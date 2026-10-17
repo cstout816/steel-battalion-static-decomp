@@ -1,0 +1,36 @@
+# Original game files and derived data
+iso/
+**/*.iso
+**/*.xiso
+**/*.xbe
+**/*.xbe.*
+**/default.xbe
+**/game_files/
+**/assets/
+**/extracted/
+**/recomp/gen/
+**/generated/
+
+# Build products and local diagnostics
+build/
+out/
+bin/
+obj/
+logs/
+CrashDumps/
+*.user
+*.suo
+*.pdb
+*.ilk
+*.obj
+*.o
+*.exe
+*.dll
+*.lib
+*.a
+*.so
+*.dylib
+CMakeCache.txt
+CMakeFiles/
+.vs/
+.vscode/
