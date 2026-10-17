@@ -2,9 +2,9 @@
 
 # Steel Battalion for Windows
 
-**A community preservation project for the original Xbox game**
+**A preservation project for the original Xbox game**
 
-**Made primarily with ChatGPT Codex, directed by project owner Connor Stout (`cstout816`).**
+**Most project research, code, and documentation are created with ChatGPT Codex, under the direction of project owner Connor Stout (`cstout816`).**
 
 <table>
   <tr>
@@ -22,6 +22,8 @@
 [What this project is](#the-short-version) · [Current progress](#current-progress) · [Planned setup](#when-a-playable-release-is-ready) · [Project details](#project-details)
 
 </div>
+
+> **Player status:** There is no playable build yet. Development has not reached the title screen. The repository is a work in progress, and the photos above show the original hardware and project concept art—not running game footage.
 
 ## The short version
 
@@ -64,9 +66,9 @@ These steps describe the plan. **The launcher and these features are not availab
 
 These are goals, not features of a released application. Experimental options will remain separate from the original experience.
 
-## Made primarily with ChatGPT Codex
+## Who is building this?
 
-This is **primarily a ChatGPT Codex project**. ChatGPT Codex has produced most of the research, documentation, code, and development work in this repository. Project owner Connor Stout (`cstout816`) sets direction, makes architecture and release decisions, provides the legally obtained game copy for local analysis, and guides verification. Progress notes distinguish work that was built or inspected from features that have actually been verified.
+This is **primarily a ChatGPT Codex project**. ChatGPT Codex has produced the majority of the research, documentation, code, and development work in this repository. Project owner Connor Stout (`cstout816`) sets priorities, makes architecture and release decisions, provides the legally obtained game copy for private local analysis, and directs verification. This authorship is stated plainly so visitors can understand how the project is being made. Progress notes distinguish work that was written or inspected from features that have actually been verified.
 
 ## Project details
 
@@ -89,4 +91,4 @@ This repository contains project code, configuration, and documentation only. **
 
 The project is not affiliated with or endorsed by Capcom, Microsoft, or the image creators. Product names and trademarks belong to their respective owners. A Windows release will be considered only after compatibility work, license review, and project-owner approval.
 
-For a no-jargon explanation of what players can expect, see the [player guide](docs/PLAYER_GUIDE.md).
+For a no-jargon explanation of what players can expect, see the [player guide](docs/PLAYER_GUIDE.md). The repository will be updated as meaningful work is completed; routine changes will be pushed to GitHub so the public project record stays current.
