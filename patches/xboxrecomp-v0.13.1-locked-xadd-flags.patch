@@ -82,6 +82,20 @@ index e7ab880..a1cadd1 100644
              pass  # These don't affect EFLAGS
          elif curr.mnemonic in ("fcompi", "fcomip", "fucomi", "fucompi",
                                  "fucomip", "fcomi"):
+diff --git a/tools/recomp/translator.py b/tools/recomp/translator.py
+index 3cd9250..fd63fa6 100644
+--- a/tools/recomp/translator.py
++++ b/tools/recomp/translator.py
+@@ -2312,7 +2312,8 @@ class FunctionTranslator:
+         # cmpxchg belongs here too: it snapshots the compare it performed,
+         # because eax may be replaced before the branch reads the result.
+         if any(insn.mnemonic in ("cmp", "test", "bsf", "bsr", "cmpxchg",
+-                                 "lock cmpxchg", "inc", "dec")
++                                 "lock cmpxchg", "xadd", "lock xadd",
++                                 "inc", "dec")
+                or insn.mnemonic in _RESULT_SNAPSHOT_SETTERS
+                for insn in instructions):
+             lines.append("    uint32_t _fa = 0, _fb = 0;")
 diff --git a/tools/recomp/test_lifter_atomics.py b/tools/recomp/test_lifter_atomics.py
 index cd1dcb4..e2f01b7 100644
 --- a/tools/recomp/test_lifter_atomics.py
