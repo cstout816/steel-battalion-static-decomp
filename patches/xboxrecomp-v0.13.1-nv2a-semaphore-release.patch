@@ -1,8 +1,8 @@
 diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
-index c65632c..d10a24b 100644
+index c65632c..183a1a1 100644
 --- a/src/kernel/nv2a_pb_exec.c
 +++ b/src/kernel/nv2a_pb_exec.c
-@@ -121,6 +121,106 @@ static uint32_t dma_resolve(uint32_t offset)
+@@ -121,6 +121,109 @@ static uint32_t dma_resolve(uint32_t offset)
      return offset;                         /* nothing better to offer */
  }
  
@@ -84,7 +84,10 @@ index c65632c..d10a24b 100644
 +        *why = "semaphore DMA target is not PCI memory";
 +        return 0;
 +    }
-+    if ((offset & 3u) || offset > limit || 3u > limit - offset) {
++    /* NV2A treats the DMA limit as an exclusive address: reaching it faults.
++     * Require all four bytes of the release word to remain below that limit. */
++    if ((offset & 3u) || offset >= limit
++        || limit - offset < sizeof(uint32_t)) {
 +        *why = "semaphore offset exceeds DMA limit";
 +        return 0;
 +    }
@@ -109,7 +112,7 @@ index c65632c..d10a24b 100644
  static int surface_write_refused(uint32_t base, uint32_t bytes, const char *what)
  {
      static int said;
-@@ -160,6 +260,9 @@ static int surface_write_refused(uint32_t base, uint32_t bytes, const char *what
+@@ -160,6 +263,9 @@ static int surface_write_refused(uint32_t base, uint32_t bytes, const char *what
  #define NV097_SET_SURFACE_FORMAT          0x0208
  #define NV097_SET_SURFACE_PITCH           0x020C
  #define NV097_SET_SURFACE_COLOR_OFFSET    0x0210
@@ -119,7 +122,7 @@ index c65632c..d10a24b 100644
  #define NV097_SET_COLOR_CLEAR_VALUE       0x1D90
  #define NV097_CLEAR_SURFACE               0x1D94
  #define NV097_SET_VERTEX_DATA_ARRAY_OFFSET 0x1720   /* +i*4, 16 attributes */
-@@ -2914,6 +3017,43 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+@@ -2914,6 +3020,43 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
          return;
      }
      switch (method) {
