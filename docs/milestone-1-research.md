@@ -1,6 +1,6 @@
 # Milestone 1: Research and Architecture
 
-Updated 2026-10-17. Status: title XBE identified and parsed; the user selected sp00nznet/xboxrecomp on 2026-10-17. Milestone 2 analysis is beginning. No project build or game boot has been attempted.
+Updated 2026-10-17. Architecture: user selected sp00nznet/xboxrecomp. Milestone 2 is complete; Milestone 3 boot work is in progress but currently blocked before the title screen. The game has not been successfully booted.
 
 ## Disc and executable evidence
 
@@ -123,4 +123,14 @@ Therefore the 4627 candidate requires more than adding a version folder: a new l
 - xboxrecomp's core is MIT, while its NOTICE identifies specific xemu-derived APU and NV2A register files under LGPL-2.1-or-later. The NOTICE says distribution must retain notices, provide LGPL source, and let users relink modified library code. That does not make MIT reuse inherently incompatible, but it adds distribution and packaging work. Source: [xboxrecomp NOTICE](https://raw.githubusercontent.com/sp00nznet/xboxrecomp/main/NOTICE), [license](https://raw.githubusercontent.com/sp00nznet/xboxrecomp/main/LICENSE).
 - For the physical controller, prefer investigating Microsoft's WinUSB user-mode path before adopting a bundled third-party driver. Cxbx-Reloaded lists WinUSB as necessary for USB pass-through; the SteelBattalionDriver is GPL-3.0 and exposes HID via a kernel driver. Neither path has been validated with this controller on the user's Windows 11 machine. Do not include driver binaries or automate driver binding; make any required device-driver setup explicit and opt-in. The app-side adapter and control mapping remain unimplemented.
 - These checks are preliminary license reviews, not legal advice. The actual dependency revisions and build linkage must be reviewed again before choosing the repository license or preparing a release. No license file has been added yet.
+
+## Milestone 3 boot attempt (2026-10-17)
+
+- Extracted the full XDVDFS game partition (1,230 files, 1,808,157,592 bytes) from the user's ISO into ignored `iso/local-analysis/game_files/`. The ISO remained read-only. The local harness now points at that extracted `default.xbe` and game-data directory; these absolute paths are local-only and are not tracked.
+- Built and launched the local AMD64 executable. It loaded the XBE, initialized the Xbox memory layout and kernel replacement, resolved all 123 imported kernel thunks, and entered `0x00192C47`. The first run repeatedly called ungenerated addresses in the executable D3D section and reached the 45-second watchdog with no window.
+- Used xboxrecomp's `seed_from_log` validation against the execution log: 23 runtime-seen addresses (including the thread start routine and D3D call targets) passed executable-section and function-body checks. Re-disassembled with those seeds and translated 9,147 functions (0 failures; 2,333,179 C lines; 351 unresolved stubs; 287 unsupported instruction sites emitted as no-op comments). The local MSVC Release rebuild succeeded.
+- Second launch no longer logged unresolved D3D indirect-call targets. It reached `KeConnectInterrupt` setup and executed unsupported `out dx, al` and `wbinvd` instructions as configured no-ops, then stalled through the 45-second watchdog. Diagnostics showed NV2A USER PUT and GET both at `0x495C` and no visible window. The process exited with code 3 after the watchdog. This supports a D3D/NV2A initialization or progress gap, but does not identify its exact root cause.
+- Verified: image extraction, executable launch and XBE entry, kernel thunk resolution, two watchdog-bounded startup attempts, seed validation, translation and native rebuild. Not verified: title screen, working graphics/rendering, audio, input, Steam integration, physical Steel Battalion controller, or performance. No smoke tests were run.
+- Known issues remain substantial: 351 unresolved call stubs, 287 no-op instruction sites, unsupported `out`/`wbinvd` paths reached at runtime, and the D3D11 backend. The stalled GPU command path and controller remain unverified. All game-derived files/logs are ignored; no ISO modifications, GitHub publication, or dependency installs occurred.
+- Milestone 3 is **not complete**. This is a hard compatibility roadblock, so stop before Milestone 4. Next decision: continue targeted D3D/NV2A/kernel investigation within xboxrecomp, or pause for an architecture re-evaluation. Do not substitute emulation or switch recompilers without explicit user approval.
 
