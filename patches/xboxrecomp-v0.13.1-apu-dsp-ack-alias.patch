@@ -1,0 +1,50 @@
+diff --git a/src/apu/apu_dsp.c b/src/apu/apu_dsp.c
+index 7156be9..9b54124 100644
+--- a/src/apu/apu_dsp.c
++++ b/src/apu/apu_dsp.c
+@@ -28,6 +28,8 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
++extern uint32_t xbox_ContiguousAllocatedBytes(void);
++
+ /* ── DSP command doorbell acknowledgement ────────────────────────────────
+  *
+  * DirectSound does not stop at creating the device. It hands the audio DSP a
+@@ -38,7 +40,9 @@
+  * entire engine, not just audio.
+  *
+  * RECOMP_APU_DSP_ACK=<addr>[,<addr>...] clears those guest dwords once per APU
+- * frame, which is what "the command completed" looks like to the title.
++ * frame, which is what "the command completed" looks like to the title. The
++ * address can be a physical/low-RAM address or an observed 0x80000000 contiguous
++ * guest VA; those aliases have distinct host mappings in this runtime.
+  *
+  * ponytail: this is a handshake acknowledgement, not a DSP. It says every
+  * command succeeded instantly and computes nothing, so anything whose *result*
+@@ -51,6 +55,10 @@
+  * read 0x01504000 / 0x014EC000 / 0x0151C000 / 0x014F0000 and the doorbell is at
+  * 0x014F8810 -- inside none of them. So it has to be observed: run with
+  * RECOMP_WATCHDOG_SECS and the spin shows up as ebx plus the poll offset.
++ * Resolve observed low addresses through the APU's physical-memory translator.
++ * An observed 0x80000000 guest VA must instead use that alias directly: the
++ * physical address can overlap the loaded XBE range, making low-vs-contiguous
++ * storage ambiguous after the alias bit has been discarded.
+  */
+ #define APU_DSP_ACK_MAX 8
+ static uint32_t s_dsp_ack[APU_DSP_ACK_MAX];
+@@ -103,7 +111,13 @@ void mcpx_apu_dsp_ack_poll(MCPXAPUState *d)
+     if (!d->ram_ptr)
+         return;
+     for (i = 0; i < s_dsp_ack_count; i++) {
+-        uint32_t *slot = (uint32_t *)(d->ram_ptr + s_dsp_ack[i]);
++        uint32_t address = s_dsp_ack[i];
++        uint32_t *slot;
++        if (address >= 0x80000000u
++                && address - 0x80000000u < xbox_ContiguousAllocatedBytes())
++            slot = (uint32_t *)(d->ram_ptr + address);
++        else
++            slot = (uint32_t *)mcpx_apu_phys(address);
+         if (*slot) {
+             static int shown[APU_DSP_ACK_MAX];
+             if (shown[i]++ < 3)

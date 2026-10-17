@@ -17,7 +17,7 @@
 
 </div>
 
-> **Player status:** There is no playable build yet. Startup currently fails during audio initialization, before the title screen. The banner describes the project; the hardware photo shows the original controller and pedals, not running game footage.
+> **Player status:** There is no playable build yet. Normal startup fails during audio setup. An experimental audio path gets farther and loads a title asset, but it still waits before showing a game frame. The banner describes the project; the hardware photo shows the original controller and pedals, not running game footage.
 
 ## The short version
 
@@ -33,7 +33,7 @@ This is not an Xbox emulator presented under another name. The project is still 
 | --- | --- |
 | Research and architecture | Complete; static recompilation remains the chosen approach. |
 | Initial Windows translation | Built locally; translation gaps mean this is not yet proof of correct game behavior. |
-| Game startup | In progress; the queue and completion fence advance, but startup then fails during audio initialization before the title screen. |
+| Game startup | In progress; normal startup fails during audio setup. An experimental audio path loads a title asset but still waits before drawing a game frame. |
 | Playable release and launcher | Not available. |
 | Full campaign compatibility | Not verified. No mission-completion or campaign-progression testing has been completed. |
 
