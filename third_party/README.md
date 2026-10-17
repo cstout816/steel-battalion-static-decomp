@@ -67,6 +67,16 @@ Steel Battalion C still contains `RECOMP_UNIMPL` for these instructions; it
 must be regenerated before the bridge can be exercised. Neither compilation
 nor runtime behavior has been verified.
 
+An isolated watchdog diagnostic,
+[`patches/xboxrecomp-v0.13.1-watchdog-native-pc.patch`](../patches/xboxrecomp-v0.13.1-watchdog-native-pc.patch),
+captures the native instruction pointer of the thread running guest code when
+the watchdog expires. It briefly suspends that thread to read its Windows
+context, resumes it before logging, then asks DbgHelp for symbol and source-line
+information when a local PDB is available. This is separate from the translated
+guest registers and does not claim to recover a guest EIP directly. The patch
+has passed a reverse-apply/whitespace check only; it has not been compiled or
+exercised.
+
 The upstream `NOTICE` identifies xemu-derived APU and NV2A components under
 LGPL-2.1-or-later. The local executable links xboxrecomp runtime libraries,
 including those components. No game executable or runtime libraries are

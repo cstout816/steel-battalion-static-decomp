@@ -1,0 +1,113 @@
+diff --git a/src/kernel/xbox_memory_layout.c b/src/kernel/xbox_memory_layout.c
+index 72d5131..e5633ef 100644
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -15,6 +15,9 @@
+ #include "xbox_memory_layout.h"
+ #include "kernel.h"
+ #include "guest_vmem.h"
++#if defined(_WIN32)
++#include <dbghelp.h>
++#endif
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -1277,6 +1280,78 @@ static uint32_t *s_watchdog_esp;
+  * registers are the thing being asked about. */
+ static uint32_t *s_watchdog_regs[6];
+ static unsigned  s_watchdog_secs;
++#if defined(_WIN32)
++static DWORD s_watchdog_guest_tid;
++
++/* The watchdog runs on its own thread. Freeze the thread that entered guest
++ * code long enough to sample its native PC, then resume it before formatting
++ * symbols or printing the rest of the report. The main executable initializes
++ * DbgHelp before arming the watchdog; a local PDB lets it resolve the host
++ * address to a generated C function/line. */
++static void watchdog_capture_guest_pc(void)
++{
++    HANDLE thread;
++    CONTEXT ctx;
++    uintptr_t pc;
++    DWORD64 displacement = 0;
++    char symbol_buf[sizeof(SYMBOL_INFO) + 256];
++    SYMBOL_INFO *symbol = (SYMBOL_INFO *)symbol_buf;
++    IMAGEHLP_LINE64 line;
++    DWORD line_displacement = 0;
++
++    if (!s_watchdog_guest_tid) {
++        fprintf(stderr, "  guest native PC unavailable: no thread ID\n");
++        return;
++    }
++    thread = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME, FALSE,
++                        s_watchdog_guest_tid);
++    if (!thread) {
++        fprintf(stderr, "  guest native PC unavailable: OpenThread error %lu\n",
++                GetLastError());
++        return;
++    }
++    if (SuspendThread(thread) == (DWORD)-1) {
++        fprintf(stderr, "  guest native PC unavailable: SuspendThread error %lu\n",
++                GetLastError());
++        CloseHandle(thread);
++        return;
++    }
++    memset(&ctx, 0, sizeof(ctx));
++    ctx.ContextFlags = CONTEXT_CONTROL;
++    if (!GetThreadContext(thread, &ctx)) {
++        DWORD error = GetLastError();
++        ResumeThread(thread);
++        CloseHandle(thread);
++        fprintf(stderr, "  guest native PC unavailable: GetThreadContext error %lu\n",
++                error);
++        return;
++    }
++    ResumeThread(thread);
++    CloseHandle(thread);
++#if defined(_M_X64)
++    pc = (uintptr_t)ctx.Rip;
++#elif defined(_M_IX86)
++    pc = (uintptr_t)ctx.Eip;
++#else
++    fprintf(stderr, "  guest native PC unavailable: unsupported host architecture\n");
++    return;
++#endif
++    fprintf(stderr, "  guest native PC: %p\n", (void *)pc);
++
++    memset(symbol_buf, 0, sizeof(symbol_buf));
++    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
++    symbol->MaxNameLen = 255;
++    if (SymFromAddr(GetCurrentProcess(), (DWORD64)pc, &displacement, symbol))
++        fprintf(stderr, "    host symbol: %s+0x%llX\n", symbol->Name,
++                (unsigned long long)displacement);
++    memset(&line, 0, sizeof(line));
++    line.SizeOfStruct = sizeof(line);
++    if (SymGetLineFromAddr64(GetCurrentProcess(), (DWORD64)pc,
++                             &line_displacement, &line))
++        fprintf(stderr, "    source line: %s:%lu\n", line.FileName,
++                line.LineNumber);
++}
++#endif
+ 
+ /* Can RECOMP_PEEK dereference this guest address?
+  *
+@@ -1589,6 +1664,9 @@ static DWORD WINAPI xbox_watchdog_thread(LPVOID unused)
+ 
+     mem = (const uint8_t *)g_memory_offset;
+     esp = s_watchdog_esp ? *s_watchdog_esp : 0;
++#if defined(_WIN32)
++    watchdog_capture_guest_pc();
++#endif
+     fprintf(stderr, "[WATCHDOG] no exit after %us; guest esp=0x%08X\n"
+             "  regs: eax=%08X ecx=%08X edx=%08X ebx=%08X esi=%08X edi=%08X\n",
+             s_watchdog_secs, esp,
+@@ -1673,6 +1751,9 @@ void xbox_WatchdogStart(void)
+      * be handed the address of the one that matters rather than reading its
+      * own, which is always zero. */
+     s_watchdog_esp = &g_esp;
++#if defined(_WIN32)
++    s_watchdog_guest_tid = GetCurrentThreadId();
++#endif
+     s_watchdog_regs[0] = &g_eax; s_watchdog_regs[1] = &g_ecx;
+     s_watchdog_regs[2] = &g_edx; s_watchdog_regs[3] = &g_ebx;
+     s_watchdog_regs[4] = &g_esi; s_watchdog_regs[5] = &g_edi;
