@@ -32,9 +32,25 @@ This is not an Xbox emulator presented under another name. The project is still 
 ```text
 Function translation output  [####################] 9,148 / 9,148 emitted (100%)
 Project milestones          [##------] 2 / 8 complete (25%)
+
+Research and architecture    [##########] 3 / 3 checks complete
+Windows executable build    [##########] 1 / 1 local build verified
+Boot and filesystem          [####------] 2 / 5 checks observed
+Graphics rendering           [##--------] 1 / 4 checks observed
+Audio                        [###-------] 1 / 3 checks observed
+Original SB controller       [----------] 0 / 3 checks verified
+Other controller support     [----------] 0 / 3 checks verified
+Campaign completion          [----------] 0 / 1 full campaign verified
+Performance                  [----------] 0 / 3 checks verified
+Debugging automation         [#####-----] 1 / 2 checks available
+Windows launcher             [----------] 0 / 4 features available
+Line of Contact research     [###-------] 1 / 3 checks complete
+Distribution                 [###-------] 1 / 3 checks complete
 ```
 
-The first bar counts functions emitted by the current production translation run; it does **not** mean every instruction or call is understood or that the game works. That output still contains 243 unsupported instruction sites and 351 unresolved call targets routed to stubs. The second bar counts completed project milestones only. Milestone 3 is still in progress, and there is no playable build.
+The function bar counts functions emitted by the current production translation run; it does **not** mean every instruction or call is understood or that the game works. That output still contains 243 unsupported instruction sites and 351 unresolved call targets routed to stubs. The milestone bar counts completed project milestones. The field bars count the named checkpoints below, not coding effort or overall completeness. A checkpoint observed with a diagnostic is not necessarily a working feature. Milestone 3 is still in progress, and there is no playable build.
+
+Checkpoint details: research covers XBE identification, architecture selection, and documented constraints; the executable bar records a local build only. Boot checks are guest entry, game asset read, title screen, rendered scene, and normal audio startup. Graphics checks are pushbuffer/clear/flip processing, title-screen image, gameplay draw, and enhanced-resolution output. Audio checks are diagnostic APU initialization, real DSP processing, and audible output. Original controller checks are input, full control mapping, and indicator-light output; other-controller checks are keyboard/mouse, gamepad, and HOTAS/custom HID. Performance checks are an original-rate baseline, stable 60 FPS, and higher-rate/frame-pacing validation. Debugging checks are crash/watchdog logs and deterministic input replay. Launcher checks are ISO validation, settings UI, Steam shortcut, and update flow. Line of Contact checks are initial community research, existing-network compatibility verification, and a separate profile. Distribution checks are project repository/documentation, completed dependency-license review, and a reviewed playable release package.
 
 | Area | Status |
 | --- | --- |
