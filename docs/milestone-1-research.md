@@ -47,16 +47,29 @@ The selected toolkit's documented Windows renderer is D3D8-to-D3D11, not D3D12. 
 
 ## Environment and verification limits
 
-- Windows 11 Pro x64, Git 2.55.0 and .NET SDK 10.0.204 are available. Visual Studio Build Tools 2022 is installed with the MSVC x86/x64 tools and Windows SDK 19041, but `cl.exe` is not on PATH. CMake, Ninja, and Clang were not found on PATH or as installed Visual Studio components. A Codex-managed Python 3.12.14 runtime is available; it does not include Capstone or pytest. No dependency was installed. xboxrecomp's documented Windows setup needs CMake 3.20+, MSVC, Python 3.10+ and Capstone; local toolchain/bootstrap requirements remain to be evaluated.
+- At the Milestone 1 research checkpoint, Windows 11 Pro x64, Git 2.55.0 and .NET SDK 10.0.204 were available. Visual Studio Build Tools 2022 had MSVC x86/x64 and Windows SDK 19041, but `cl.exe` was not on PATH. CMake, Ninja, and Clang were not found on PATH or among checked Visual Studio components. A Codex-managed Python 3.12.14 runtime lacked Capstone. Local-only tool setup is recorded below.
 - ISO root and XDVDFS partition were examined by reading the existing image. `default.xbe` was extracted only to an ignored local-analysis path, then the image metadata, header, section table, library versions, and kernel ordinal table were inspected.
 - At the Milestone 1 checkpoint, no code had been generated and no compiler or test was run. See the Milestone 2 progress record below for later analysis/codegen. No native executable, boot, rendering, audio, input, or performance result has been verified.
 - The repository is on `main`; the initial setup is committed, and the architecture research was committed locally as `bc3a034`. That commit is one commit ahead of `origin/main` and has not been pushed. The repository-local author identity is `cstout816 <cstout816@live.com>`.
 
-## Next steps
+## Milestone 2 result
 
-1. Complete Milestone 2's initial translation and establish whether the title-specific generated C can be configured and compiled into a Windows executable.
-2. Keep all game data/generated code local and ignored. CMake is still missing, while MSVC is installed but not on the normal PATH; any tool setup must remain project-local.
-3. Do not claim a game executable or boot until an actual Windows build and title run are verified. Runtime compatibility, audio, rendering, and input remain unverified.
+- Full static translation completed for 9,125 functions: 2,331,961 lines of C across 37 chunks (about 97.7 MiB), with zero function-level translation failures. The upstream summary reported 351 unresolved call targets stubbed and 287 unsupported instruction sites (38 mnemonics) emitted as no-op comments. These gaps can alter game behavior; successful translation/build does not establish correctness.
+- The first build exposed a shift-count bug in xboxrecomp v0.13.1: x86 masks shift counts to five bits, but its C output used an immediate count such as `0xA7` directly, producing MSVC C4293 warnings and undefined C behavior. The isolated patch [`patches/xboxrecomp-v0.13.1-shift-count.patch`](../patches/xboxrecomp-v0.13.1-shift-count.patch) masks counts, preserves the zero-count no-op, and avoids out-of-range carry shifts. Its MIT notice is retained under [`third_party/licenses/xboxrecomp-MIT.txt`](../third_party/licenses/xboxrecomp-MIT.txt); see [`third_party/README.md`](../third_party/README.md).
+- After applying the patch, a targeted generated-C test compiled and ran on MSVC, checking `SHL EAX, 0xA7` against the masked result and checking a count of `0x20` preserves value/flag snapshots; both checks passed. The full generated C was regenerated and rebuilt.
+- CMake configured and MSVC built the local xboxrecomp game template successfully. The result is a 103,068,160-byte x64 Windows PE (`0x8664`) at ignored path `local-tools/steel-battalion-game/build/Release/your_game_recomp.exe`. The first build showed two C4293 warnings; the corrected build completed successfully with no such warnings observed. The local executable and game-derived source remain ignored. No smoke-test executable was run.
+- This is a native host executable containing statically translated x86 code and xboxrecomp compatibility libraries, not a full-system emulator. It remains a build artifact, not a verified game launch: the template still needs a real user XBE/assets path, the XBE data set has not been fully extracted, and no boot/title-screen/render/audio/input check has run. The runtime renderer is D3D11, not the requested D3D12.
+
+### Milestone 2 verification limits and known issues
+
+- Function boundaries, ABI classifications, and control flow are heuristic. The 9,125 generated functions are not proof of complete or accurate execution coverage.
+- 351 unresolved targets route through generated stubs. The 287 unsupported instructions become no-op comments. Either can prevent startup or corrupt game behavior.
+- Original controller support, kernel/D3D8/audio fidelity, the 4627-specific runtime paths, asset loading, title-screen boot, Steam integration, and performance are unverified.
+- Generated C, the XBE, ISO, temporary build harness, and executable are all ignored by Git. The original ISO remains untouched. Local branch changes have not been pushed.
+
+## Next milestone
+
+Milestone 3 is to configure the real XBE/data paths, implement only the compatibility fixes needed for startup, and attempt a boot to the title screen. It must begin only after the user approves moving beyond Milestone 2. The project is not ready for graphics enhancements.
 
 
 
@@ -84,7 +97,7 @@ Finish the initial translation and determine whether a title-specific Windows ex
 - **sp00nznet/xboxrecomp v0.13.1** (MIT core with separately licensed LGPL-2.1-or-later xemu-derived APU/NV2A components) is more immediately useful for XBE analysis: its parser and disassembler derive section layout from the XBE and can analyze all code sections; its docs explicitly warn that `.text`-only misses executable library sections. Its documented Windows runtime translates D3D8 to D3D11, which does not match the requested D3D12 target. The public `xboxdashboard` project shows a static recompilation on XDK build 3944 reaching substantial startup/kernel work, but its current notes still say it has not rendered a scene. This is evidence that the pipeline is real and useful, not that Steel Battalion boots or that build 4627 is fully supported. Sources: [xboxrecomp README](https://github.com/sp00nznet/xboxrecomp), [Getting Started](https://github.com/sp00nznet/xboxrecomp/blob/main/docs/GETTING_STARTED.md), [xboxdashboard status](https://github.com/sp00nznet/xboxdashboard).
 - **Cxbx-Reloaded** and **xemu** remain emulator references only. Their execution cores are not proposed for the native game's runtime.
 
-The newest research does not establish a drop-in winner. Xbox XBE Recomp best matches the D3D12 requirement but is missing build-4627 metadata. xboxrecomp offers a title-agnostic analysis/recompilation path, but its Windows graphics layer is D3D11 and its target-specific boot behavior is unknown. Do not silently waive the D3D12 requirement or switch to emulation. The recommended direction for approval is Xbox XBE Recomp as the provisional primary runtime, with a bounded build-4627 metadata feasibility step and xboxrecomp as an independent analysis/reference tool. If that step cannot be completed without proprietary SDK material or unreliable signatures, stop and present the D3D11 renderer-port alternative for a new decision.
+At this earlier research checkpoint, the D3D12-oriented Xbox XBE Recomp candidate appeared closest to the graphics request, while xboxrecomp's Windows renderer was D3D11. The user's subsequent explicit selection of xboxrecomp supersedes the provisional Xbox XBE Recomp recommendation. The selected runtime preserves the static-recompilation CPU architecture; its D3D11 renderer limitation remains recorded above.
 
 ### Input feasibility
 

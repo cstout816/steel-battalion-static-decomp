@@ -1,0 +1,30 @@
+diff --git a/tools/recomp/lifter.py b/tools/recomp/lifter.py
+index e7ab880..68c8d87 100644
+--- a/tools/recomp/lifter.py
++++ b/tools/recomp/lifter.py
+@@ -2094,12 +2094,19 @@ class Lifter:
+             return [f"/* shift: bad operands */"]
+         dst = _fmt_operand_read(ops[0])
+         cnt = _fmt_operand_read(ops[1])
+-        out = []
++        width = (_operand_width(ops[0]) or 4) * 8
++        # x86 masks the count to five bits for 8-, 16-, and 32-bit shifts.
++        # C leaves a shift by the operand width or more undefined, so do the
++        # operation in uint32_t after masking. A masked zero is a true no-op:
++        # it must preserve both the destination and every flag snapshot.
++        out = [f"{{ uint32_t _c = (uint32_t)({cnt}) & 31u; if (_c) {{"]
+         if self.needs_cf:
+-            w = (_operand_width(ops[0]) or 4) * 8
+-            # CF is the last bit shifted out; a zero count leaves CF alone.
+-            bit = f"({cnt}) - 1" if c_op == ">>" else f"{w} - ({cnt})"
+-            out.append(f"if ({cnt}) _cf = (int)((({dst}) >> ({bit})) & 1);")
+-        out.append(_fmt_operand_write(ops[0], f"{dst} {c_op} {cnt}"))
++            # CF is defined for counts up to the operand width. For larger
++            # counts x86 leaves it undefined; retain the prior value without
++            # emitting a negative or out-of-range C shift expression.
++            bit = f"(_c - 1u)" if c_op == ">>" else f"({width}u - _c)"
++            out.append(f"if (_c <= {width}u) _cf = (int)(((uint32_t)({dst}) >> {bit}) & 1u);")
++        out.append(_fmt_operand_write(ops[0], f"((uint32_t)({dst}) {c_op} _c)"))
+         out.append(self._result_snapshot(ops, "shift"))
++        out.append("} } /* x86 shift count masked to five bits */")
+         return out

@@ -2,7 +2,7 @@
 
 A Windows x64 project to investigate and, if technically feasible, statically recompile the original Xbox version of *Steel Battalion* (2001) into a native application. The intended execution model is ahead-of-time translation of the game's x86 code plus Xbox compatibility layers. Full-system emulation is not the project's execution architecture.
 
-Milestone 1 research confirmed the user's XBE is a retail XBEH for *STEEL BATTALION* (title ID `0x43430002`, XDK build 4627), with 78 sections and 123 kernel imports. The user selected **sp00nznet/xboxrecomp** for the static-recompilation path. Its documented Windows renderer uses D3D11, so the requested D3D12 target is not yet met. Milestone 2 analysis is in progress; no game executable has been recompiled, and no boot, rendering, audio, or input result is claimed.
+Milestone 1 identified the user's retail XBEH for *STEEL BATTALION* (title ID `0x43430002`, XDK build 4627), with 78 sections and 123 kernel imports. The user selected **sp00nznet/xboxrecomp** for static recompilation. Milestone 2 produced a local Windows x64 executable from 9,125 translated functions. The artifact and all game-derived C remain ignored and are not distributed. The executable has not been run; boot, rendering, audio, and input are unverified. xboxrecomp's documented Windows renderer uses D3D11, so the D3D12 target remains unmet.
 
 ## Game files
 
