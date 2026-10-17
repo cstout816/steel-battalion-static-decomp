@@ -6,16 +6,10 @@
 
 **Most project research, code, and documentation are created with ChatGPT Codex, under the direction of project owner Connor Stout (`cstout816`).**
 
-<table>
-  <tr>
-    <td align="center" width="50%"><img src="docs/images/steel-battalion-controller.jpg" alt="Original Steel Battalion controller and pedals" width="100%"></td>
-    <td align="center" width="50%"><img src="docs/images/steel-battalion-project-concept.png" alt="AI-generated concept image of a home simulator control station; not the original controller or game" width="100%"></td>
-  </tr>
-  <tr>
-    <td align="center">Original controller and pedals · photo by John Tregoning, CC BY 2.0</td>
-    <td align="center">Project concept artwork · generated with ChatGPT</td>
-  </tr>
-</table>
+<img src="docs/images/project-banner.svg" alt="Steel Battalion for Windows: a static recompilation and preservation project for the original Xbox game. Experimental development; no playable build yet." width="100%">
+
+<p><img src="docs/images/steel-battalion-controller.jpg" alt="Original Steel Battalion controller and pedals" width="70%"><br>
+<sub>Original controller and pedals · photo by John Tregoning, CC BY 2.0</sub></p>
 
 ### Experimental development · Not ready to play
 
@@ -23,7 +17,7 @@
 
 </div>
 
-> **Player status:** There is no playable build yet. Development has not reached the title screen. The repository is a work in progress, and the photos above show the original hardware and project concept art—not running game footage.
+> **Player status:** There is no playable build yet. Startup currently fails during audio initialization, before the title screen. The banner describes the project; the hardware photo shows the original controller and pedals, not running game footage.
 
 ## The short version
 
@@ -39,7 +33,7 @@ This is not an Xbox emulator presented under another name. The project is still 
 | --- | --- |
 | Research and architecture | Complete; static recompilation remains the chosen approach. |
 | Initial Windows translation | Built locally; translation gaps mean this is not yet proof of correct game behavior. |
-| Game startup | In progress; startup stalled before the title screen. A bounded semaphore-release compatibility path is prepared, but it has not yet been rebuilt or runtime-verified. |
+| Game startup | In progress; the queue and completion fence advance, but startup then fails during audio initialization before the title screen. |
 | Playable release and launcher | Not available. |
 | Full campaign compatibility | Not verified. No mission-completion or campaign-progression testing has been completed. |
 
