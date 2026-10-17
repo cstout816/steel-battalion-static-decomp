@@ -12,6 +12,7 @@ iso/
 **/generated/
 
 # Build products and local diagnostics
+local-tools/
 build/
 out/
 bin/
