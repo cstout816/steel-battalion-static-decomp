@@ -1,66 +1,90 @@
 <div align="center">
 
-# Steel Battalion: Native Windows Preservation Project
+# Steel Battalion for Windows
 
-**Original Xbox · Windows 10/11 · Static recompilation research**
+**A community preservation project for the original Xbox game**
 
-<img src="docs/images/steel-battalion-controller.jpg" alt="The original Steel Battalion controller and foot pedals" width="760">
+**Made primarily with ChatGPT Codex, directed by project owner Connor Stout (`cstout816`).**
 
-*The original Steel Battalion controller and pedals. Photo by John Tregoning, CC BY 2.0; resized for this page. See [image credits](docs/ATTRIBUTIONS.md).*
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/images/steel-battalion-controller.jpg" alt="Original Steel Battalion controller and pedals" width="100%"></td>
+    <td align="center" width="50%"><img src="docs/images/steel-battalion-project-concept.png" alt="AI-generated concept image of a home simulator control station; not the original controller or game" width="100%"></td>
+  </tr>
+  <tr>
+    <td align="center">Original controller and pedals · photo by John Tregoning, CC BY 2.0</td>
+    <td align="center">Project concept artwork · generated with ChatGPT</td>
+  </tr>
+</table>
 
-**Project status: Experimental — there is no playable release yet.**
+### Experimental development · Not ready to play
+
+[What this project is](#the-short-version) · [Current progress](#current-progress) · [Planned setup](#when-a-playable-release-is-ready) · [Project details](#project-details)
 
 </div>
 
-This project is working toward a Windows version of *Steel Battalion* for the original Xbox. The long-term goal is to translate the game's original processor instructions ahead of time and provide the Xbox services it expects through Windows compatibility code.
+## The short version
 
-> **In plain terms:** We are trying to make the game run as a Windows app while preserving its original behavior. We are not presenting ordinary Xbox emulation as static recompilation. Getting the game to start is still an unsolved step, and a complete campaign has not been tested.
+The goal is to make the original *Steel Battalion* run as a Windows application while keeping the original game and its demanding campaign intact. The project uses **static recompilation**: translating the game's original Xbox processor instructions ahead of time, then providing the Xbox services it needs through compatibility code.
 
-## Is it ready to play?
+This is not an Xbox emulator presented under another name. The project is still early: it has not reached the title screen, and there is no playable download, installer, or one-click setup yet.
 
-**No.** The project is still in early development. A local Windows program has entered the game's code, but startup stalled before the title screen while graphics hardware services were being initialized. The latest code translation adds a missing interrupt routine, but that update has not yet been rebuilt or verified. There is no installer or public game build to download.
+> **For players:** There is nothing to install or play from this repository yet. Please check back for a tested release. When one is ready, you will need to provide your own legally obtained game copy. The project will never include or modify your game files.
 
-We will not call the game compatible based on a title screen or a single mission. The goal is to verify the entire campaign, including mission completion and progression, saves, cinematics, sound, controls, and stable performance.
+## Current progress
 
-## What is being built
+| Area | Status |
+| --- | --- |
+| Research and architecture | Complete; static recompilation remains the chosen approach. |
+| Initial Windows translation | Built locally; translation gaps mean this is not yet proof of correct game behavior. |
+| Game startup | In progress; startup stalled before the title screen. Recent interrupt and controller-I/O changes have not yet been rebuilt and verified. |
+| Playable release and launcher | Not available. |
+| Full campaign compatibility | Not verified. No mission-completion or campaign-progression testing has been completed. |
 
-- A native Windows x64 application based on **static recompilation** and Xbox compatibility layers.
-- A simple launcher for choosing and checking your own game image, changing settings, viewing logs, and optionally adding the app to Steam as a non-Steam game.
-- Support for the original Steel Battalion controller, with accessible keyboard, mouse, gamepad, and HOTAS control options.
-- Original and optional enhanced display settings, while preserving the game's effects and mechanics.
-- Later investigation of *Steel Battalion: Line of Contact* as a separate game and compatibility profile. Any multiplayer support must be checked against existing Insignia, XLink Kai, and community sessions first.
+**The latest verified state is not a playable game.** The title screen, graphics, sound, controller input, saves, cinematics, mission completion, and campaign progression remain unverified. We will report compatibility only after the complete campaign has been tested mission by mission.
 
-These are project goals, not features available in a playable release today. See the [community compatibility and preservation plan](docs/community-compatibility-preservation.md) for the priorities and full-campaign test checklist.
+## When a playable release is ready
 
-## Development progress
+The intended setup is designed to be straightforward:
 
-- **Research and architecture:** complete. The project selected [sp00nznet/xboxrecomp](https://github.com/sp00nznet/xboxrecomp) for its ahead-of-time x86 translation and Xbox runtime components.
-- **Initial translation and Windows build:** completed locally. Thousands of game functions have been translated to C and a Windows x64 executable was built. Some game instructions and function targets remain untranslated or approximated, so this does not prove correct behavior.
-- **Game startup:** in progress. The current investigation is focused on Xbox graphics initialization and interrupt handling. The title screen, sound, input, and campaign remain unverified.
-- **Launcher, controller editor, graphics options, and campaign testing:** not implemented yet.
+1. Download the project launcher from a reviewed release.
+2. Select your own legally obtained original Xbox game image; the launcher will check it and explain any problems.
+3. Choose the original Steel Battalion controller or a supported keyboard, mouse, gamepad, or HOTAS setup.
+4. Start the game and adjust display or control options as needed.
 
-The runtime currently documents a Direct3D 11 graphics path. The requested Direct3D 12 target is not met. The work will not silently switch to an emulator or describe emulation as recompilation.
+These steps describe the plan. **The launcher and these features are not available today.** The planned launcher will also offer an optional action to add the game to a user's Steam library as a non-Steam game; Steam will not provide the game or grant a store entitlement.
 
-## Who is making this?
+## What the project is working toward
 
-**This is primarily a ChatGPT Codex project.** Most of the research, documentation, code, and development work in this repository is being produced with ChatGPT Codex, an AI coding agent from OpenAI. Project owner **Connor Stout (`cstout816`)** sets the goals, supplies the legally obtained game copy used for local analysis, makes project decisions, and directs verification and release approval. AI-generated work is recorded and checked as the project advances; results are reported only when they have actually been verified.
+- **Campaign reliability first:** test every mission, save, cinematic, audio event, controller function, and progression step.
+- **Full controller support:** preserve the original Steel Battalion controller and indicator lights where hardware permits, while making keyboard, mouse, modern controllers, HOTAS, and custom HID devices accessible.
+- **A simple Windows launcher:** check a user-supplied game image, offer settings and diagnostics, and optionally add the game to Steam.
+- **Careful modernization:** offer original and enhanced graphics settings, widescreen and high-resolution output, and frame-rate options that preserve game timing.
+- **Future research:** investigate *Steel Battalion: Line of Contact* separately and check compatibility with Insignia, XLink Kai, and existing community sessions before considering multiplayer changes.
 
-## What you will need when a release is ready
+These are goals, not features of a released application. Experimental options will remain separate from the original experience.
 
-You will need to provide your own legally obtained copy of the original Xbox game. **This repository does not include the ISO, executable, extracted game files, generated game code, textures, sound, or cinematics.** We will not alter or redistribute your game image.
+## Made primarily with ChatGPT Codex
 
-The launcher and one-click setup are planned but are not available yet. For now, there is no supported installation or play guide.
+This is **primarily a ChatGPT Codex project**. ChatGPT Codex has produced most of the research, documentation, code, and development work in this repository. Project owner Connor Stout (`cstout816`) sets direction, makes architecture and release decisions, provides the legally obtained game copy for local analysis, and guides verification. Progress notes distinguish work that was built or inspected from features that have actually been verified.
 
-## Updates and useful links
+## Project details
 
-- [Development and architecture notes](docs/milestone-1-research.md)
-- [Community compatibility and preservation plan](docs/community-compatibility-preservation.md)
-- [Steel Battalion community on Reddit](https://www.reddit.com/r/steelbattaliononline/)
-- [Steel Battalion community Discord](https://discord.gg/steelbattalion)
-- [ChatGPT Codex](https://openai.com/codex/)
+The selected foundation is [sp00nznet/xboxrecomp](https://github.com/sp00nznet/xboxrecomp), which translates Xbox x86 code ahead of time. Its documented Windows graphics path uses Direct3D 11; the requested Direct3D 12 path is not implemented. Xbox kernel, graphics, audio, filesystem, and controller behavior still need compatibility work. The project will not quietly substitute ordinary emulation for the selected static-recompilation architecture.
 
-The project owner will publish a Windows release only after it is ready and reviewed. Do not download game files from this repository or from unofficial mirrors.
+Third-party components and licenses are being reviewed before a distribution license or Windows release is chosen. No proprietary Xbox SDK files are intended for inclusion.
 
-## Photo credits
+## Your game files stay yours
 
-The controller photograph above is credited to **John Tregoning** and used under **Creative Commons Attribution 2.0**. It shows the controller and pedals, not the game software. See [ATTRIBUTIONS.md](docs/ATTRIBUTIONS.md) for the source and license details.
+This repository contains project code, configuration, and documentation only. **It does not include an Xbox ISO, XBE executable, extracted game code, textures, audio, cinematics, or other game files.** Users must supply their own legally obtained game copy. The original image will not be changed or redistributed.
+
+## Follow the work
+
+- [Project status and architecture notes](docs/milestone-1-research.md) — research, decisions, and verification records.
+- [Community compatibility and preservation plan](docs/community-compatibility-preservation.md) — controller, campaign, graphics, and future multiplayer priorities.
+- [Image credits and licenses](docs/ATTRIBUTIONS.md).
+- [Steel Battalion community on Reddit](https://www.reddit.com/r/steelbattaliononline/).
+- [Steel Battalion community Discord](https://discord.gg/steelbattalion).
+- [ChatGPT Codex](https://openai.com/codex/).
+
+The project is not affiliated with or endorsed by Capcom, Microsoft, or the image creators. Product names and trademarks belong to their respective owners. A Windows release will be considered only after compatibility work, license review, and project-owner approval.

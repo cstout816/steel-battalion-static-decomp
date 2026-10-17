@@ -9,3 +9,11 @@
 - **Purpose:** Shows the original controller and pedals; it is not a game screenshot or game asset.
 
 The creator does not endorse this project. All other product names and trademarks belong to their respective owners.
+
+## Project concept image
+
+- **Creator:** Generated with ChatGPT for this project.
+- **Source:** Original AI-generated illustration; no third-party reference image was used.
+- **License:** Project-created concept artwork. It is included to illustrate the project's general preservation theme.
+- **Changes:** None.
+- **Purpose:** Clearly illustrative concept artwork only. It is not a photograph of the original Steel Battalion controller and does not show the game.
