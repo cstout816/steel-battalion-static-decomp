@@ -1,0 +1,65 @@
+diff --git a/src/kernel/nv2a_pb_scan.c b/src/kernel/nv2a_pb_scan.c
+index 65bbedb..9e37149 100644
+--- a/src/kernel/nv2a_pb_scan.c
++++ b/src/kernel/nv2a_pb_scan.c
+@@ -50,6 +50,33 @@ extern void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+ extern void nv2a_pb_exec_report(void);
+ static int s_exec_enabled = -1;
+ 
++/* Trace object selection and DMA/semaphore methods needed to resolve a
++ * title's fence target. This is observational only. */
++static void trace_semaphore_method(uint32_t subch, uint32_t method,
++                                   uint32_t param)
++{
++    static int enabled = -1;
++    if (enabled < 0)
++        enabled = getenv("RECOMP_PB_SEMAPHORE_TRACE") != NULL;
++    if (!enabled)
++        return;
++
++    const char *name = NULL;
++    if (method == 0x0000)
++        name = "SET_OBJECT";
++    else if (method >= 0x0180 && method <= 0x01A8)
++        name = "CONTEXT_DMA";
++    else if (method == 0x1D6C)
++        name = "SET_SEMAPHORE_OFFSET";
++    else if (method == 0x1D70)
++        name = "BACK_END_WRITE_SEMAPHORE_RELEASE";
++    else
++        return;
++
++    fprintf(stderr, "  [PB-SEM] subch %u method 0x%04X %-36s param 0x%08X\n",
++            subch, method, name, param);
++}
++
+ static void note(uint32_t subch, uint32_t method)
+ {
+     for (int i = 0; i < s_seen_count; i++) {
+@@ -205,13 +232,14 @@ static uint32_t pb_walk(uint32_t va, uint32_t end_va, int in_call,
+ 
+             for (uint32_t i = 0; i < count && va < end_va; i++) {
+                 uint32_t m = noninc ? method : method + i * 4;
++                uint32_t param = *(const uint32_t *)(mem + va);
+                 note(subch, m);
++                trace_semaphore_method(subch, m, param);
+                 /* Same walk, two consumers: the survey counts, the executor
+                  * acts. Keeping them on one decode means they can never
+                  * disagree about what the stream said. */
+                 if (s_exec_enabled)
+-                    nv2a_pb_exec_method(subch, m,
+-                                        *(const uint32_t *)(mem + va));
++                    nv2a_pb_exec_method(subch, m, param);
+                 va += 4;
+                 words++;
+             }
+@@ -230,7 +258,8 @@ void nv2a_pb_scan(uint32_t start_va, uint32_t end_va)
+         s_exec_enabled = getenv("RECOMP_PB_EXEC") != NULL;
+     static int scan = -1;
+     if (scan < 0)
+-        scan = getenv("RECOMP_PB_SCAN") != NULL;
++        scan = getenv("RECOMP_PB_SCAN") != NULL
++            || getenv("RECOMP_PB_SEMAPHORE_TRACE") != NULL;
+     if (!(scan || s_exec_enabled) || end_va <= start_va)
+         return;
+     if (end_va - start_va > 0x400000u)        /* a sane single-frame bound */
