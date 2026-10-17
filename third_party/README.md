@@ -25,12 +25,16 @@ verification are still pending.
 
 This hookup does not make the component a complete GPU implementation. At the
 pinned revision, `nv2a_core.c` labels PFIFO as a phase-one stub, and the block
-table routes PFIFO cache and NV_USER windows to stub handlers. The component's
-own README describes push-buffer parsing as a separate processing path. Treat
-the hook as first-step register integration only; title-screen rendering and
-GPU command execution remain unverified and may require completing or replacing
-those specific device functions with compatible, license-reviewed upstream
-code.
+table routes PFIFO cache and NV_USER windows to stub handlers. The same pinned
+checkout also includes a separate, opt-in scanner and partial pushbuffer
+executor in `src/kernel/nv2a_pb_scan.c` and `nv2a_pb_exec.c`, linked into the
+`xbox_kernel` target. It is gated by `RECOMP_PB_EXEC=1` and can process a
+subset of surface, clear, and geometry methods into the guest framebuffer.
+It is not a complete PFIFO, shader, or texture implementation. Its safety
+guards and method coverage must be validated against Steel Battalion; no
+Steel Battalion frame has been verified. The project has a partial
+command-execution experiment available, but neither this path nor title-screen
+rendering is verified.
 
 The port-I/O bridge is isolated in
 [`patches/xboxrecomp-v0.13.1-port-io.patch`](../patches/xboxrecomp-v0.13.1-port-io.patch)
