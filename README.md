@@ -90,6 +90,44 @@ Distribution: clean package, licenses, docs      [#-------------------] 1 / 3 (3
 
 For example, “guest entry and asset read” records two observed startup checkpoints, while “title screen and gameplay frame” remains at zero. The DSP doorbell acknowledgment is diagnostic only, so it does not count as DSP processing or audible output. Diagnostic logging and local project documentation exist, but deterministic replay, a clean playable package, and completed license review do not. Counts will move only when the corresponding outcome is verified. These detailed bars supplement the milestone and top-level field bars above; they do not change the milestone gate or imply campaign compatibility.
 
+### Requirement-by-requirement progress
+
+These additional bars break the requested features into smaller player-facing checks. They count working, verified outcomes; planning, source inspection, and diagnostic-only behavior do not count as delivered features.
+
+```text
+Original controller: adapter, detection, input, output  [--------------------] 0 / 4 (0%)
+Controller editor: labeled layout and reassignment     [--------------------] 0 / 4 (0%)
+Controller behavior: toggles, gears, analog calibration [--------------------] 0 / 3 (0%)
+Controller feedback: indicator lights and vibration    [--------------------] 0 / 2 (0%)
+Input devices: keyboard/mouse and Xbox/PlayStation      [--------------------] 0 / 3 (0%)
+Input devices: HOTAS, pedals, multi-device/custom HID   [--------------------] 0 / 3 (0%)
+Controller profiles: defaults, import, export           [--------------------] 0 / 3 (0%)
+
+Campaign checks: mission load and stable gameplay      [--------------------] 0 / 2 (0%)
+Campaign checks: cinematics and mission audio           [--------------------] 0 / 2 (0%)
+Campaign checks: save/load and mission completion      [--------------------] 0 / 2 (0%)
+Campaign checks: progression through the full campaign  [--------------------] 0 / 1 (0%)
+
+Display: 1080p, 1440p, 4K, and window/fullscreen modes  [--------------------] 0 / 4 (0%)
+Display: widescreen, 4:3, HUD placement, FOV            [--------------------] 0 / 4 (0%)
+Rendering: original look and enhanced preset           [--------------------] 0 / 2 (0%)
+Rendering: filtering, AA, VSync, noise/grain options    [--------------------] 0 / 4 (0%)
+Rendering: shader/pipeline cache and scaling            [--------------------] 0 / 2 (0%)
+Frame pacing: original, 30, 60, 120, 144 FPS modes      [--------------------] 0 / 5 (0%)
+Frame pacing: timing safety, uncapped mode, measurements [--------------------] 0 / 3 (0%)
+
+Launcher: import, validate, identify, and change ISO    [--------------------] 0 / 4 (0%)
+Launcher: settings, diagnostics, logs, reset, shortcut  [--------------------] 0 / 5 (0%)
+Launcher: add the game to Steam                         [--------------------] 0 / 1 (0%)
+Launcher updates: check, notes, download consent        [--------------------] 0 / 3 (0%)
+Launcher updates: verify files and preserve settings    [--------------------] 0 / 2 (0%)
+Community tools: portable mode and troubleshooting      [--------------------] 0 / 2 (0%)
+Community tools: consent-based crash report and docs    [--------------------] 0 / 2 (0%)
+Line of Contact: separate game profile and network study [--------------------] 0 / 2 (0%)
+```
+
+These feature bars complement the engineering checkpoint bars above. They are intentionally zero until the feature is implemented and verified; a planned feature or research note alone does not advance them.
+
 | Area | Status |
 | --- | --- |
 | Research and architecture | Complete; static recompilation remains the chosen approach. |
