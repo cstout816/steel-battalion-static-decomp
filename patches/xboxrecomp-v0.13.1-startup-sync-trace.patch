@@ -1,0 +1,127 @@
+diff --git a/src/kernel/kernel_bridge.c b/src/kernel/kernel_bridge.c
+index c65ba43..306bc9f 100644
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -1513,6 +1513,27 @@ static void ke_shadow_insert(uint32_t guest_va, HANDLE host);
+ static HANDLE bridge_resolve_handle(uint32_t token);
+ static HANDLE ke_guest_event(uint32_t guest_va, int *type);
+ 
++/* Optional startup synchronization trace. It is deliberately observational:
++ * keep the normal bridge behavior untouched and bound diagnostic output so a
++ * runaway guest cannot fill the disk. */
++static int bridge_sync_trace_enabled(void)
++{
++    static LONG cached = -1;
++    LONG value = InterlockedCompareExchange(&cached, -1, -1);
++    if (value < 0) {
++        const char *setting = getenv("RECOMP_SYNC_TRACE");
++        value = setting && setting[0] && setting[0] != '0';
++        InterlockedCompareExchange(&cached, value, -1);
++    }
++    return value != 0;
++}
++
++static int bridge_sync_trace_allow(void)
++{
++    static volatile LONG lines;
++    return InterlockedIncrement(&lines) <= 4096;
++}
++
+ /* ── KeSetEvent (ordinal 145) ────────────────────────────── */
+ static void bridge_KeSetEvent(void)
+ {
+@@ -1531,6 +1552,10 @@ static void bridge_KeSetEvent(void)
+             g_eax = BRIDGE_MEM32(guest_va + 4) != 0;   /* previous state */
+             BRIDGE_MEM32(guest_va + 4) = 1;
+             SetEvent(ge);
++            if (bridge_sync_trace_enabled() && bridge_sync_trace_allow())
++                fprintf(stderr, "[SYNC] tid=%lu KeSetEvent caller=%08X guest=%08X host=%p value=%08X\n",
++                        GetCurrentThreadId(), g_xbox_kernel_caller, guest_va,
++                        ge, g_eax);
+             return;
+         }
+     }
+@@ -1543,6 +1568,9 @@ static void bridge_KeSetEvent(void)
+         g_eax = (uint32_t)SetEvent(h);
+     else
+         g_eax = 0;
++    if (bridge_sync_trace_enabled() && bridge_sync_trace_allow())
++        fprintf(stderr, "[SYNC] tid=%lu KeSetEvent caller=%08X guest=%08X host=%p result=%08X\n",
++                GetCurrentThreadId(), g_xbox_kernel_caller, guest_va, h, g_eax);
+ }
+ 
+ /* ── KeWaitForSingleObject (ordinal 159) ─────────────────── */
+@@ -1621,9 +1649,14 @@ static void bridge_NtClearEvent(void)
+  * context's go-event and only the first 14 KB of the map ever loaded. */
+ static void bridge_NtSetEvent(void)
+ {
+-    HANDLE   handle = bridge_resolve_handle(STACK_ARG(0));
++    uint32_t token  = STACK_ARG(0);
++    HANDLE   handle = bridge_resolve_handle(token);
+     uint32_t prev   = STACK_ARG(1);
+     g_eax = (uint32_t)xbox_NtSetEvent(handle, XBOX_TO_NATIVE(prev));
++    if (bridge_sync_trace_enabled() && bridge_sync_trace_allow())
++        fprintf(stderr, "[SYNC] tid=%lu NtSetEvent caller=%08X token=%08X host=%p status=%08X prev=%08X\n",
++                GetCurrentThreadId(), g_xbox_kernel_caller, token, handle,
++                g_eax, prev ? BRIDGE_MEM32(prev) : 0xFFFFFFFFu);
+ }
+ 
+ /* ── NtPulseEvent (ordinal 205) ──────────────────────────── */
+@@ -1633,9 +1666,13 @@ static void bridge_NtSetEvent(void)
+  * faithfully -- a waiter not yet blocked misses it, exactly as on hardware. */
+ static void bridge_NtPulseEvent(void)
+ {
+-    HANDLE handle = bridge_resolve_handle(STACK_ARG(0));
++    uint32_t token = STACK_ARG(0);
++    HANDLE handle = bridge_resolve_handle(token);
+     if (handle) PulseEvent(handle);
+     g_eax = 0;
++    if (bridge_sync_trace_enabled() && bridge_sync_trace_allow())
++        fprintf(stderr, "[SYNC] tid=%lu NtPulseEvent caller=%08X token=%08X host=%p status=%08X\n",
++                GetCurrentThreadId(), g_xbox_kernel_caller, token, handle, g_eax);
+ }
+ 
+ /* ── NtWaitForSingleObjectEx (ordinal 234) ───────────────── */
+@@ -1738,6 +1775,21 @@ static void bridge_NtWaitForMultipleObjectsEx(void)
+     g_eax = (uint32_t)xbox_NtWaitForMultipleObjectsEx(
+         count, handles, wait_type, (BOOLEAN)alertable,
+         XBOX_TO_NATIVE(timeout_ptr));
++    if (bridge_sync_trace_enabled() && bridge_sync_trace_allow()) {
++        LARGE_INTEGER timeout_value;
++        timeout_value.QuadPart = 0;
++        if (timeout_ptr)
++            timeout_value = *(PLARGE_INTEGER)XBOX_TO_NATIVE(timeout_ptr);
++        fprintf(stderr, "[SYNC] tid=%lu NtWaitForMultipleObjectsEx caller=%08X count=%u type=%u mode=%u alertable=%u timeout=%s%lld status=%08X",
++                GetCurrentThreadId(), g_xbox_kernel_caller, count, wait_type,
++                wait_mode, alertable, timeout_ptr ? "100ns=" : "INFINITE",
++                timeout_ptr ? timeout_value.QuadPart : 0, g_eax);
++        for (i = 0; i < count; i++)
++            fprintf(stderr, " h%u=%08X/%p", i,
++                    BRIDGE_MEM32(handles_va + i * 4), handles[i]);
++        fputc('\n', stderr);
++        fflush(stderr);
++    }
+ }
+ 
+ /*
+@@ -7094,6 +7146,10 @@ static void bridge_KeResetEvent(void)
+             BRIDGE_MEM32(guest_va + 4) = 0;
+             ResetEvent(ge);
+             g_eax = 0;
++            if (bridge_sync_trace_enabled() && bridge_sync_trace_allow())
++                fprintf(stderr, "[SYNC] tid=%lu KeResetEvent caller=%08X guest=%08X host=%p result=%08X\n",
++                        GetCurrentThreadId(), g_xbox_kernel_caller, guest_va,
++                        ge, g_eax);
+             return;
+         }
+     }
+@@ -7104,6 +7160,9 @@ static void bridge_KeResetEvent(void)
+         ResetEvent(h);
+ 
+     g_eax = 0;
++    if (bridge_sync_trace_enabled() && bridge_sync_trace_allow())
++        fprintf(stderr, "[SYNC] tid=%lu KeResetEvent caller=%08X guest=%08X host=%p result=%08X\n",
++                GetCurrentThreadId(), g_xbox_kernel_caller, guest_va, h, g_eax);
+ }
+ 
+ /* --- KeResumeThread (ordinal 140, 1 arg = 4 bytes) --- */
