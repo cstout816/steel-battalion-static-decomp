@@ -17,7 +17,7 @@
 
 </div>
 
-> **Player status:** There is no playable build yet. Normal startup fails during audio setup. An experimental audio path gets farther and loads a title asset, but it still waits before showing a game frame. The banner describes the project; the hardware photo shows the original controller and pedals, not running game footage.
+> **Player status:** There is no playable build yet. Normal startup fails during audio setup. Experimental audio and asynchronous-file-I/O diagnostics load several title assets and reach GPU draw calls, but the rendered image has not been visually verified and the title screen has not been reached. The banner describes the project; the hardware photo shows the original controller and pedals, not running game footage.
 
 ## The short version
 
@@ -132,7 +132,7 @@ These feature bars complement the engineering checkpoint bars above. They are in
 | --- | --- |
 | Research and architecture | Complete; static recompilation remains the chosen approach. |
 | Initial Windows translation | Built locally; translation gaps mean this is not yet proof of correct game behavior. |
-| Game startup | In progress; normal startup fails during audio setup. An experimental audio path loads a title asset but still waits before drawing a game frame. |
+| Game startup | In progress; normal startup fails during audio setup. Experimental audio and async-I/O diagnostics load three title assets and issue GPU draws, but the image is unverified and no title screen has been reached. |
 | Playable release and launcher | Not available. |
 | Full campaign compatibility | Not verified. No mission-completion or campaign-progression testing has been completed. |
 
