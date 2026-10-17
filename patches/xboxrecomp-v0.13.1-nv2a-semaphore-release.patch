@@ -1,5 +1,5 @@
 diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
-index c65632c..e54e3bb 100644
+index c65632c..d10a24b 100644
 --- a/src/kernel/nv2a_pb_exec.c
 +++ b/src/kernel/nv2a_pb_exec.c
 @@ -121,6 +121,106 @@ static uint32_t dma_resolve(uint32_t offset)
@@ -66,7 +66,7 @@ index c65632c..e54e3bb 100644
 +        return 0;
 +    }
 +    instance = (context & 0x0000FFFFu) << 4;
-+    if ((uint64_t)instance + 12u > 0x100000u) {
++    if ((uint64_t)instance + 16u > 0x100000u) {
 +        *why = "DMA descriptor outside PRAMIN";
 +        return 0;
 +    }
