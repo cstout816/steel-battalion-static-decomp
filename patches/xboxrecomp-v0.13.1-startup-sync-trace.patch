@@ -1,8 +1,8 @@
 diff --git a/src/kernel/kernel_bridge.c b/src/kernel/kernel_bridge.c
-index c65ba43..306bc9f 100644
+index c65ba43..d9edc12 100644
 --- a/src/kernel/kernel_bridge.c
 +++ b/src/kernel/kernel_bridge.c
-@@ -1513,6 +1513,27 @@ static void ke_shadow_insert(uint32_t guest_va, HANDLE host);
+@@ -1513,6 +1513,33 @@ static void ke_shadow_insert(uint32_t guest_va, HANDLE host);
  static HANDLE bridge_resolve_handle(uint32_t token);
  static HANDLE ke_guest_event(uint32_t guest_va, int *type);
  
@@ -27,10 +27,16 @@ index c65ba43..306bc9f 100644
 +    return InterlockedIncrement(&lines) <= 4096;
 +}
 +
++static LONG bridge_sync_trace_delay_number(void)
++{
++    static volatile LONG calls;
++    return InterlockedIncrement(&calls);
++}
++
  /* ── KeSetEvent (ordinal 145) ────────────────────────────── */
  static void bridge_KeSetEvent(void)
  {
-@@ -1531,6 +1552,10 @@ static void bridge_KeSetEvent(void)
+@@ -1531,6 +1558,10 @@ static void bridge_KeSetEvent(void)
              g_eax = BRIDGE_MEM32(guest_va + 4) != 0;   /* previous state */
              BRIDGE_MEM32(guest_va + 4) = 1;
              SetEvent(ge);
@@ -41,7 +47,7 @@ index c65ba43..306bc9f 100644
              return;
          }
      }
-@@ -1543,6 +1568,9 @@ static void bridge_KeSetEvent(void)
+@@ -1543,6 +1574,9 @@ static void bridge_KeSetEvent(void)
          g_eax = (uint32_t)SetEvent(h);
      else
          g_eax = 0;
@@ -51,7 +57,7 @@ index c65ba43..306bc9f 100644
  }
  
  /* ── KeWaitForSingleObject (ordinal 159) ─────────────────── */
-@@ -1621,9 +1649,14 @@ static void bridge_NtClearEvent(void)
+@@ -1621,9 +1655,14 @@ static void bridge_NtClearEvent(void)
   * context's go-event and only the first 14 KB of the map ever loaded. */
  static void bridge_NtSetEvent(void)
  {
@@ -67,7 +73,7 @@ index c65ba43..306bc9f 100644
  }
  
  /* ── NtPulseEvent (ordinal 205) ──────────────────────────── */
-@@ -1633,9 +1666,13 @@ static void bridge_NtSetEvent(void)
+@@ -1633,9 +1672,13 @@ static void bridge_NtSetEvent(void)
   * faithfully -- a waiter not yet blocked misses it, exactly as on hardware. */
  static void bridge_NtPulseEvent(void)
  {
@@ -82,7 +88,7 @@ index c65ba43..306bc9f 100644
  }
  
  /* ── NtWaitForSingleObjectEx (ordinal 234) ───────────────── */
-@@ -1738,6 +1775,21 @@ static void bridge_NtWaitForMultipleObjectsEx(void)
+@@ -1738,6 +1781,21 @@ static void bridge_NtWaitForMultipleObjectsEx(void)
      g_eax = (uint32_t)xbox_NtWaitForMultipleObjectsEx(
          count, handles, wait_type, (BOOLEAN)alertable,
          XBOX_TO_NATIVE(timeout_ptr));
@@ -104,7 +110,39 @@ index c65ba43..306bc9f 100644
  }
  
  /*
-@@ -7094,6 +7146,10 @@ static void bridge_KeResetEvent(void)
+@@ -1808,11 +1866,29 @@ static void bridge_KeDelayExecutionThread(void)
+     uint32_t wait_mode    = STACK_ARG(0);
+     uint32_t alertable    = STACK_ARG(1);
+     uint32_t interval_ptr = STACK_ARG(2);
+-
+-
++    LARGE_INTEGER interval;
++    uint32_t caller = g_xbox_kernel_caller;
++    int trace_enabled = bridge_sync_trace_enabled();
++    LONG call_number = trace_enabled ? bridge_sync_trace_delay_number() : 0;
++    int trace_call = trace_enabled
++        && (call_number <= 64 || (call_number % 512) == 0);
++    interval.QuadPart = trace_enabled && interval_ptr
++        ? ((PLARGE_INTEGER)XBOX_TO_NATIVE(interval_ptr))->QuadPart : 0;
++
++    if (trace_call) {
++        fprintf(stderr, "[SYNC] tid=%lu delay-enter #%ld return=%08X mode=%u alertable=%u interval100ns=%lld\n",
++                GetCurrentThreadId(), call_number, caller, wait_mode,
++                alertable, interval.QuadPart);
++        fflush(stderr);
++    }
+     g_eax = (uint32_t)xbox_KeDelayExecutionThread(
+         (KPROCESSOR_MODE)wait_mode, (BOOLEAN)alertable,
+         XBOX_TO_NATIVE(interval_ptr));
++    if (trace_call) {
++        fprintf(stderr, "[SYNC] tid=%lu delay-return #%ld return=%08X status=%08X\n",
++                GetCurrentThreadId(), call_number, caller, g_eax);
++        fflush(stderr);
++    }
+ }
+ 
+ /* ── KeBugCheck (ordinal 95) / KeBugCheckEx (96) ─────────── */
+@@ -7094,6 +7170,10 @@ static void bridge_KeResetEvent(void)
              BRIDGE_MEM32(guest_va + 4) = 0;
              ResetEvent(ge);
              g_eax = 0;
@@ -115,7 +153,7 @@ index c65ba43..306bc9f 100644
              return;
          }
      }
-@@ -7104,6 +7160,9 @@ static void bridge_KeResetEvent(void)
+@@ -7104,6 +7184,9 @@ static void bridge_KeResetEvent(void)
          ResetEvent(h);
  
      g_eax = 0;

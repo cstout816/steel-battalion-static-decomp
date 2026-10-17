@@ -52,6 +52,44 @@ The function bar counts functions emitted by the current production translation 
 
 Checkpoint details: research covers XBE identification, architecture selection, and documented constraints; the executable bar records a local build only. Boot checks are guest entry, game asset read, title screen, rendered scene, and normal audio startup. Graphics checks are pushbuffer/clear/flip processing, title-screen image, gameplay draw, and enhanced-resolution output. Audio checks are diagnostic APU initialization, real DSP processing, and audible output. Original controller checks are input, full control mapping, and indicator-light output; other-controller checks are keyboard/mouse, gamepad, and HOTAS/custom HID. Performance checks are an original-rate baseline, stable 60 FPS, and higher-rate/frame-pacing validation. Debugging checks are crash/watchdog logs and deterministic input replay. Launcher checks are ISO validation, settings UI, Steam shortcut, and update flow. Line of Contact checks are initial community research, existing-network compatibility verification, and a separate profile. Distribution checks are project repository/documentation, completed dependency-license review, and a reviewed playable release package.
 
+### Detailed field progress
+
+These smaller bars expose progress across the individual work areas requested for the project. Each denominator is a short list of verifiable outcomes, not an estimate of effort. A 0% bar means no outcome in that field has been verified yet; it does not mean the work is impossible.
+
+```text
+Static recompilation: functions emitted       [####################] 9,148 / 9,148 (100%)
+Static recompilation: unsupported ops resolved [--------------------] 0 / 243 (0%)
+Static recompilation: unresolved calls resolved [--------------------] 0 / 351 (0%)
+Windows target: build completes locally         [#-------------------] 1 / 1 (100%)
+Xbox runtime: guest entry and asset read         [##------------------] 2 / 4 (50%)
+Xbox runtime: title screen and gameplay frame    [--------------------] 0 / 2 (0%)
+Xbox kernel and synchronization                  [--------------------] 0 / 3 (0%)
+Filesystem and ISO validation                    [--------------------] 0 / 3 (0%)
+Direct3D/NV2A: full scene rendering              [--------------------] 0 / 3 (0%)
+Audio: DSP processing and audible output         [--------------------] 0 / 2 (0%)
+
+Original SB controller: input, mapping, lights   [--------------------] 0 / 3 (0%)
+Modern controller and accessibility profiles     [--------------------] 0 / 4 (0%)
+Graphics: resolution, ratios, display modes      [--------------------] 0 / 4 (0%)
+Graphics: HUD, FOV, image controls, presets      [--------------------] 0 / 4 (0%)
+Frame rate: original timing and 30/60 FPS        [--------------------] 0 / 3 (0%)
+Frame rate: 120/144/uncapped safety and pacing   [--------------------] 0 / 3 (0%)
+Campaign: mission-by-mission completion          [--------------------] 0 / 1 (0%)
+Campaign: saves, cinematics, progression checks  [--------------------] 0 / 4 (0%)
+
+Diagnostics: crash logs and performance records  [#-------------------] 1 / 2 (50%)
+Diagnostics: deterministic input replay          [--------------------] 0 / 1 (0%)
+Launcher: game library and ISO path              [--------------------] 0 / 3 (0%)
+Launcher: graphics and controller settings       [--------------------] 0 / 2 (0%)
+Launcher: Steam shortcut and app entry           [--------------------] 0 / 1 (0%)
+Launcher: consent-based verified updates          [--------------------] 0 / 3 (0%)
+Community: portable install, profiles, support   [--------------------] 0 / 4 (0%)
+Line of Contact: network and separate profile     [--------------------] 0 / 3 (0%)
+Distribution: clean package, licenses, docs      [#-------------------] 1 / 3 (33%)
+```
+
+For example, “guest entry and asset read” records two observed startup checkpoints, while “title screen and gameplay frame” remains at zero. The DSP doorbell acknowledgment is diagnostic only, so it does not count as DSP processing or audible output. Diagnostic logging and local project documentation exist, but deterministic replay, a clean playable package, and completed license review do not. Counts will move only when the corresponding outcome is verified. These detailed bars supplement the milestone and top-level field bars above; they do not change the milestone gate or imply campaign compatibility.
+
 | Area | Status |
 | --- | --- |
 | Research and architecture | Complete; static recompilation remains the chosen approach. |
