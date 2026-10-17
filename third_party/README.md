@@ -17,11 +17,34 @@ The xboxrecomp new-game template contains an NV2A MMIO decoder and register
 model, but the template host did not initialize or route faults to it. The
 project-specific integration is kept separately in
 [`patches/steel-battalion-nv2a-host-hook.patch`](../patches/steel-battalion-nv2a-host-hook.patch).
-It initializes the existing model, protects the guest MMIO aperture to route
-accesses through the vectored exception handler, and reports unsupported
-register-access instructions through the normal crash diagnostics. The patch
-applies to the upstream template at the pinned version; build and runtime
-verification are still pending.
+It initializes the existing model and routes selected register pages through
+the vectored exception handler. The RAMHT register page, PRAMIN, and NV_USER
+remain shared memory so the kernel's pushbuffer worker and semaphore path see
+the guest's writes. The model's RAMIN pointer aliases that shared PRAMIN via
+[`patches/xboxrecomp-v0.13.1-shared-pramin.patch`](../patches/xboxrecomp-v0.13.1-shared-pramin.patch).
+An optional rate-limited diagnostic is isolated in
+[`patches/steel-battalion-mmio-fault-trace.patch`](../patches/steel-battalion-mmio-fault-trace.patch).
+
+The allocator stall exposed a static-lifter bug in locked XADD handling. Capstone
+reports `lock xadd`, but the flag tracker previously discarded its EFLAGS
+result. The emitted `jne` then read an uninitialized fallback flag, which made
+the reference-count destructor path run for every decrement. The isolated fix
+[`patches/xboxrecomp-v0.13.1-locked-xadd-flags.patch`](../patches/xboxrecomp-v0.13.1-locked-xadd-flags.patch)
+normalizes the lock prefix for flag tracking and snapshots the atomic addition
+result for ZF. Its focused lifter tests pass, and a local single-function
+translation confirms the actual Steel Battalion release routine now branches
+on that result. A bounded runtime run passed the former allocator loop and
+advanced farther, then crashed in an audio cleanup path with a null list
+object. This does not establish audio compatibility or a successful boot.
+
+An earlier local RelWithDebInfo run verified that Steel Battalion advances
+USER DMA_PUT/DMA_GET to `0x495C`, resolves its handle 8 semaphore DMA
+descriptor, and releases the guest fence from 3 to 9, then stalls in a guest
+allocator free-list loop. After the locked-XADD fix below, the allocator loop
+no longer recurs in the bounded run; audio cleanup now crashes on a null list
+object. The pushbuffer executor still reports one surface clear and one flip
+setup but zero geometry draws and zero pixels; a title screen, audio, and
+controller input have not been verified.
 
 This hookup does not make the component a complete GPU implementation. At the
 pinned revision, `nv2a_core.c` labels PFIFO as a phase-one stub, and the block
@@ -31,10 +54,9 @@ executor in `src/kernel/nv2a_pb_scan.c` and `nv2a_pb_exec.c`, linked into the
 `xbox_kernel` target. It is gated by `RECOMP_PB_EXEC=1` and can process a
 subset of surface, clear, and geometry methods into the guest framebuffer.
 It is not a complete PFIFO, shader, or texture implementation. Its safety
-guards and method coverage must be validated against Steel Battalion; no
-Steel Battalion frame has been verified. The project has a partial
-command-execution experiment available, but neither this path nor title-screen
-rendering is verified.
+guards and method coverage still need validation against Steel Battalion's
+full command stream. The observed clear/flip is partial command execution, not
+a rendered title-screen frame.
 
 There is also a separate `src/nv2a/nv2a_pgraph_d3d11.c` translator for a limited
 subset of NV097 methods. It is dispatched by the toolkit's `pgraph_method()`

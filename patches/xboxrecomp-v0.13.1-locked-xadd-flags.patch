@@ -1,0 +1,104 @@
+diff --git a/tools/recomp/lifter.py b/tools/recomp/lifter.py
+index e7ab880..a1cadd1 100644
+--- a/tools/recomp/lifter.py
++++ b/tools/recomp/lifter.py
+@@ -397,7 +397,6 @@ _EFLAGS_SETTERS = frozenset({
+ _FLAGS_UNDEFINED = frozenset({
+     "mul", "div", "idiv",  # Flags partially undefined
+     "rdtsc", "cpuid",      # Special instructions
+-    "lock xadd",           # Lock prefix - complex flag behavior
+     # popfd REPLACES every flag with whatever was pushed. Its flags are not
+     # architecturally undefined -- they are simply not knowable from the
+     # instruction stream -- but the tracking action is the same: whatever the
+@@ -984,9 +983,9 @@ def _make_condition(jcc, flag_setter, flag_ops):
+     # ── xadd: exchange and add, flags from addition ──
+     if flag_setter == "xadd":
+         if jcc in ("je", "jz"):
+-            return f"({lhs} == 0)", desc
++            return "(_fa == 0)", desc
+         if jcc in ("jne", "jnz"):
+-            return f"({lhs} != 0)", desc
++            return "(_fa != 0)", desc
+         return None
+ 
+     # ── repe cmpsb / repne scasb: string comparison ──
+@@ -1743,10 +1766,14 @@ class Lifter:
+                 src = _fmt_operand_read(ops[1])
+                 if atomic_m == "xadd":
+                     # dst = dst + src, and src receives dst's old value.
++                    # XADD's ZF comes from that addition. Snapshot it here;
++                    # rereading dst later can race and is not the same flags.
+                     return [
+-                        "{ uint32_t _old = RECOMP_ATOMIC_ADD32("
+-                        f"XBOX_PTR({addr}), {src});",
+-                        "  " + _fmt_operand_write(ops[1], "_old") + " }"
++                        f"{{ uint32_t _src = (uint32_t)({src});",
++                        "  uint32_t _old = RECOMP_ATOMIC_ADD32("
++                        f"XBOX_PTR({addr}), _src);",
++                        "  " + _fmt_operand_write(ops[1], "_old"),
++                        "  _fa = _old + _src; _fas = (int32_t)_fa; }"
+                         f"  /* {m} */",
+                     ]
+                 # cmpxchg: compare eax with dst; on a match store src, else
+@@ -3976,27 +4010,32 @@ def lift_basic_block(lifter, bb, flag_state=None):
+         stmts.extend(results)
+ 
+         # Track flag-setting instructions
+-        if (curr.mnemonic in _BARE_STRING_COMPARES
++        # LOCK changes atomicity, not flag semantics. Capstone keeps it in the
++        # mnemonic, so strip it before identifying the flag-setting operation.
++        flag_mnemonic = (curr.mnemonic[5:]
++                         if curr.mnemonic.startswith("lock ")
++                         else curr.mnemonic)
++        if (flag_mnemonic in _BARE_STRING_COMPARES
+                 and not _has_xmm_operand(curr.operands)):
+             # A single cmps/scas sets the flags like cmp. "cmpsd" is also
+             # the SSE2 scalar compare, which is why it sits in
+             # _EFLAGS_PRESERVE and has to be caught before that test.
+-            last_flag_setter = curr.mnemonic
++            last_flag_setter = flag_mnemonic
+             last_flag_ops = list(curr.operands)
+-        elif curr.mnemonic in _SSE_CMP_NAMED:
++        elif flag_mnemonic in _SSE_CMP_NAMED:
+             pass  # SSE compares write a mask, not EFLAGS
+-        elif curr.mnemonic in FLAG_SETTERS:
++        elif flag_mnemonic in FLAG_SETTERS:
+             last_flag_setter, last_flag_ops = normalise_zero_test(
+-                curr.mnemonic, list(curr.operands))
+-        elif curr.mnemonic in _FLAGS_UNDEFINED:
++                flag_mnemonic, list(curr.operands))
++        elif flag_mnemonic in _FLAGS_UNDEFINED:
+             # Flags are undefined after these - clear tracking
+             last_flag_setter = None
+             last_flag_ops = []
+-        elif curr.mnemonic in _EFLAGS_SETTERS:
++        elif flag_mnemonic in _EFLAGS_SETTERS:
+             # Additional flag-setting instructions
+             last_flag_setter, last_flag_ops = normalise_zero_test(
+-                curr.mnemonic, list(curr.operands))
+-        elif curr.mnemonic in _EFLAGS_PRESERVE:
++                flag_mnemonic, list(curr.operands))
++        elif flag_mnemonic in _EFLAGS_PRESERVE:
+             pass  # These don't affect EFLAGS
+         elif curr.mnemonic in ("fcompi", "fcomip", "fucomi", "fucompi",
+                                 "fucomip", "fcomi"):
+diff --git a/tools/recomp/test_lifter_atomics.py b/tools/recomp/test_lifter_atomics.py
+index cd1dcb4..e2f01b7 100644
+--- a/tools/recomp/test_lifter_atomics.py
++++ b/tools/recomp/test_lifter_atomics.py
+@@ -55,3 +55,15 @@ class AtomicLiftTest(unittest.TestCase):
+                 generated = _lift(m, "edx")
+                 self.assertNotIn("TODO", generated)
+                 self.assertIn("RECOMP_ATOMIC_", generated)
++
++    def test_locked_xadd_branch_uses_atomic_result_flags(self):
++        xadd = Instruction(0, 3, "lock xadd", "dword ptr [ecx], edx", "f00fc111")
++        xadd.operands = [_mem_ecx(), Operand(type="reg", reg="edx")]
++        jne = Instruction(3, 2, "jne", "0x20", "751b")
++        jne.jump_target = 0x20
++        generated, _ = lift_basic_block(
++            Lifter(), BasicBlock(start=0, instructions=[xadd, jne]))
++        generated = chr(10).join(generated)
++        self.assertIn("_fa = _old + _src;", generated)
++        self.assertIn("if ((_fa != 0))", generated)
++        self.assertNotIn("if (_flags", generated)
