@@ -242,7 +242,7 @@ Therefore the 4627 candidate requires more than adding a version folder: a new l
 ### Local crash-symbol coverage (2026-10-17)
 
 - The current local CMake cache builds `Release`, whose compiler flags are `/O2 /Ob2 /DNDEBUG`; the output directory contains the executable but no PDB. The game's exception logger calls DbgHelp `SymFromAddr`, but without a PDB it cannot reliably name generated `sub_XXXXXXXX` functions from host instruction addresses.
-- CMake's existing `RelWithDebInfo` configuration enables `/Zi`. Use that configuration for the next diagnostic rebuild and retain its PDB beside the executable in ignored local build output. This improves exception symbolization; it does not add the missing guest PC to the separate hang watchdog, which currently records only GPRs/ESP and other counters.
+- CMake's existing `RelWithDebInfo` configuration enables `/Zi` and `/debug /INCREMENTAL` at link time. Use that configuration for the next diagnostic rebuild and retain its PDB beside the executable in ignored local build output. This should enable exception/watchdog symbolization, but actual PDB output remains unverified until a build. It does not add the missing guest PC to the separate hang watchdog, which currently records only GPRs/ESP and other counters.
 - Static configuration/file inspection only. No reconfigure or build was run while RobloxPlayerBeta PID 42320 was active.
 
 ### Watchdog native-PC diagnostic prepared (2026-10-17)
