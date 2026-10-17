@@ -36,6 +36,16 @@ Steel Battalion frame has been verified. The project has a partial
 command-execution experiment available, but neither this path nor title-screen
 rendering is verified.
 
+There is also a separate `src/nv2a/nv2a_pgraph_d3d11.c` translator for a limited
+subset of NV097 methods. It is dispatched by the toolkit's `pgraph_method()`
+path and by its pushbuffer replay harness. That path should not be confused
+with the game-specific executor above: the toolkit labels PFIFO a phase-one
+stub, so the title's normal guest pushbuffer has not been shown to reach this
+translator. Static source inspection finds no call from the game's
+`nv2a_pb_exec_method()` to `pgraph_d3d11_method()`; the game-specific executor
+instead rasterizes its supported subset into the guest framebuffer. This
+separation is important when interpreting a future window or frame trace.
+
 An isolated follow-on patch,
 [`patches/xboxrecomp-v0.13.1-nv2a-semaphore-release.patch`](../patches/xboxrecomp-v0.13.1-nv2a-semaphore-release.patch),
 adds the Xbox BIOS RAMHT defaults and a bounded NV097 semaphore release path
