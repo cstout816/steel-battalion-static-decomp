@@ -238,3 +238,9 @@ Therefore the 4627 candidate requires more than adding a version folder: a new l
 - The host worker scans the submitted range and only then writes `DMA_GET = DMA_PUT`. The old pushbuffer trace already shows this pointer pair equal at `0x495C`, while the distinct guest semaphore word at `0x80003000` remained 3 and the later queue wait stalled. Therefore advancing GET addresses the command-consumption check but does not by itself satisfy the queue fence; the semaphore release path remains independently necessary.
 - The next trace must record both waits independently: USER PUT/GET and the `0x80003000` semaphore value/producer. Also retain the status-word value used by `sub_0020F180` so a separate busy result is not mistaken for fence completion. This interpretation is based on static disassembly and the old trace; the newer semaphore patch remains uncompiled and unverified.
 - RobloxPlayerBeta PID 42320 remains active. No generation, build, or runtime test was started.
+
+### Local crash-symbol coverage (2026-10-17)
+
+- The current local CMake cache builds `Release`, whose compiler flags are `/O2 /Ob2 /DNDEBUG`; the output directory contains the executable but no PDB. The game's exception logger calls DbgHelp `SymFromAddr`, but without a PDB it cannot reliably name generated `sub_XXXXXXXX` functions from host instruction addresses.
+- CMake's existing `RelWithDebInfo` configuration enables `/Zi`. Use that configuration for the next diagnostic rebuild and retain its PDB beside the executable in ignored local build output. This improves exception symbolization; it does not add the missing guest PC to the separate hang watchdog, which currently records only GPRs/ESP and other counters.
+- Static configuration/file inspection only. No reconfigure or build was run while RobloxPlayerBeta PID 42320 was active.
