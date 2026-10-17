@@ -1,0 +1,199 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+index c65632c..e54e3bb 100644
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -121,6 +121,106 @@ static uint32_t dma_resolve(uint32_t offset)
+     return offset;                         /* nothing better to offer */
+ }
+ 
++/* Resolve a semaphore context the way PFIFO/PGRAPH do: handle -> RAMHT entry
++ * -> instance in PRAMIN -> DMA descriptor -> physical-memory target. The
++ * aperture is mapped as RAM in this runtime, so this reads the BIOS/D3D
++ * structures without pretending to emulate the rest of NV2A. */
++static int semaphore_target(uint32_t handle, uint32_t offset,
++                            uint32_t *guest_va, uint32_t *instance_out,
++                            uint32_t *flags_out, uint32_t *limit_out,
++                            uint32_t *frame_out, const char **why)
++{
++    const uint32_t ramin_offset = 0x700000u;
++    const uint32_t ramht_reg_offset = 0x2210u;
++    const uint32_t ramht_bytes = 0x1000u;
++    const uint32_t ramht_slots = ramht_bytes / 8u;
++    const uint32_t max_probes = 128u;
++    const uint8_t *nv2a = (const uint8_t *)((uintptr_t)xbox_GetMemoryOffset()
++                                            + 0xFD000000u);
++    const uint32_t *ramin;
++    uint32_t base, slot, instance, context = 0;
++    uint32_t flags, limit, frame, physical;
++    uint64_t end;
++    int found = 0;
++
++    {
++        uint32_t configured = *(const uint32_t *)(nv2a + ramht_reg_offset);
++        uint32_t size_code = (configured >> 24) & 3u;
++        /* RAMHT size code 3 is the Xbox BIOS 4 KB table used by the guest. */
++        if (size_code != 3u) {
++            *why = "unsupported RAMHT size";
++            return 0;
++        }
++        base = (configured & 0xFFFFu) << 8;
++    }
++    if ((uint64_t)base + ramht_bytes > 0x100000u) {
++        *why = "RAMHT outside PRAMIN";
++        return 0;
++    }
++    ramin = (const uint32_t *)(nv2a + ramin_offset);
++
++    /* With the Xbox BIOS setting, a handle below 2048 hashes directly to
++     * its handle value; the configured search depth permits 128 probes. */
++    slot = handle & (ramht_slots - 1u);
++    for (uint32_t probe = 0; probe < max_probes; probe++) {
++        uint32_t entry = (base / 4u) + slot * 2u;
++        uint32_t entry_handle = ramin[entry];
++        context = ramin[entry + 1u];
++        if ((context & 0x80000000u) && entry_handle == handle) {
++            found = 1;
++            break;
++        }
++        slot = (slot + 1u) & (ramht_slots - 1u);
++    }
++    if (!found) {
++        *why = "RAMHT handle not found";
++        return 0;
++    }
++    if ((context & 0x00030000u) != 0x00010000u) {
++        *why = "RAMHT entry is not a graphics context";
++        return 0;
++    }
++    instance = (context & 0x0000FFFFu) << 4;
++    if ((uint64_t)instance + 12u > 0x100000u) {
++        *why = "DMA descriptor outside PRAMIN";
++        return 0;
++    }
++    {
++        const uint32_t *dma = ramin + instance / 4u;
++        flags = dma[0];
++        limit = dma[1];
++        frame = dma[2];
++    }
++    if ((flags & 0xFFFu) != 0x03Du) {
++        *why = "DMA object is not a semaphore";
++        return 0;
++    }
++    if ((flags & 0x00030000u) != 0x00020000u) {
++        *why = "semaphore DMA target is not PCI memory";
++        return 0;
++    }
++    if ((offset & 3u) || offset > limit || 3u > limit - offset) {
++        *why = "semaphore offset exceeds DMA limit";
++        return 0;
++    }
++    physical = (frame & 0xFFFFF000u) | (flags & 0xFFF00000u);
++    end = (uint64_t)physical + offset + sizeof(uint32_t);
++    if (end > XBOX_CONTIG_SIZE || end < physical) {
++        *why = "semaphore physical address outside Xbox RAM";
++        return 0;
++    }
++    *guest_va = XBOX_CONTIG_BASE + physical + offset;
++    *instance_out = instance;
++    *flags_out = flags;
++    *limit_out = limit;
++    *frame_out = frame;
++    *why = "ok";
++    return 1;
++}
++
++static uint32_t s_semaphore_dma_handle;
++static uint32_t s_semaphore_offset;
++
+ static int surface_write_refused(uint32_t base, uint32_t bytes, const char *what)
+ {
+     static int said;
+@@ -160,6 +260,9 @@ static int surface_write_refused(uint32_t base, uint32_t bytes, const char *what
+ #define NV097_SET_SURFACE_FORMAT          0x0208
+ #define NV097_SET_SURFACE_PITCH           0x020C
+ #define NV097_SET_SURFACE_COLOR_OFFSET    0x0210
++#define NV097_SET_CONTEXT_DMA_SEMAPHORE   0x01A4
++#define NV097_SET_SEMAPHORE_OFFSET        0x1D6C
++#define NV097_BACK_END_WRITE_SEMAPHORE_RELEASE 0x1D70
+ #define NV097_SET_COLOR_CLEAR_VALUE       0x1D90
+ #define NV097_CLEAR_SURFACE               0x1D94
+ #define NV097_SET_VERTEX_DATA_ARRAY_OFFSET 0x1720   /* +i*4, 16 attributes */
+@@ -2914,6 +3017,43 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+         return;
+     }
+     switch (method) {
++    case NV097_SET_CONTEXT_DMA_SEMAPHORE:
++        s_semaphore_dma_handle = param;
++        break;
++    case NV097_SET_SEMAPHORE_OFFSET:
++        s_semaphore_offset = param;
++        break;
++    case NV097_BACK_END_WRITE_SEMAPHORE_RELEASE: {
++        static int trace = -1;
++        static unsigned shown;
++        uint32_t guest_va, instance, flags, limit, frame;
++        const char *why;
++        uint8_t *mem = (uint8_t *)((uintptr_t)xbox_GetMemoryOffset());
++
++        if (trace < 0)
++            trace = getenv("RECOMP_PB_SEMAPHORE_TRACE") != NULL;
++        if (!semaphore_target(s_semaphore_dma_handle, s_semaphore_offset,
++                              &guest_va, &instance, &flags, &limit, &frame,
++                              &why)) {
++            note_unhandled(method, param);
++            if (trace && shown++ < 32u)
++                fprintf(stderr,
++                        "  [PB-SEM] release unresolved handle=%08X offset=%08X "
++                        "value=%08X reason=%s\n",
++                        s_semaphore_dma_handle, s_semaphore_offset, param, why);
++            break;
++        }
++        *(volatile uint32_t *)(mem + guest_va) = param;
++        if (trace && shown++ < 32u)
++            fprintf(stderr,
++                    "  [PB-SEM] release handle=%08X instance=%05X flags=%08X "
++                    "limit=%08X frame=%08X physical=%08X guest=%08X value=%08X\n",
++                    s_semaphore_dma_handle, instance, flags, limit, frame,
++                    ((frame & 0xFFFFF000u) | (flags & 0xFFF00000u))
++                        + s_semaphore_offset,
++                    guest_va, param);
++        break;
++    }
+     case NV097_SET_SURFACE_CLIP_HORIZONTAL:
+         s_gpu.clip_x = param & 0xFFFF;
+         s_gpu.clip_w = (param >> 16) & 0xFFFF;
+diff --git a/src/kernel/xbox_memory_layout.c b/src/kernel/xbox_memory_layout.c
+index 72d5131..440b632 100644
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -2331,6 +2331,29 @@ BOOL xbox_MemoryLayoutInit(const void *xbe_data, size_t xbe_size)
+                     || getenv("RECOMP_PB_SCAN") != NULL
+                     || getenv("RECOMP_PB_EXEC") != NULL;
+         if (g_nv2a_memory) {
++            /* The Xbox BIOS installs the PFIFO RAMHT/RAMFC defaults before
++             * the title's D3D runtime creates its DMA objects. The guest
++             * runtime writes those objects into RAMIN; without the matching
++             * handle table, a hardware-faithful DMA lookup cannot resolve
++             * them. Model the standard 4K RAMHT and its BIOS DMA handles. */
++            static const struct { uint32_t handle, instance; } ramht_defaults[] = {
++                { 0x02, 0x60 }, { 0x03, 0x10 }, { 0x04, 0x30 },
++                { 0x07, 0x70 }, { 0x08, 0x90 }, { 0x09, 0x20 },
++                { 0x0A, 0x40 }, { 0x0B, 0xA0 }, { 0x0C, 0x80 },
++                { 0x11, 0x10 }, { 0x19, 0x80 },
++            };
++            uint32_t *ramin = (uint32_t *)((uint8_t *)g_nv2a_memory + 0x700000u);
++            uint32_t *ramht = (uint32_t *)((uint8_t *)ramin + 0x10000u);
++            *(uint32_t *)((uint8_t *)g_nv2a_memory + 0x2210u) = 0x03000100u;
++            *(uint32_t *)((uint8_t *)g_nv2a_memory + 0x2214u) = 0x00890110u;
++            for (size_t i = 0;
++                 i < sizeof(ramht_defaults) / sizeof(ramht_defaults[0]);
++                 i++) {
++                uint32_t handle = ramht_defaults[i].handle;
++                ramht[handle * 2u] = handle;
++                ramht[handle * 2u + 1u] = 0x80010000u
++                                           | (ramht_defaults[i].instance >> 4);
++            }
+             fprintf(stderr, "  NV2A register aperture: %u MB at Xbox VA "
+                     "0x%08X (zeroed, no register semantics)\n",
+                     XBOX_NV2A_SIZE / (1024 * 1024), XBOX_NV2A_BASE);

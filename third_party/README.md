@@ -36,6 +36,18 @@ Steel Battalion frame has been verified. The project has a partial
 command-execution experiment available, but neither this path nor title-screen
 rendering is verified.
 
+An isolated follow-on patch,
+[`patches/xboxrecomp-v0.13.1-nv2a-semaphore-release.patch`](../patches/xboxrecomp-v0.13.1-nv2a-semaphore-release.patch),
+adds the Xbox BIOS RAMHT defaults and a bounded NV097 semaphore release path
+to that partial executor. It resolves the configured handle through RAMHT and
+the guest DMA descriptor, checks class, target, limit, and physical-memory
+bounds, then writes through the contiguous physical alias. It is informed by
+xemu's LGPL-2.1-or-later DMA descriptor interpretation and Cxbx-Reloaded
+commit `d3bf46e` as behavioral prior art; no Cxbx code was copied. Runtime
+coverage is not established, and the patch is not a complete PFIFO or GPU
+implementation. Keep the Cxbx GPL-2.0 license restriction in mind before any
+future direct code reuse.
+
 The port-I/O bridge is isolated in
 [`patches/xboxrecomp-v0.13.1-port-io.patch`](../patches/xboxrecomp-v0.13.1-port-io.patch)
 and the host callback lives in the NV2A host patch above. It translates x86

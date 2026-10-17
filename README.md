@@ -37,7 +37,7 @@ This is not an Xbox emulator presented under another name. The project is still 
 | --- | --- |
 | Research and architecture | Complete; static recompilation remains the chosen approach. |
 | Initial Windows translation | Built locally; translation gaps mean this is not yet proof of correct game behavior. |
-| Game startup | In progress; startup stalled before the title screen. Recent interrupt and controller-I/O changes have not yet been rebuilt and verified. |
+| Game startup | In progress; startup stalled before the title screen. A bounded semaphore-release compatibility path is prepared, but it has not yet been rebuilt or runtime-verified. |
 | Playable release and launcher | Not available. |
 | Full campaign compatibility | Not verified. No mission-completion or campaign-progression testing has been completed. |
 
