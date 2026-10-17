@@ -29,6 +29,13 @@ This is not an Xbox emulator presented under another name. The project is still 
 
 ## Current progress
 
+```text
+Function translation output  [####################] 9,148 / 9,148 emitted (100%)
+Project milestones          [##------] 2 / 8 complete (25%)
+```
+
+The first bar counts functions emitted by the current production translation run; it does **not** mean every instruction or call is understood or that the game works. That output still contains 243 unsupported instruction sites and 351 unresolved call targets routed to stubs. The second bar counts completed project milestones only. Milestone 3 is still in progress, and there is no playable build.
+
 | Area | Status |
 | --- | --- |
 | Research and architecture | Complete; static recompilation remains the chosen approach. |
