@@ -88,3 +88,5 @@ This repository contains project code, configuration, and documentation only. **
 - [ChatGPT Codex](https://openai.com/codex/).
 
 The project is not affiliated with or endorsed by Capcom, Microsoft, or the image creators. Product names and trademarks belong to their respective owners. A Windows release will be considered only after compatibility work, license review, and project-owner approval.
+
+For a no-jargon explanation of what players can expect, see the [player guide](docs/PLAYER_GUIDE.md).
