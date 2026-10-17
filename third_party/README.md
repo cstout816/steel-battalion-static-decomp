@@ -13,6 +13,16 @@ It masks counts, preserves zero-count no-op behavior, and avoids out-of-range C
 shifts when recovering carry. Keep this change separate from upstream source
 and revalidate it when changing xboxrecomp versions.
 
+The xboxrecomp new-game template contains an NV2A MMIO decoder and register
+model, but the template host did not initialize or route faults to it. The
+project-specific integration is kept separately in
+[`patches/steel-battalion-nv2a-host-hook.patch`](../patches/steel-battalion-nv2a-host-hook.patch).
+It initializes the existing model, protects the guest MMIO aperture to route
+accesses through the vectored exception handler, and reports unsupported
+register-access instructions through the normal crash diagnostics. The patch
+applies to the upstream template at the pinned version; build and runtime
+verification are still pending.
+
 The upstream `NOTICE` identifies xemu-derived APU and NV2A components under
 LGPL-2.1-or-later. The local executable links xboxrecomp runtime libraries,
 including those components. No game executable or runtime libraries are

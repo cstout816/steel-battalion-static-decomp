@@ -1,0 +1,100 @@
+diff --git a/templates/new-game/src/main.c b/templates/new-game/src/main.c
+index 01a3631..3ce901a 100644
+--- a/templates/new-game/src/main.c
++++ b/templates/new-game/src/main.c
+@@ -40,6 +40,8 @@
+ 
+ /* xboxrecomp runtime headers */
+ #include <xbox/xboxrecomp.h>
++#include "nv2a_mmio_hook.h"
++#include "nv2a_state.h"
+ 
+ /*
+  * If xboxrecomp.h is not an umbrella header in your setup, include
+@@ -81,9 +83,9 @@ extern ptrdiff_t g_xbox_mem_offset;
+  * TODO: Set these from your xbe_parser output.
+  * Run: py -3 -m tools.xbe_parser game/default.xbe
+  */
+-#define YOUR_GAME_ENTRY_POINT   0x00000000  /* XBE entry point VA */
+-#define YOUR_GAME_XBE_PATH      "game\\Your Game Title\\default.xbe"
+-#define YOUR_GAME_DIR            "game\\Your Game Title"
++#define YOUR_GAME_ENTRY_POINT   0x00192C47  /* Steel Battalion XBE entry point VA */
++#define YOUR_GAME_XBE_PATH      "game\\Steel Battalion\\default.xbe"
++#define YOUR_GAME_DIR            "game\\Steel Battalion"
+ 
+ /* ── Forward declarations ──────────────────────────────────── */
+ 
+@@ -230,16 +232,18 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
+ {
+     if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+         uintptr_t fault_addr = ep->ExceptionRecord->ExceptionInformation[1];
+-
+-        /*
+-         * GPU register probe at 0xFD000000 range.
+-         * Some games probe NV2A registers directly. On real hardware this
+-         * returns GPU state; here we just skip the instruction.
+-         * TODO: Implement mini x86-64 decoder for instruction skipping,
+-         * or connect to the xbox_nv2a library for proper handling.
+-         */
+-        if (fault_addr >= 0xFD000000 && fault_addr < 0xFE000000) {
+-            return EXCEPTION_CONTINUE_SEARCH;
++        uint32_t fault_xbox_va =
++            (uint32_t)(fault_addr - (uintptr_t)g_xbox_mem_offset);
++
++        /* Route direct Xbox NV2A MMIO accesses through xboxrecomp's
++         * register model. The aperture is set PAGE_NOACCESS after the model
++         * is initialized, so guest and bridge accesses arrive here. */
++        if (fault_xbox_va >= 0xFD000000u && fault_xbox_va < 0xFE000000u) {
++            if (nv2a_hook_handle_mmio(
++                    ep->ContextRecord, fault_addr, fault_xbox_va,
++                    ep->ExceptionRecord->ExceptionInformation[0] ? 1 : 0)) {
++                return EXCEPTION_CONTINUE_EXECUTION;
++            }
+         }
+ 
+         /* APU registers -> the emulated APU.
+@@ -250,12 +254,9 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
+          * "Handled" means the access was decoded and the instruction stepped
+          * over, so execution resumes instead of unwinding. */
+         {
+-            uint32_t xbox_va =
+-                (uint32_t)(fault_addr - (uintptr_t)g_xbox_mem_offset);
+-
+-            if (xbox_va >= APU_TRAP_BASE && xbox_va < APU_TRAP_END
++            if (fault_xbox_va >= APU_TRAP_BASE && fault_xbox_va < APU_TRAP_END
+                     && apu_hook_handle_mmio(
+-                           ep->ContextRecord, fault_addr, xbox_va,
++                           ep->ContextRecord, fault_addr, fault_xbox_va,
+                            ep->ExceptionRecord->ExceptionInformation[0]
+                                ? 1 : 0)) {
+                 return EXCEPTION_CONTINUE_EXECUTION;
+@@ -352,6 +353,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+     g_xbox_mem_offset = xbox_GetMemoryOffset();
+     printf("Xbox memory mapped. Offset: 0x%llX\n", (unsigned long long)g_xbox_mem_offset);
+ 
++    /* The memory-layout helper initially reserves the NV2A range as zeroed
++     * RAM. Replace that placeholder with the bundled register model: its
++     * VEH hook needs accesses to fault so it can decode and service them. */
++    nv2a_hook_init(g_xbox_mem_offset);
++    if (!nv2a_get_state()) {
++        fprintf(stderr, "[BOOT] NV2A model failed to initialize\n");
++        free(xbe_data);
++        return 1;
++    }
++    {
++        DWORD old_protect;
++        void *nv2a_aperture =
++            (void *)(uintptr_t)(0xFD000000u + g_xbox_mem_offset);
++        if (!VirtualProtect(nv2a_aperture, 0x01000000u,
++                            PAGE_NOACCESS, &old_protect)) {
++            fprintf(stderr, "[BOOT] Failed to protect NV2A MMIO aperture "
++                    "(error %lu)\n", GetLastError());
++            free(xbe_data);
++            return 1;
++        }
++        fprintf(stderr, "[BOOT] NV2A MMIO routed through register model\n");
++    }
++
+     /* Bring up the emulated APU.
+      *
+      * Gated on the same variable that unmaps its registers, because the two
