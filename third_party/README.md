@@ -23,6 +23,15 @@ register-access instructions through the normal crash diagnostics. The patch
 applies to the upstream template at the pinned version; build and runtime
 verification are still pending.
 
+This hookup does not make the component a complete GPU implementation. At the
+pinned revision, `nv2a_core.c` labels PFIFO as a phase-one stub, and the block
+table routes PFIFO cache and NV_USER windows to stub handlers. The component's
+own README describes push-buffer parsing as a separate processing path. Treat
+the hook as first-step register integration only; title-screen rendering and
+GPU command execution remain unverified and may require completing or replacing
+those specific device functions with compatible, license-reviewed upstream
+code.
+
 The upstream `NOTICE` identifies xemu-derived APU and NV2A components under
 LGPL-2.1-or-later. The local executable links xboxrecomp runtime libraries,
 including those components. No game executable or runtime libraries are
