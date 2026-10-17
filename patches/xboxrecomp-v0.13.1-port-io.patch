@@ -1,0 +1,48 @@
+diff --git a/templates/runtime/recomp_types.h b/templates/runtime/recomp_types.h
+index 8e9325e..07d2e36 100644
+--- a/templates/runtime/recomp_types.h
++++ b/templates/runtime/recomp_types.h
+@@ -1434,4 +1434,8 @@ static inline RecompMmx MMX_PSADBW(RecompMmx a, RecompMmx b) {
+ void recomp_unimpl(const char *text, uint32_t va);
+ #define RECOMP_UNIMPL(_text, _va) recomp_unimpl((_text), (_va))
+ 
++/* x86 IN/OUT instructions use the title's emulated Xbox I/O-port bus. */
++uint32_t recomp_port_in(uint16_t port, uint32_t width);
++void recomp_port_out(uint16_t port, uint32_t width, uint32_t value);
++
+ #endif /* RECOMP_TYPES_H */
+diff --git a/tools/recomp/lifter.py b/tools/recomp/lifter.py
+index e7ab880..4b44236 100644
+--- a/tools/recomp/lifter.py
++++ b/tools/recomp/lifter.py
+@@ -1381,6 +1381,30 @@ class Lifter:
+                           not ops[1].mem_index and ops[1].mem_disp == 0):
+             return [f"/* nop */"]
+ 
++        # ── x86 port I/O ──
++        # Route IN/OUT through the host Xbox I/O bus. IN changes only the
++        # selected AL/AX/EAX width; OUT leaves guest registers untouched.
++        if m in ("in", "out"):
++            if nops != 2:
++                return self._unimplemented(insn, m)
++            if m == "in":
++                dst, port_op = ops
++                width = _operand_width(dst)
++                if (dst.type != "reg" or width not in (1, 2, 4)
++                        or port_op.type not in ("reg", "imm")):
++                    return self._unimplemented(insn, m)
++                port = _fmt_operand_read(port_op)
++                return [_fmt_operand_write(
++                    dst, f"recomp_port_in((uint16_t)({port}), {width}u)")]
++            port_op, src = ops
++            width = _operand_width(src)
++            if (src.type != "reg" or width not in (1, 2, 4)
++                    or port_op.type not in ("reg", "imm")):
++                return self._unimplemented(insn, m)
++            port = _fmt_operand_read(port_op)
++            value = _fmt_operand_read(src)
++            return [f"recomp_port_out((uint16_t)({port}), {width}u, {value});"]
++
+         # ── Data movement ──
+         if m == "mov":
+             return self._lift_mov(insn, ops)

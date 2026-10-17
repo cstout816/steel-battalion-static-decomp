@@ -32,6 +32,15 @@ GPU command execution remain unverified and may require completing or replacing
 those specific device functions with compatible, license-reviewed upstream
 code.
 
+The port-I/O bridge is isolated in
+[`patches/xboxrecomp-v0.13.1-port-io.patch`](../patches/xboxrecomp-v0.13.1-port-io.patch)
+and the host callback lives in the NV2A host patch above. It translates x86
+`IN`/`OUT` operations through a host callback and models the observed `0x80C0`
+LPC GPIO behavior from the open xemu PR as a candidate. The currently generated
+Steel Battalion C still contains `RECOMP_UNIMPL` for these instructions; it
+must be regenerated before the bridge can be exercised. Neither compilation
+nor runtime behavior has been verified.
+
 The upstream `NOTICE` identifies xemu-derived APU and NV2A components under
 LGPL-2.1-or-later. The local executable links xboxrecomp runtime libraries,
 including those components. No game executable or runtime libraries are

@@ -1,17 +1,45 @@
 diff --git a/templates/new-game/src/main.c b/templates/new-game/src/main.c
-index 01a3631..3ce901a 100644
+index 01a3631..ea31ec8 100644
 --- a/templates/new-game/src/main.c
 +++ b/templates/new-game/src/main.c
-@@ -40,6 +40,8 @@
+@@ -40,6 +40,36 @@
  
  /* xboxrecomp runtime headers */
  #include <xbox/xboxrecomp.h>
 +#include "nv2a_mmio_hook.h"
 +#include "nv2a_state.h"
++
++/* Candidate LPC power-management GPIO behavior from xemu's open PR #2851:
++ * reads at 0x80C0 toggle the encoder field pin in bit 5. This is a device
++ * model candidate; hardware verification is still pending. Unmapped Xbox
++ * ports read as open bus (all ones) and ignore writes. */
++static volatile LONG g_xbox_field_pin;
++
++uint32_t recomp_port_in(uint16_t port, uint32_t width)
++{
++    uint32_t mask = width == 1 ? 0xFFu :
++                    width == 2 ? 0xFFFFu : 0xFFFFFFFFu;
++
++    if (port >= 0x80C0u && port < 0x80DAu) {
++        if (port == 0x80C0u) {
++            LONG field_pin = InterlockedXor(&g_xbox_field_pin, 1) ^ 1;
++            return ((uint32_t)field_pin & 1u) << 5;
++        }
++        return 0;
++    }
++    return mask;
++}
++
++void recomp_port_out(uint16_t port, uint32_t width, uint32_t value)
++{
++    (void)port;
++    (void)width;
++    (void)value;
++}
  
  /*
   * If xboxrecomp.h is not an umbrella header in your setup, include
-@@ -81,9 +83,9 @@ extern ptrdiff_t g_xbox_mem_offset;
+@@ -81,9 +111,9 @@ extern ptrdiff_t g_xbox_mem_offset;
   * TODO: Set these from your xbe_parser output.
   * Run: py -3 -m tools.xbe_parser game/default.xbe
   */
@@ -24,7 +52,7 @@ index 01a3631..3ce901a 100644
  
  /* ── Forward declarations ──────────────────────────────────── */
  
-@@ -230,16 +232,18 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
+@@ -230,16 +260,18 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
  {
      if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
          uintptr_t fault_addr = ep->ExceptionRecord->ExceptionInformation[1];
@@ -53,7 +81,7 @@ index 01a3631..3ce901a 100644
          }
  
          /* APU registers -> the emulated APU.
-@@ -250,12 +254,9 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
+@@ -250,12 +282,9 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
           * "Handled" means the access was decoded and the instruction stepped
           * over, so execution resumes instead of unwinding. */
          {
@@ -68,7 +96,7 @@ index 01a3631..3ce901a 100644
                             ep->ExceptionRecord->ExceptionInformation[0]
                                 ? 1 : 0)) {
                  return EXCEPTION_CONTINUE_EXECUTION;
-@@ -352,6 +353,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+@@ -352,6 +381,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
      g_xbox_mem_offset = xbox_GetMemoryOffset();
      printf("Xbox memory mapped. Offset: 0x%llX\n", (unsigned long long)g_xbox_mem_offset);
  
