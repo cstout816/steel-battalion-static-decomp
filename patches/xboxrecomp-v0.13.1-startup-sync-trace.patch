@@ -1,8 +1,22 @@
 diff --git a/src/kernel/kernel_bridge.c b/src/kernel/kernel_bridge.c
-index c65ba43..d9edc12 100644
+index c65ba43..ac6c136 100644
 --- a/src/kernel/kernel_bridge.c
 +++ b/src/kernel/kernel_bridge.c
-@@ -1513,6 +1513,33 @@ static void ke_shadow_insert(uint32_t guest_va, HANDLE host);
+@@ -48,11 +48,12 @@
+  * xbox_memory_layout.h and must match the definitions there -- a plain extern
+  * here binds to the TLS template rather than the calling thread's copy, which
+  * reads as every register being zero. */
+-extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp;
++extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp, g_ebp;
+ extern RECOMP_TLS uint32_t g_ebx, g_esi, g_edi;
+ extern uint32_t g_xbox_code_lo, g_xbox_code_hi;
+ extern RECOMP_TLS uint32_t g_seh_ebp;
+ extern ptrdiff_t g_xbox_mem_offset;
++extern void xbox_CsTraceOwnedLocks(void);
+ 
+ /* Dispatch table lookup (for function pointer args) */
+ typedef void (*recomp_func_t)(void);
+@@ -1513,6 +1514,33 @@ static void ke_shadow_insert(uint32_t guest_va, HANDLE host);
  static HANDLE bridge_resolve_handle(uint32_t token);
  static HANDLE ke_guest_event(uint32_t guest_va, int *type);
  
@@ -36,7 +50,7 @@ index c65ba43..d9edc12 100644
  /* ── KeSetEvent (ordinal 145) ────────────────────────────── */
  static void bridge_KeSetEvent(void)
  {
-@@ -1531,6 +1558,10 @@ static void bridge_KeSetEvent(void)
+@@ -1531,6 +1559,10 @@ static void bridge_KeSetEvent(void)
              g_eax = BRIDGE_MEM32(guest_va + 4) != 0;   /* previous state */
              BRIDGE_MEM32(guest_va + 4) = 1;
              SetEvent(ge);
@@ -47,7 +61,7 @@ index c65ba43..d9edc12 100644
              return;
          }
      }
-@@ -1543,6 +1574,9 @@ static void bridge_KeSetEvent(void)
+@@ -1543,6 +1575,9 @@ static void bridge_KeSetEvent(void)
          g_eax = (uint32_t)SetEvent(h);
      else
          g_eax = 0;
@@ -57,7 +71,7 @@ index c65ba43..d9edc12 100644
  }
  
  /* ── KeWaitForSingleObject (ordinal 159) ─────────────────── */
-@@ -1621,9 +1655,14 @@ static void bridge_NtClearEvent(void)
+@@ -1621,9 +1656,14 @@ static void bridge_NtClearEvent(void)
   * context's go-event and only the first 14 KB of the map ever loaded. */
  static void bridge_NtSetEvent(void)
  {
@@ -73,7 +87,7 @@ index c65ba43..d9edc12 100644
  }
  
  /* ── NtPulseEvent (ordinal 205) ──────────────────────────── */
-@@ -1633,9 +1672,13 @@ static void bridge_NtSetEvent(void)
+@@ -1633,9 +1673,13 @@ static void bridge_NtSetEvent(void)
   * faithfully -- a waiter not yet blocked misses it, exactly as on hardware. */
  static void bridge_NtPulseEvent(void)
  {
@@ -88,7 +102,7 @@ index c65ba43..d9edc12 100644
  }
  
  /* ── NtWaitForSingleObjectEx (ordinal 234) ───────────────── */
-@@ -1738,6 +1781,21 @@ static void bridge_NtWaitForMultipleObjectsEx(void)
+@@ -1738,6 +1782,21 @@ static void bridge_NtWaitForMultipleObjectsEx(void)
      g_eax = (uint32_t)xbox_NtWaitForMultipleObjectsEx(
          count, handles, wait_type, (BOOLEAN)alertable,
          XBOX_TO_NATIVE(timeout_ptr));
@@ -110,7 +124,7 @@ index c65ba43..d9edc12 100644
  }
  
  /*
-@@ -1808,11 +1866,29 @@ static void bridge_KeDelayExecutionThread(void)
+@@ -1808,11 +1867,63 @@ static void bridge_KeDelayExecutionThread(void)
      uint32_t wait_mode    = STACK_ARG(0);
      uint32_t alertable    = STACK_ARG(1);
      uint32_t interval_ptr = STACK_ARG(2);
@@ -129,6 +143,40 @@ index c65ba43..d9edc12 100644
 +        fprintf(stderr, "[SYNC] tid=%lu delay-enter #%ld return=%08X mode=%u alertable=%u interval100ns=%lld\n",
 +                GetCurrentThreadId(), call_number, caller, wait_mode,
 +                alertable, interval.QuadPart);
++        if (call_number <= 2 || (call_number % 512) == 0) {
++            uint32_t frame = g_ebp;
++            int depth;
++            for (depth = 0; depth < 12; ++depth) {
++                uint32_t previous, return_va;
++                if ((frame & 3u) || !bridge_va_mapped(frame, 8))
++                    break;
++                previous = BRIDGE_MEM32(frame);
++                return_va = BRIDGE_MEM32(frame + 4);
++                fprintf(stderr, "[SYNC]   frame %d ebp=%08X return=%08X\n",
++                        depth, frame, return_va);
++                if (!previous || previous <= frame
++                    || !bridge_va_mapped(previous, 8))
++                    break;
++                frame = previous;
++            }
++            if (g_esp && bridge_va_mapped(g_esp, 4)) {
++                int offset, shown = 0;
++                for (offset = 0; offset < 1024 && shown < 12; offset += 4) {
++                    uint32_t address = g_esp + (uint32_t)offset;
++                    uint32_t candidate;
++                    if (!bridge_va_mapped(address, 4))
++                        break;
++                    candidate = BRIDGE_MEM32(address);
++                    if (candidate >= g_xbox_code_lo
++                        && candidate < g_xbox_code_hi) {
++                        fprintf(stderr, "[SYNC]   stack+%03X=%08X\n",
++                                offset, candidate);
++                        shown++;
++                    }
++                }
++            }
++            xbox_CsTraceOwnedLocks();
++        }
 +        fflush(stderr);
 +    }
      g_eax = (uint32_t)xbox_KeDelayExecutionThread(
@@ -142,7 +190,7 @@ index c65ba43..d9edc12 100644
  }
  
  /* ── KeBugCheck (ordinal 95) / KeBugCheckEx (96) ─────────── */
-@@ -7094,6 +7170,10 @@ static void bridge_KeResetEvent(void)
+@@ -7094,6 +7205,10 @@ static void bridge_KeResetEvent(void)
              BRIDGE_MEM32(guest_va + 4) = 0;
              ResetEvent(ge);
              g_eax = 0;
@@ -153,7 +201,7 @@ index c65ba43..d9edc12 100644
              return;
          }
      }
-@@ -7104,6 +7184,9 @@ static void bridge_KeResetEvent(void)
+@@ -7104,6 +7219,9 @@ static void bridge_KeResetEvent(void)
          ResetEvent(h);
  
      g_eax = 0;
@@ -163,3 +211,30 @@ index c65ba43..d9edc12 100644
  }
  
  /* --- KeResumeThread (ordinal 140, 1 arg = 4 bytes) --- */
+diff --git a/src/kernel/kernel_rtl.c b/src/kernel/kernel_rtl.c
+index 9760735..fe9f28f 100644
+--- a/src/kernel/kernel_rtl.c
++++ b/src/kernel/kernel_rtl.c
+@@ -470,6 +470,22 @@ static void xbox_cs_clear_owner(CRITICAL_SECTION* cs)
+     }
+ }
+ 
++/* Opt-in synchronization diagnostics: show whether a thread sleeps while it
++ * still owns any guest critical sections, without changing lock behavior. */
++void xbox_CsTraceOwnedLocks(void)
++{
++    unsigned long tid = GetCurrentThreadId();
++    size_t i;
++    for (i = 0; i < XBOX_CS_TABLE_SIZE; ++i) {
++        XBOX_CS_SLOT* slot = &g_cs_table[i];
++        if (slot->key && slot->owner_tid == tid) {
++            fprintf(stderr, "[SYNC]   held-lock guest=%08X site=%08X depth=%ld\n",
++                    (uint32_t)(slot->key - (uintptr_t)g_xbox_mem_offset),
++                    slot->owner_site, slot->depth);
++        }
++    }
++}
++
+ VOID __stdcall xbox_RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
+ {
+     CRITICAL_SECTION* cs = xbox_cs_shadow(CriticalSection);
