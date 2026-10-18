@@ -1,0 +1,44 @@
+diff --git a/src/main.c b/src/main.c
+--- a/src/main.c
++++ b/src/main.c
+@@ -40,6 +40,7 @@
+ 
+ /* xboxrecomp runtime headers */
+ #include <xbox/xboxrecomp.h>
++#include <ohci.h>
+ #include "nv2a_mmio_hook.h"
+ #include "nv2a_state.h"
+ 
+@@ -321,6 +322,14 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
+             }
+         }
+ 
++        /* XAPI's USB stack accesses the MCPX OHCI registers directly. The
++         * OHCI pages are protected by xbox_OhciInit; route those faults to
++         * the existing controller model before the generic crash reporter. */
++        if (xbox_OhciOwnsAddress(fault_xbox_va)
++                && xbox_OhciHandleMmio(ep->ContextRecord, fault_xbox_va)) {
++            return EXCEPTION_CONTINUE_EXECUTION;
++        }
++
+         /* APU registers -> the emulated APU.
+          *
+          * The other half of RECOMP_AC97_READY: reporting the codec ready is
+@@ -481,6 +490,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+     printf("Initializing kernel bridge...\n");
+     xbox_kernel_bridge_init();
+ 
++    /* The USB host is opt-in. With RECOMP_USB set, XAPI can discover the
++     * emulated Xbox gamepad through the MCPX OHCI controller. */
++    xbox_OhciInit();
+ 
+     /* Step 6: Initialize stack */
+     g_esp = XBOX_STACK_TOP;
+@@ -537,6 +549,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+     printf("\nGame returned. Cleaning up...\n");
+ 
+     /* Cleanup */
++    xbox_OhciShutdown();
+     xbox_kernel_shutdown();
+     xbox_MemoryLayoutShutdown();
+     free(xbe_data);

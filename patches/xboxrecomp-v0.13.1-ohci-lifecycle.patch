@@ -1,0 +1,81 @@
+diff --git a/src/usb/ohci.c b/src/usb/ohci.c
+index 641a94d..ecac4e7 100644
+--- a/src/usb/ohci.c
++++ b/src/usb/ohci.c
+@@ -171,6 +171,8 @@ static unsigned s_ndp = OHCI_PORTS;
+ static int s_npads = 1;          /* RECOMP_USB_PADS */
+ static int s_enabled;
+ static int s_trace;
++static volatile LONG s_stop;
++static HANDLE s_thread;
+ 
+ static uint32_t *reg_of(OhciController *hc, uint32_t off)
+ {
+@@ -1032,6 +1034,8 @@ static DWORD WINAPI ohci_thread(LPVOID unused)
+         uint32_t control, enable, status;
+         uint32_t pass_done = 0;     /* this pass's done queue, newest first */
+ 
++        if (InterlockedCompareExchange(&s_stop, 0, 0))
++            break;
+         Sleep(OHCI_TICK_MS);
+         control = hc->reg[HcControl / 4];
+         enable  = hc->reg[HcInterruptEnable / 4];
+@@ -1315,11 +1319,42 @@ void xbox_OhciInit(void)
+     fflush(stderr);
+ 
+ #if defined(_WIN32)
+-    {
+-        HANDLE th = CreateThread(NULL, 0, ohci_thread, NULL, 0, NULL);
+-        if (th)
+-            CloseHandle(th);
++    s_stop = 0;
++    s_thread = CreateThread(NULL, 0, ohci_thread, NULL, 0, NULL);
++    if (!s_thread) {
++        s_enabled = 0;
++        fprintf(stderr, "  OHCI: failed to start controller worker (error %lu)\n",
++                GetLastError());
++    }
++#endif
++}
++
++void xbox_OhciShutdown(void)
++{
++#if defined(_WIN32)
++    int i;
++    ptrdiff_t off;
++    DWORD old_protect;
++
++    if (!s_enabled)
++        return;
++    InterlockedExchange(&s_stop, 1);
++    if (s_thread) {
++        WaitForSingleObject(s_thread, 2000);
++        CloseHandle(s_thread);
++        s_thread = NULL;
++    }
++    xbox_OhciReport();
++
++    /* Leave the MCPX allocation in its ordinary state before its owner tears
++     * the memory layout down or a later run initializes another title. */
++    off = xbox_GetMemoryOffset();
++    if (off) {
++        for (i = 0; i < 2; i++)
++            VirtualProtect((LPVOID)((uintptr_t)off + s_hc[i].base),
++                           XBOX_OHCI_SIZE, PAGE_READWRITE, &old_protect);
+     }
++    s_enabled = 0;
+ #endif
+ }
+ 
+diff --git a/src/usb/ohci.h b/src/usb/ohci.h
+index 94ff7b2..ddc417a 100644
+--- a/src/usb/ohci.h
++++ b/src/usb/ohci.h
+@@ -33,6 +33,7 @@
+  * RECOMP_USB is set, so a title that was working without a controller keeps
+  * behaving exactly as it did. */
+ void xbox_OhciInit(void);
++void xbox_OhciShutdown(void);
+ 
+ /* 1 if the address is inside a controller this model owns. */
+ int  xbox_OhciOwnsAddress(uint32_t xbox_va);
