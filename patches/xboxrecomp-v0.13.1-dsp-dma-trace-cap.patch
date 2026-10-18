@@ -1,0 +1,16 @@
+diff --git a/src/apu/apu_dsp56300_bridge.c b/src/apu/apu_dsp56300_bridge.c
+--- a/src/apu/apu_dsp56300_bridge.c
++++ b/src/apu/apu_dsp56300_bridge.c
+@@ -289,9 +289,11 @@ static void dsp_dma_control_write(DSPState *dsp, uint32_t value)
+ {
+     static unsigned int trace_count;
++    static unsigned int start_trace_count;
+     uint32_t previous_control = dsp->dma.control;
+     switch (value & DSP_DMA_ACTION_MASK) {
+     case DSP_DMA_ACTION_START:
+-        if (getenv("RECOMP_APU_DSP_TRACE") && dsp->jit) {
++        if (getenv("RECOMP_APU_DSP_TRACE") && dsp->jit &&
++            start_trace_count++ < 16u) {
+             uint32_t node = dsp->dma.next_block & 0x3FFFu;
+             uint32_t x_words = dsp->is_gp ? GP_X_RAM_WORDS : EP_X_RAM_WORDS;
+             if (node < x_words) {
