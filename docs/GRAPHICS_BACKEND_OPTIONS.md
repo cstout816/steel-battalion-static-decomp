@@ -32,6 +32,26 @@ The community [Xemu-SB-VK fork](https://github.com/quizerno/Xemu-SB-VK) reports 
 
 The local D3D12 prototype remains useful as a correctness/reference experiment. It verifies a synthetic triangle and byte-identical output for two synchronized startup passes (opaque-black depth pass and following transparent textured pass), but no visible texture, title-screen parity, or speedup. It is not the selected performance backend. D3D11 stays a compatibility/interim path only.
 
+### Upstream Vulkan integration feasibility audit
+
+Inspected xemu master commit `8fc3208` read-only. Its Vulkan PGRAPH directory contains 17 C translation units in `meson.build`; those source files carry LGPL-2.1-or-later notices. The pinned dependency references in that checkout are:
+
+| Dependency | Pinned source revision | License evidence | Remaining review |
+| --- | --- | --- | --- |
+| Volk | `3ca312a4f38baa63d8006b6905abbeeb89c8087d` | Upstream identifies MIT. | Confirm actual files/features built and retain notice. |
+| glslang | `e1b562a8bed273a02f30b59b66a5d499793cede5` | Upstream license file describes a 3-Clause BSD core plus additional licenses for its preprocessor and other components. | Review the exact compiled components and their notices; xemu disables HLSL support in its fallback build. |
+| Vulkan Memory Allocator (VMA) | `3aa921224c154a0d2c43912bc88e1c42ce1f7607` | Upstream identifies MIT. | Its implementation is C++ although its public API is C-compatible; confirm the project build can include it. |
+| SPIRV-Reflect | `f3e261fda74ca81b44d1941931c6b7b5fe236d0e` | Upstream identifies Apache-2.0. | Retain license and notice. |
+| Vulkan headers/loader | Not pinned by these xemu wrap files on Windows. | Supplied by a Windows SDK/loader package selected at build or runtime. | Choose and audit a reproducible Windows dependency source and decide whether the loader is bundled or provided by the GPU driver. |
+
+This is a preliminary inventory, not a complete distribution-license approval. In particular, glslang's license file covers multiple components, and any additional build-time transitive dependencies and notices must be inventoried before choosing the repository license or shipping binaries.
+
+This is not a drop-in renderer library. The renderer API takes xemu `NV2AState`/`PGRAPHState`, uses QEMU helpers and memory-region services, includes xemu shader/surface/texture state, and its `renderer.c` initializes an offscreen GL context for optional external-memory sharing. The checked-out XboxRecomp state structure is explicitly a minimal PGRAPH stub, and its current integrated backend is a narrow D3D11 method handler. Integrating Vulkan therefore requires either expanding the local guest GPU state model and writing a host-facing adapter, or isolating/adapting the renderer behind a smaller API; it does not require adopting QEMU's CPU, kernel, or machine-emulation loop. This is substantial work but not a technical dead end. Keep the choice provisional until the adapter can consume the real Steel Battalion pushbuffer state and pass the software-reference frame checks.
+
+The smallest project-owned adapter seam is in `nv2a_pb_exec.c`: retain the current pushbuffer decoder and guest register state, retain `nv2a_vsh_run()` for the initial vertex transform, convert the resulting clipped triangles and `s_gpu` render state into a backend-neutral draw packet, and submit that packet to a Vulkan raster module. The packet must carry surface/color and zeta targets, viewport/scissor, primitive/vertex outputs, combiner state, texture-stage inputs, blend/depth/alpha/color-write state, and synchronization/version information for guest RAM. Keep the CPU rasterizer as the exact comparison path and fallback. The first vertical slice should target the actual startup passes and visible logo, with texture and depth correctness before any resolution or presentation enhancements. Avoid per-draw GPU/CPU readback; synchronize guest-memory reads/writes at the actual boundaries and present at flip.
+
+This means adapting Vulkan rendering algorithms and resource/shader components, not calling xemu's QEMU-bound PGRAPH functions directly. The first implementation decision after licensing is whether to extract the xemu renderer state machine behind this packet API or write a smaller Vulkan renderer using the existing pushbuffer state decoder. Choose based on overlap in required textures, surface coherence, and shader semantics; do not transplant all QEMU NV2A state or its emulator loop.
+
 ### Experimental patch sequence
 
 The D3D12 prototype is isolated from the local XboxRecomp checkout as two patches against XboxRecomp v0.13.1 commit `193e299`. Apply `patches/xboxrecomp-v0.13.1-d3d12-flat-triangle-experimental.patch` first, then `patches/xboxrecomp-v0.13.1-d3d12-strip-depth-experimental.patch`. The second patch adds a narrow six-vertex strip path, depth preservation through the software reference, and an opt-in transformed-draw capture hook. Both patches are experimental and opt-in; they do not provide a complete NV2A renderer. The second patch applies cleanly after the first and passes `git diff --check` in a clean temporary baseline. The Windows target build and synchronized captures were verified from the corresponding local dependency checkout.
@@ -54,6 +74,6 @@ The D3D12 prototype is isolated from the local XboxRecomp checkout as two patche
 3. Verify clear, depth, blend, texture sampling, vertex-program outputs, and guest framebuffer/surface updates independently.
 4. Measure CPU and GPU frame time on identical splash and title-screen captures; compare frame pacing and image differences.
 5. Do not infer campaign performance from the intro or advance graphics/boot progress bars until a repeatable title-screen run and the corresponding behavior are verified.
-6. Before Vulkan integration, create a file-level license inventory and an adapter plan that reuses only NV2A graphics components; retain software captures as the image reference. Later compare Vulkan and D3D12 only if both can execute the same guest work without readback stalls.
+6. Complete a versioned license inventory for the 17 renderer files and Vulkan dependencies, then define the adapter contract for the current pushbuffer executor and retain software captures as the image reference. Later compare Vulkan and D3D12 only if both can execute the same guest work without readback stalls.
 
 The user asked for the best-performing native NV2A backend after research. Vulkan is selected for its mature reusable NV2A renderer and performance potential; actual comparative speed is not measured. Limited renderer research remains within Milestone 3. Do not advance the milestone until the game reaches a verified title screen with rendering, audio, and input checked.
