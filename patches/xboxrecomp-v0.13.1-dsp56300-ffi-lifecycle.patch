@@ -1,14 +1,19 @@
 diff --git a/src/apu/CMakeLists.txt b/src/apu/CMakeLists.txt
-index 0bd4ebd..c2abf48 100644
+index 0bd4ebd..b5eb47e 100644
 --- a/src/apu/CMakeLists.txt
 +++ b/src/apu/CMakeLists.txt
-@@ -13,6 +13,107 @@ add_library(xbox_apu STATIC
+@@ -9,10 +9,112 @@ add_library(xbox_apu STATIC
+     apu_core.c
+     apu_vp.c
+     apu_dsp.c
++    apu_dsp56300_bridge.c
+     apu_mmio_hook.c
      apu_xaudio2.c
  )
  
-+# The pinned DSP56300 FFI is an optional core-lifecycle integration step.
-+# GP/EP MMIO, firmware bootstrap, cycle scheduling, and DMA are not yet wired,
-+# so leave it disabled until the complete behavior is implemented and tested.
++# GP/EP guest RAM MMIO maps to the existing DSPState arrays in all builds.
++# The pinned DSP56300 FFI core remains optional until bootstrap, cycle
++# scheduling, and DMA behavior are implemented and verified.
 +option(XBOXRECOMP_ENABLE_DSP56300 "Create MCPX GP/EP engines with the MIT DSP56300 FFI" OFF)
 +if(XBOXRECOMP_ENABLE_DSP56300)
 +    if(NOT WIN32 OR NOT MSVC)
@@ -80,14 +85,11 @@ index 0bd4ebd..c2abf48 100644
 +    add_library(dsp56300_ffi STATIC IMPORTED GLOBAL)
 +    set_target_properties(dsp56300_ffi PROPERTIES
 +        IMPORTED_LOCATION "${DSP56300_STATIC_LIBRARY}")
-+    set_property(TARGET dsp56300_ffi PROPERTY INTERFACE_LINK_LIBRARIES
-+        "ws2_32;userenv;ntdll")
 +    add_dependencies(xbox_apu dsp56300_ffi_build)
-+    target_sources(xbox_apu PRIVATE apu_dsp56300_bridge.c)
 +    target_include_directories(xbox_apu PRIVATE
 +        "${DSP56300_SOURCE_DIR}/crates/emu-ffi/include")
 +    target_compile_definitions(xbox_apu PRIVATE MCPX_APU_USE_DSP56300=1)
-+    target_link_libraries(xbox_apu PRIVATE dsp56300_ffi)
++    target_link_libraries(xbox_apu PRIVATE dsp56300_ffi ws2_32 userenv ntdll)
 +
 +    option(XBOXRECOMP_BUILD_DSP56300_TESTS
 +        "Build focused DSP56300 C FFI memory-map and lifecycle checks" OFF)
@@ -97,11 +99,14 @@ index 0bd4ebd..c2abf48 100644
 +            apu_dsp56300_bridge.c
 +            ../../tests/dsp56300_memory_map_test.c)
 +        target_include_directories(dsp56300_memory_map_test PRIVATE
-+            ${CMAKE_CURRENT_SOURCE_DIR}
 +            ${CMAKE_CURRENT_SOURCE_DIR}/..
++            ${CMAKE_CURRENT_SOURCE_DIR}
 +            ${CMAKE_CURRENT_SOURCE_DIR}/../nv2a
 +            "${DSP56300_SOURCE_DIR}/crates/emu-ffi/include")
-+        target_link_libraries(dsp56300_memory_map_test PRIVATE dsp56300_ffi)
++        target_compile_definitions(dsp56300_memory_map_test PRIVATE
++            MCPX_APU_USE_DSP56300=1)
++        target_link_libraries(dsp56300_memory_map_test PRIVATE
++            dsp56300_ffi ws2_32 userenv ntdll)
 +        add_dependencies(dsp56300_memory_map_test dsp56300_ffi_build)
 +        add_test(NAME dsp56300_memory_map COMMAND dsp56300_memory_map_test)
 +    endif()
@@ -111,10 +116,17 @@ index 0bd4ebd..c2abf48 100644
  
  # qemu_shim.h lives in nv2a/ - shared QEMU type abstraction
 diff --git a/src/apu/README.md b/src/apu/README.md
-index 04c6b06..6a7512f 100644
+index 04c6b06..cc0925e 100644
 --- a/src/apu/README.md
 +++ b/src/apu/README.md
-@@ -8,16 +8,33 @@ Hardware emulation of the Xbox's MCPX APU (Audio Processing Unit), extracted fro
+@@ -3,21 +3,40 @@
+ Hardware emulation of the Xbox's MCPX APU (Audio Processing Unit), extracted from [xemu](https://github.com/xemu-project/xemu). The APU is a custom chip with three processors:
+ 
+ - **VP (Voice Processor)** — 256 hardware voices, ADPCM/PCM decode, pitch shifting, envelopes, HRTF 3D audio
+-- **GP (Global Processor)** — DSP for global effects (reverb, chorus). Currently **stubbed** — effects bypass.
+-- **EP (Encode Processor)** — DSP for AC3/DTS encoding. Currently **stubbed** — passthrough.
++- **GP (Global Processor)** — DSP for global effects (reverb, chorus). Guest-visible X/Y/P RAM windows are mapped; DSP firmware execution remains incomplete.
++- **EP (Encode Processor)** — DSP for AC3/DTS encoding. Guest-visible X/Y/P RAM windows are mapped; DSP firmware execution remains incomplete.
  
  Audio output uses Windows `waveOut` at 48kHz stereo 16-bit.
  
@@ -127,11 +139,13 @@ index 04c6b06..6a7512f 100644
 +`82fb25a6917a36ac66212ae31f02aab62211f979`; set `DSP56300_SOURCE_DIR` to that
 +clean checkout and make the Rust 1.99 toolchain available to CMake.
 +
-+This is only engine-lifecycle groundwork. The optional path does not yet route
-+GP/EP MMIO, load/bootstrap firmware, schedule cycles, perform FIFO/DMA, or
-+generate DSP audio. It remains off by default and is not playable-audio support.
-+Do not enable it for a game run until those behaviors are implemented and
-+verified. The existing passthrough remains the default.
++The GP and EP RAM windows are routed through the APU MMIO handler, including
++the GP mixbuffer alias and 24-bit word masking. P-memory writes use the FFI
++write API when that engine is enabled so translated code is invalidated. The
++reset register is stored and reset assertion resets the core; reset release
++does not yet load firmware. Scratch bootstrap, cycle scheduling, peripheral
++callbacks, FIFO/DMA, and DSP audio remain unimplemented. The optional FFI core
++stays off by default, and this is not playable-audio support.
 +
  ## Files
  
@@ -145,13 +159,13 @@ index 04c6b06..6a7512f 100644
  | `apu_vp.c` | 1,247 | Voice Processor — decode, resample, mix, envelopes, HRTF |
 -| `apu_dsp.c` | 90 | GP/EP stubs (mixbin 0/1 passthrough) |
 +| `apu_dsp.c` | 259 | GP/EP lifecycle and current passthrough stub |
-+| `apu_dsp56300_bridge.c` | 96 | Optional FFI engine creation/reset/destruction and memory map |
-+| `apu_dsp56300_bridge.h` | 13 | Optional bridge declarations |
++| `apu_dsp56300_bridge.c` | 210 | GP/EP RAM map and optional FFI engine lifecycle |
++| `apu_dsp56300_bridge.h` | 17 | Bridge declarations |
  | `apu_mmio_hook.c` | 253 | VEH x86-64 instruction decoder for 0xFE800000+ MMIO |
  | `apu_shim.h` | 431 | QEMU compatibility (threads, atomics, clocks → Win32) |
  | `apu_debug.h` | 104 | Debug logging macros |
 diff --git a/src/apu/apu_core.c b/src/apu/apu_core.c
-index 258048c..544d7ac 100644
+index 258048c..0ff1388 100644
 --- a/src/apu/apu_core.c
 +++ b/src/apu/apu_core.c
 @@ -639,15 +639,7 @@ static void mcpx_apu_reset_locked(MCPXAPUState *d)
@@ -171,7 +185,15 @@ index 258048c..544d7ac 100644
      d->set_irq = false;
  }
  
-@@ -721,6 +713,7 @@ void mcpx_apu_shutdown(MCPXAPUState *d)
+@@ -666,6 +658,7 @@ MCPXAPUState *mcpx_apu_init_standalone(uint8_t *ram_ptr)
+     g_apu_ram_ptr = ram_ptr;
+     g_state = d;
+     d->ram_ptr = ram_ptr;
++    d->mcpx_ptr = (uint8_t *)xbox_GetMCPXMemoryBase();
+ 
+     d->set_irq = false;
+     d->exiting = false;
+@@ -721,6 +714,7 @@ void mcpx_apu_shutdown(MCPXAPUState *d)
  
      qemu_thread_join(&d->apu_thread);
      mcpx_apu_vp_finalize(d);
@@ -179,25 +201,202 @@ index 258048c..544d7ac 100644
      mcpx_apu_monitor_finalize(d);
  
      free(d);
+@@ -754,8 +748,17 @@ void mcpx_apu_dispatch_mmio(MCPXAPUState *d, hwaddr addr, uint64_t val,
+         if (is_write) {
+             mcpx_apu_write(d, addr, val, size);
+         }
++    } else if (addr >= 0x30000 && addr < 0x40000) {
++        if (is_write) {
++            mcpx_apu_dsp_mmio_write(d, true, (uint32_t)(addr - 0x30000),
++                                    (uint32_t)val, size);
++        }
++    } else if (addr >= 0x50000 && addr < 0x60000) {
++        if (is_write) {
++            mcpx_apu_dsp_mmio_write(d, false, (uint32_t)(addr - 0x50000),
++                                    (uint32_t)val, size);
++        }
+     }
+-    /* GP (0x30000) and EP (0x50000) regions ignored for now */
+ }
+ 
+ /* ============================================================
+@@ -770,6 +773,10 @@ uint64_t mcpx_apu_mmio_read(MCPXAPUState *d, uint64_t addr, unsigned int size)
+         return mcpx_apu_vp_read(d, addr - 0x20000, size);
+     } else if (addr < 0x20000) {
+         return mcpx_apu_read(d, (hwaddr)addr, size);
++    } else if (addr >= 0x30000 && addr < 0x40000) {
++        return mcpx_apu_dsp_mmio_read(d, true, (uint32_t)(addr - 0x30000), size);
++    } else if (addr >= 0x50000 && addr < 0x60000) {
++        return mcpx_apu_dsp_mmio_read(d, false, (uint32_t)(addr - 0x50000), size);
+     }
+     return 0;
+ }
 diff --git a/src/apu/apu_dsp.c b/src/apu/apu_dsp.c
-index 7156be9..b2a5103 100644
+index 7156be9..41dbf49 100644
 --- a/src/apu/apu_dsp.c
 +++ b/src/apu/apu_dsp.c
-@@ -25,6 +25,10 @@
+@@ -24,10 +24,81 @@
+ 
  #include "apu_state.h"
  #include "fpconv.h"
- 
-+#ifdef MCPX_APU_USE_DSP56300
++#include "apu_regs.h"
 +#include "apu_dsp56300_bridge.h"
-+#endif
 +
++#ifdef MCPX_APU_USE_DSP56300
++#include "dsp56300.h"
++#endif
+ 
  #include <stdlib.h>
  #include <string.h>
  
-@@ -125,12 +129,51 @@ void mcpx_apu_dsp_init(MCPXAPUState *d)
++static bool apu_gp_ep_trace_enabled(void)
++{
++    static int enabled = -1;
++    if (enabled < 0) {
++        const char *value = getenv("RECOMP_APU_GP_EP_TRACE");
++        enabled = value && value[0] == '1';
++    }
++    return enabled != 0;
++}
++
++static void apu_gp_ep_trace(bool is_gp, bool is_write, uint32_t offset,
++                            uint32_t value, unsigned int size)
++{
++    static volatile LONG trace_count;
++    LONG ordinal;
++    if (!apu_gp_ep_trace_enabled()) {
++        return;
++    }
++    ordinal = InterlockedIncrement(&trace_count);
++    if (ordinal <= 512) {
++        fprintf(stderr, "[APU-%s] %s offset=0x%04X size=%u value=0x%08X\n",
++                is_gp ? "GP" : "EP", is_write ? "write" : "read",
++                offset, size, value);
++    } else if (ordinal == 513) {
++        fprintf(stderr, "[APU] GP/EP MMIO trace capped at 512 accesses\n");
++    }
++}
++
++static void mcpx_apu_dsp_sync_reset(MCPXAPUState *d, bool is_gp)
++{
++    DSPState *dsp = is_gp ? d->gp.dsp : d->ep.dsp;
++    uint32_t *regs = is_gp ? d->gp.regs : d->ep.regs;
++    uint8_t *window = d->mcpx_ptr
++        ? d->mcpx_ptr + (is_gp ? 0x30000u : 0x50000u)
++        : NULL;
++    uint32_t old_value;
++    uint32_t value;
++    const uint32_t reset_reg = is_gp ? NV_PAPU_GPRST : NV_PAPU_EPRST;
++
++    if (!window || !dsp) {
++        return;
++    }
++    value = *(volatile uint32_t *)(window + reset_reg);
++    old_value = regs[reset_reg];
++    if (value == old_value) {
++        return;
++    }
++    regs[reset_reg] = value;
++    if (!(value & NV_PAPU_GPRST_GPRST) ||
++        !(value & NV_PAPU_GPRST_GPDSPRST)) {
++#ifdef MCPX_APU_USE_DSP56300
++        mcpx_apu_dsp_engine_reset(dsp);
++#endif
++    } else if ((!(old_value & NV_PAPU_GPRST_GPRST) ||
++                !(old_value & NV_PAPU_GPRST_GPDSPRST)) &&
++               (value & NV_PAPU_GPRST_GPRST) &&
++               (value & NV_PAPU_GPRST_GPDSPRST)) {
++        fprintf(stderr, "[APU] %s DSP reset released; firmware bootstrap is not implemented\n",
++                is_gp ? "GP" : "EP");
++    }
++    if (!is_gp) {
++        d->ep_frame_div = 0;
++    }
++}
++
+ /* ── DSP command doorbell acknowledgement ────────────────────────────────
+  *
+  * DirectSound does not stop at creating the device. It hands the audio DSP a
+@@ -114,6 +185,70 @@ void mcpx_apu_dsp_ack_poll(MCPXAPUState *d)
+     }
+ }
+ 
++uint32_t mcpx_apu_dsp_mmio_read(MCPXAPUState *d, bool is_gp,
++                                uint32_t byte_offset, unsigned int size)
++{
++    DSPState *dsp;
++    uint32_t *regs;
++    uint32_t value = 0;
++
++    if (!d || size != 4 || (byte_offset & 3u) != 0 || byte_offset >= 0x10000u) {
++        return 0;
++    }
++    dsp = is_gp ? d->gp.dsp : d->ep.dsp;
++    regs = is_gp ? d->gp.regs : d->ep.regs;
++    if (!dsp || !mcpx_apu_dsp_memory_read(dsp, byte_offset, &value)) {
++        value = regs[byte_offset];
++    }
++    apu_gp_ep_trace(is_gp, false, byte_offset, value, size);
++    return value;
++}
++
++void mcpx_apu_dsp_mmio_write(MCPXAPUState *d, bool is_gp,
++                             uint32_t byte_offset, uint32_t value,
++                             unsigned int size)
++{
++    DSPState *dsp;
++    uint32_t *regs;
++    uint32_t reset_reg;
++    uint32_t old_value;
++
++    if (!d || size != 4 || (byte_offset & 3u) != 0 || byte_offset >= 0x10000u) {
++        return;
++    }
++    dsp = is_gp ? d->gp.dsp : d->ep.dsp;
++    regs = is_gp ? d->gp.regs : d->ep.regs;
++    reset_reg = is_gp ? NV_PAPU_GPRST : NV_PAPU_EPRST;
++    old_value = regs[byte_offset];
++
++    if (!dsp || !mcpx_apu_dsp_memory_write(dsp, byte_offset, value)) {
++        regs[byte_offset] = value;
++    }
++    apu_gp_ep_trace(is_gp, true, byte_offset, value, size);
++
++    if (byte_offset == reset_reg) {
++        if (!(value & NV_PAPU_GPRST_GPRST) ||
++            !(value & NV_PAPU_GPRST_GPDSPRST)) {
++#ifdef MCPX_APU_USE_DSP56300
++            mcpx_apu_dsp_engine_reset(dsp);
++#endif
++        } else if ((!(old_value & NV_PAPU_GPRST_GPRST) ||
++                    !(old_value & NV_PAPU_GPRST_GPDSPRST)) &&
++                   (value & NV_PAPU_GPRST_GPRST) &&
++                   (value & NV_PAPU_GPRST_GPDSPRST)) {
++            /* Scratch-to-P firmware bootstrap is not implemented yet. */
++            static unsigned int bootstrap_notice_count;
++            if (bootstrap_notice_count++ < 4) {
++                fprintf(stderr, "[APU] %s DSP reset released; firmware bootstrap is not implemented\n",
++                        is_gp ? "GP" : "EP");
++            }
++        }
++        if (!is_gp) {
++            d->ep_frame_div = 0;
++        }
++    }
++}
++
+ void mcpx_apu_dsp_init(MCPXAPUState *d)
+ {
+     /* Allocate minimal DSP state for GP and EP.
+@@ -124,6 +259,19 @@ void mcpx_apu_dsp_init(MCPXAPUState *d)
+ 
      if (d->gp.dsp) d->gp.dsp->is_gp = true;
      if (d->ep.dsp) d->ep.dsp->is_gp = false;
- 
++    if (d->mcpx_ptr) {
++        if (d->gp.dsp) d->gp.dsp->guest_mmio_base = d->mcpx_ptr + 0x30000u;
++        if (d->ep.dsp) d->ep.dsp->guest_mmio_base = d->mcpx_ptr + 0x50000u;
++    }
++
 +#ifdef MCPX_APU_USE_DSP56300
 +    if (d->gp.dsp && !mcpx_apu_dsp_engine_init(d->gp.dsp)) {
 +        fprintf(stderr, "[APU] GP DSP56300 engine creation failed; retaining stub\n");
@@ -206,10 +405,10 @@ index 7156be9..b2a5103 100644
 +        fprintf(stderr, "[APU] EP DSP56300 engine creation failed; retaining stub\n");
 +    }
 +#endif
-+
+ 
      d->gp.realtime = false;
      d->ep.realtime = false;
- 
+@@ -131,6 +279,36 @@ void mcpx_apu_dsp_init(MCPXAPUState *d)
      fprintf(stderr, "[APU] DSP GP/EP initialized (STUBBED - passthrough mode)\n");
  }
  
@@ -246,22 +445,42 @@ index 7156be9..b2a5103 100644
  void mcpx_apu_update_dsp_preference(MCPXAPUState *d)
  {
      /* In the real xemu, this reads settings to decide whether
+@@ -141,6 +319,17 @@ void mcpx_apu_update_dsp_preference(MCPXAPUState *d)
+ void mcpx_apu_dsp_frame(MCPXAPUState *d,
+                          float mixbins[NUM_MIXBINS][NUM_SAMPLES_PER_FRAME])
+ {
++    if (!d) {
++        return;
++    }
++    if (d->gp.dsp) {
++        mcpx_apu_dsp_sync_reset(d, true);
++        mcpx_apu_dsp_sync_program_cache(d->gp.dsp);
++    }
++    if (d->ep.dsp) {
++        mcpx_apu_dsp_sync_reset(d, false);
++        mcpx_apu_dsp_sync_program_cache(d->ep.dsp);
++    }
+     /* Bypass DSP: take mixbin 0 (front-left) and mixbin 1 (front-right)
+      * and write them directly to the monitor frame buffer as the final
+      * EP output.
 diff --git a/src/apu/apu_dsp56300_bridge.c b/src/apu/apu_dsp56300_bridge.c
 new file mode 100644
-index 0000000..881e221
+index 0000000..0c46c33
 --- /dev/null
 +++ b/src/apu/apu_dsp56300_bridge.c
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,264 @@
 +/*
 + * XboxRecomp-owned adapter between the MCPX APU state and the MIT DSP56300 C FFI.
-+ * The FFI receives stable backing arrays owned by DSPState. This file only
-+ * creates, resets, and destroys the core; it does not yet route GP/EP MMIO,
-+ * bootstrap firmware, schedule DSP cycles, perform DMA, or produce audio.
++ * The FFI receives stable backing arrays owned by DSPState. This file maps
++ * guest GP/EP RAM windows and manages the optional core lifecycle. Firmware
++ * bootstrap, DSP cycle scheduling, DMA, and audio generation are not wired.
 + */
 +#include "apu_dsp56300_bridge.h"
 +
 +#include "apu_state.h"
++#ifdef MCPX_APU_USE_DSP56300
 +#include "dsp56300.h"
++#endif
 +
 +#include <string.h>
 +
@@ -272,6 +491,13 @@ index 0000000..881e221
 +#define EP_X_RAM_WORDS 0x0C00u
 +#define EP_Y_RAM_WORDS 0x0100u
 +#define DSP_P_RAM_WORDS 0x1000u
++#define DSP_WORD_MASK 0x00FFFFFFu
++
++typedef enum {
++    DSP_MMIO_SPACE_X,
++    DSP_MMIO_SPACE_Y,
++    DSP_MMIO_SPACE_P
++} DspMmioSpace;
 +
 +_Static_assert(DSP_XRAM_SIZE >= GP_X_RAM_WORDS,
 +               "GP DSP X backing storage is too small");
@@ -282,6 +508,7 @@ index 0000000..881e221
 +_Static_assert(DSP_MIXBUFFER_SIZE == GP_MIXBUF_WORDS,
 +               "GP mixbin window and backing storage differ");
 +
++#ifdef MCPX_APU_USE_DSP56300
 +static void set_buffer_region(Dsp56300MemoryRegion *region,
 +                              uint32_t start,
 +                              uint32_t end,
@@ -294,9 +521,14 @@ index 0000000..881e221
 +    region->data.buffer.base = base;
 +    region->data.buffer.offset = 0;
 +}
++#endif
 +
 +bool mcpx_apu_dsp_engine_init(DSPState *dsp)
 +{
++#ifndef MCPX_APU_USE_DSP56300
++    (void)dsp;
++    return false;
++#else
 +    Dsp56300MemoryRegion x_regions[2];
 +    Dsp56300MemoryRegion y_region;
 +    Dsp56300MemoryRegion p_region;
@@ -308,52 +540,205 @@ index 0000000..881e221
 +
 +    memset(&info, 0, sizeof(info));
 +    if (dsp->is_gp) {
-+        set_buffer_region(&x_regions[0], 0, GP_X_RAM_WORDS, dsp->core.xram);
++        uint8_t *base = dsp->guest_mmio_base;
++        set_buffer_region(&x_regions[0], 0, GP_X_RAM_WORDS,
++                          base ? (uint32_t *)(base + 0x0000u) : dsp->core.xram);
 +        set_buffer_region(&x_regions[1], GP_MIXBUF_START,
 +                          GP_MIXBUF_START + GP_MIXBUF_WORDS,
-+                          dsp->core.mixbuffer);
-+        set_buffer_region(&y_region, 0, GP_Y_RAM_WORDS, dsp->core.yram);
++                          base ? (uint32_t *)(base + 0x5000u) : dsp->core.mixbuffer);
++        set_buffer_region(&y_region, 0, GP_Y_RAM_WORDS,
++                          base ? (uint32_t *)(base + 0x6000u) : dsp->core.yram);
 +        info.memory_map.x_regions = x_regions;
 +        info.memory_map.x_count = 2;
 +    } else {
-+        set_buffer_region(&x_regions[0], 0, EP_X_RAM_WORDS, dsp->core.xram);
-+        set_buffer_region(&y_region, 0, EP_Y_RAM_WORDS, dsp->core.yram);
++        uint8_t *base = dsp->guest_mmio_base;
++        set_buffer_region(&x_regions[0], 0, EP_X_RAM_WORDS,
++                          base ? (uint32_t *)(base + 0x0000u) : dsp->core.xram);
++        set_buffer_region(&y_region, 0, EP_Y_RAM_WORDS,
++                          base ? (uint32_t *)(base + 0x6000u) : dsp->core.yram);
 +        info.memory_map.x_regions = x_regions;
 +        info.memory_map.x_count = 1;
 +    }
 +
-+    set_buffer_region(&p_region, 0, DSP_P_RAM_WORDS, dsp->core.pram);
++    set_buffer_region(&p_region, 0, DSP_P_RAM_WORDS,
++                      dsp->guest_mmio_base
++                          ? (uint32_t *)(dsp->guest_mmio_base + 0xA000u)
++                          : dsp->core.pram);
 +    info.memory_map.y_regions = &y_region;
 +    info.memory_map.y_count = 1;
 +    info.memory_map.p_regions = &p_region;
 +    info.memory_map.p_count = 1;
 +
 +    /* The FFI copies region descriptors but retains all buffer pointers. The
-+     * DSPState and its arrays must therefore outlive the returned JIT handle. */
++     * guest MCPX aperture (or fallback DSPState arrays) must outlive the JIT. */
 +    dsp->jit = dsp56300_create(&info);
 +    return dsp->jit != NULL;
++#endif
 +}
 +
 +void mcpx_apu_dsp_engine_destroy(DSPState *dsp)
 +{
++#ifdef MCPX_APU_USE_DSP56300
 +    if (dsp && dsp->jit) {
 +        dsp56300_destroy(dsp->jit);
 +        dsp->jit = NULL;
 +    }
++#else
++    (void)dsp;
++#endif
 +}
 +
 +void mcpx_apu_dsp_engine_reset(DSPState *dsp)
 +{
++#ifdef MCPX_APU_USE_DSP56300
 +    if (dsp && dsp->jit) {
 +        dsp56300_reset(dsp->jit);
 +    }
++#else
++    (void)dsp;
++#endif
++}
++
++/* Translate guest-visible byte offsets to the DSP's 24-bit word spaces.
++ * False means the access is a peripheral register or an unmapped hole. */
++static bool mmio_word(DSPState *dsp, uint32_t byte_offset,
++                      DspMmioSpace *space, uint32_t *word)
++{
++    if (!dsp || (byte_offset & 3u) != 0) {
++        return false;
++    }
++    if (dsp->is_gp) {
++        if (byte_offset < GP_X_RAM_WORDS * 4u) {
++            *space = DSP_MMIO_SPACE_X;
++            *word = byte_offset / 4u;
++        } else if (byte_offset >= 0x5000u &&
++                   byte_offset < 0x5000u + GP_MIXBUF_WORDS * 4u) {
++            *space = DSP_MMIO_SPACE_X;
++            *word = GP_MIXBUF_START + (byte_offset - 0x5000u) / 4u;
++        } else if (byte_offset >= 0x6000u &&
++                   byte_offset < 0x6000u + GP_Y_RAM_WORDS * 4u) {
++            *space = DSP_MMIO_SPACE_Y;
++            *word = (byte_offset - 0x6000u) / 4u;
++        } else if (byte_offset >= 0xA000u &&
++                   byte_offset < 0xA000u + DSP_P_RAM_WORDS * 4u) {
++            *space = DSP_MMIO_SPACE_P;
++            *word = (byte_offset - 0xA000u) / 4u;
++        } else {
++            return false;
++        }
++    } else {
++        if (byte_offset < EP_X_RAM_WORDS * 4u) {
++            *space = DSP_MMIO_SPACE_X;
++            *word = byte_offset / 4u;
++        } else if (byte_offset >= 0x6000u &&
++                   byte_offset < 0x6000u + EP_Y_RAM_WORDS * 4u) {
++            *space = DSP_MMIO_SPACE_Y;
++            *word = (byte_offset - 0x6000u) / 4u;
++        } else if (byte_offset >= 0xA000u &&
++                   byte_offset < 0xA000u + DSP_P_RAM_WORDS * 4u) {
++            *space = DSP_MMIO_SPACE_P;
++            *word = (byte_offset - 0xA000u) / 4u;
++        } else {
++            return false;
++        }
++    }
++    return true;
++}
++
++static uint32_t *mmio_backing_word(DSPState *dsp,
++                                   DspMmioSpace space,
++                                   uint32_t word)
++{
++    if (dsp->guest_mmio_base) {
++        uint32_t byte_offset;
++        if (space == DSP_MMIO_SPACE_X) {
++            byte_offset = dsp->is_gp && word >= GP_MIXBUF_START
++                    && word < GP_MIXBUF_START + GP_MIXBUF_WORDS
++                ? 0x5000u + (word - GP_MIXBUF_START) * 4u
++                : word * 4u;
++        } else if (space == DSP_MMIO_SPACE_Y) {
++            byte_offset = 0x6000u + word * 4u;
++        } else {
++            byte_offset = 0xA000u + word * 4u;
++        }
++        return (uint32_t *)(dsp->guest_mmio_base + byte_offset);
++    }
++    if (space == DSP_MMIO_SPACE_X) {
++        if (dsp->is_gp && word >= GP_MIXBUF_START &&
++            word < GP_MIXBUF_START + GP_MIXBUF_WORDS) {
++            return &dsp->core.mixbuffer[word - GP_MIXBUF_START];
++        }
++        return &dsp->core.xram[word];
++    }
++    if (space == DSP_MMIO_SPACE_Y) {
++        return &dsp->core.yram[word];
++    }
++    return &dsp->core.pram[word];
++}
++
++bool mcpx_apu_dsp_memory_read(DSPState *dsp, uint32_t byte_offset,
++                              uint32_t *value)
++{
++    DspMmioSpace space;
++    uint32_t word;
++    if (!value || !mmio_word(dsp, byte_offset, &space, &word)) {
++        return false;
++    }
++    *value = *mmio_backing_word(dsp, space, word) & DSP_WORD_MASK;
++    return true;
++}
++
++void mcpx_apu_dsp_sync_program_cache(DSPState *dsp)
++{
++#ifdef MCPX_APU_USE_DSP56300
++    uint32_t *program;
++    uint64_t hash = UINT64_C(1469598103934665603);
++
++    if (!dsp || !dsp->jit || !dsp->guest_mmio_base) {
++        return;
++    }
++    program = (uint32_t *)(dsp->guest_mmio_base + 0xA000u);
++    for (uint32_t i = 0; i < DSP_P_RAM_WORDS; ++i) {
++        hash ^= program[i] & DSP_WORD_MASK;
++        hash *= UINT64_C(1099511628211);
++    }
++    if (!dsp->guest_program_hash_valid || hash != dsp->guest_program_hash) {
++        dsp56300_invalidate_cache((Dsp56300Jit *)dsp->jit);
++        dsp->guest_program_hash = hash;
++        dsp->guest_program_hash_valid = true;
++    }
++#else
++    (void)dsp;
++#endif
++}
++
++bool mcpx_apu_dsp_memory_write(DSPState *dsp, uint32_t byte_offset,
++                               uint32_t value)
++{
++    DspMmioSpace space;
++    uint32_t word;
++    if (!mmio_word(dsp, byte_offset, &space, &word)) {
++        return false;
++    }
++    value &= DSP_WORD_MASK;
++#ifdef MCPX_APU_USE_DSP56300
++    if (space == DSP_MMIO_SPACE_P && dsp->jit) {
++        dsp56300_write_memory((Dsp56300Jit *)dsp->jit,
++                              DSP56300_MEM_SPACE_P, word, value);
++    } else {
++        *mmio_backing_word(dsp, space, word) = value;
++    }
++#else
++    *mmio_backing_word(dsp, space, word) = value;
++#endif
++    return true;
 +}
 diff --git a/src/apu/apu_dsp56300_bridge.h b/src/apu/apu_dsp56300_bridge.h
 new file mode 100644
-index 0000000..b58af45
+index 0000000..95bfc09
 --- /dev/null
 +++ b/src/apu/apu_dsp56300_bridge.h
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,18 @@
 +/*
 + * XboxRecomp-owned adapter between the MCPX APU state and the MIT DSP56300 C FFI.
 + * No xemu GPL bridge code is copied here.
@@ -367,20 +752,37 @@ index 0000000..b58af45
 +bool mcpx_apu_dsp_engine_init(DSPState *dsp);
 +void mcpx_apu_dsp_engine_destroy(DSPState *dsp);
 +void mcpx_apu_dsp_engine_reset(DSPState *dsp);
++bool mcpx_apu_dsp_memory_read(DSPState *dsp, uint32_t byte_offset,
++                              uint32_t *value);
++bool mcpx_apu_dsp_memory_write(DSPState *dsp, uint32_t byte_offset,
++                               uint32_t value);
++void mcpx_apu_dsp_sync_program_cache(DSPState *dsp);
 diff --git a/src/apu/apu_state.h b/src/apu/apu_state.h
-index 871ff5d..21ce9b0 100644
+index 871ff5d..97e1bad 100644
 --- a/src/apu/apu_state.h
 +++ b/src/apu/apu_state.h
-@@ -136,6 +136,8 @@ typedef struct DSPState {
+@@ -136,6 +136,12 @@ typedef struct DSPState {
      int save_cycles;
      uint32_t interrupts;
      bool is_gp;
++    /* Directly mapped MCPX GP/EP guest memory windows (untrapped RAM). */
++    uint8_t *guest_mmio_base;
++    uint64_t guest_program_hash;
++    bool guest_program_hash_valid;
 +    /* Optional MIT DSP56300 FFI engine, owned by the APU bridge. */
 +    void *jit;
  } DSPState;
  
  /* ============================================================
-@@ -522,6 +524,8 @@ void mcpx_apu_vp_reset(MCPXAPUState *d);
+@@ -474,6 +480,7 @@ struct MCPXAPUState {
+ 
+     MemoryRegion *ram;
+     uint8_t *ram_ptr;
++    uint8_t *mcpx_ptr;
+     MemoryRegion mmio;
+ 
+     MCPXAPUVPState vp;
+@@ -522,9 +529,16 @@ void mcpx_apu_vp_reset(MCPXAPUState *d);
  
  /* DSP functions (stubbed) */
  void mcpx_apu_dsp_init(MCPXAPUState *d);
@@ -389,12 +791,49 @@ index 871ff5d..21ce9b0 100644
  void mcpx_apu_update_dsp_preference(MCPXAPUState *d);
  void mcpx_apu_dsp_frame(MCPXAPUState *d, float mixbins[NUM_MIXBINS][NUM_SAMPLES_PER_FRAME]);
  void mcpx_apu_dsp_ack_poll(MCPXAPUState *d);
++uint32_t mcpx_apu_dsp_mmio_read(MCPXAPUState *d, bool is_gp,
++                                uint32_t byte_offset, unsigned int size);
++void mcpx_apu_dsp_mmio_write(MCPXAPUState *d, bool is_gp,
++                             uint32_t byte_offset, uint32_t value,
++                             unsigned int size);
+ 
+ /* Debug globals */
+ extern MCPXAPUState *g_state;
+diff --git a/src/kernel/xbox_memory_layout.c b/src/kernel/xbox_memory_layout.c
+index 72d5131..a246fdd 100644
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -2829,6 +2829,11 @@ void *xbox_GetMemoryBase(void)
+     return g_memory_base;
+ }
+ 
++void *xbox_GetMCPXMemoryBase(void)
++{
++    return g_mcpx_memory;
++}
++
+ ptrdiff_t xbox_GetMemoryOffset(void)
+ {
+     return g_memory_offset;
+diff --git a/src/kernel/xbox_memory_layout.h b/src/kernel/xbox_memory_layout.h
+index 53f9d3d..93b650f 100644
+--- a/src/kernel/xbox_memory_layout.h
++++ b/src/kernel/xbox_memory_layout.h
+@@ -204,6 +204,8 @@ BOOL xbox_IsXboxAddress(uintptr_t address);
+  * Returns NULL if memory layout is not initialized.
+  */
+ void *xbox_GetMemoryBase(void);
++/* Host pointer to the guest MCPX device aperture, or NULL before initialization. */
++void *xbox_GetMCPXMemoryBase(void);
+ 
+ /**
+  * Get the offset from Xbox VA to actual mapped address.
 diff --git a/tests/dsp56300_memory_map_test.c b/tests/dsp56300_memory_map_test.c
 new file mode 100644
-index 0000000..8c58ff6
+index 0000000..19f93bf
 --- /dev/null
 +++ b/tests/dsp56300_memory_map_test.c
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,141 @@
 +/*
 + * Focused C ABI check for the XboxRecomp-owned DSP56300 memory map.
 + * This does not execute firmware or claim APU audio compatibility.
@@ -422,29 +861,62 @@ index 0000000..8c58ff6
 +    return 1;
 +}
 +
++static int check_mmio_word(const char *name, DSPState *dsp,
++                           uint32_t byte_offset, uint32_t *backing_word,
++                           uint32_t value)
++{
++    uint32_t actual = 0;
++    if (!mcpx_apu_dsp_memory_write(dsp, byte_offset, value) ||
++        *backing_word != (value & 0x00FFFFFFu) ||
++        !mcpx_apu_dsp_memory_read(dsp, byte_offset, &actual) ||
++        actual != (value & 0x00FFFFFFu)) {
++        fprintf(stderr, "DSP guest MMIO check failed: %s\n", name);
++        return 0;
++    }
++    return 1;
++}
++
 +static int check_gp_map(void)
 +{
 +    DSPState gp = {0};
++    uint32_t guest_ram[0x4000] = {0};
 +    int ok = 1;
 +
 +    gp.is_gp = true;
++    gp.guest_mmio_base = (uint8_t *)guest_ram;
 +    if (!mcpx_apu_dsp_engine_init(&gp)) {
 +        fprintf(stderr, "GP DSP56300 engine creation failed\n");
 +        return 0;
 +    }
 +
 +    ok &= check_word("GP X first word", &gp, DSP56300_MEM_SPACE_X,
-+                     0x0000, &gp.core.xram[0], 0x12345);
++                     0x0000, &guest_ram[0x0000], 0x12345);
 +    ok &= check_word("GP X last word", &gp, DSP56300_MEM_SPACE_X,
-+                     0x0FFF, &gp.core.xram[0x0FFF], 0x23456);
++                     0x0FFF, &guest_ram[0x0FFF], 0x23456);
 +    ok &= check_word("GP mixbuffer first word", &gp, DSP56300_MEM_SPACE_X,
-+                     0x1400, &gp.core.mixbuffer[0], 0x34567);
++                     0x1400, &guest_ram[0x1400], 0x34567);
 +    ok &= check_word("GP mixbuffer last word", &gp, DSP56300_MEM_SPACE_X,
-+                     0x17FF, &gp.core.mixbuffer[0x3FF], 0x45678);
++                     0x17FF, &guest_ram[0x17FF], 0x45678);
 +    ok &= check_word("GP Y last word", &gp, DSP56300_MEM_SPACE_Y,
-+                     0x07FF, &gp.core.yram[0x07FF], 0x56789);
++                     0x07FF, &guest_ram[0x6000 / 4 + 0x07FF], 0x56789);
 +    ok &= check_word("GP P last word", &gp, DSP56300_MEM_SPACE_P,
-+                     0x0FFF, &gp.core.pram[0x0FFF], 0x6789A);
++                     0x0FFF, &guest_ram[0xA000 / 4 + 0x0FFF], 0x6789A);
++    ok &= check_mmio_word("GP X window end", &gp, 0x0FFCu,
++                          &guest_ram[0x03FF], 0xFF123456u);
++    ok &= check_mmio_word("GP mixbuffer window end", &gp, 0x5FFCu,
++                          &guest_ram[0x5000 / 4 + 0x03FF], 0xFF234567u);
++    ok &= check_mmio_word("GP Y window end", &gp, 0x7FFCu,
++                          &guest_ram[0x6000 / 4 + 0x07FF], 0xFF345678u);
++    ok &= check_mmio_word("GP P window end", &gp, 0xDFFCu,
++                          &guest_ram[0xA000 / 4 + 0x0FFF], 0xFF456789u);
++    {
++        uint32_t ignored;
++        if (mcpx_apu_dsp_memory_read(&gp, 0x4000u, &ignored) ||
++            mcpx_apu_dsp_memory_write(&gp, 0x4000u, 1u)) {
++            fprintf(stderr, "GP unmapped hole incorrectly aliases DSP RAM\n");
++            ok = 0;
++        }
++    }
 +
 +    if (!mcpx_apu_dsp_engine_init(&gp) || !gp.jit) {
 +        fprintf(stderr, "GP engine initialization is not idempotent\n");
@@ -459,20 +931,36 @@ index 0000000..8c58ff6
 +static int check_ep_map(void)
 +{
 +    DSPState ep = {0};
++    uint32_t guest_ram[0x4000] = {0};
 +    int ok = 1;
 +
 +    ep.is_gp = false;
++    ep.guest_mmio_base = (uint8_t *)guest_ram;
 +    if (!mcpx_apu_dsp_engine_init(&ep)) {
 +        fprintf(stderr, "EP DSP56300 engine creation failed\n");
 +        return 0;
 +    }
 +
 +    ok &= check_word("EP X last word", &ep, DSP56300_MEM_SPACE_X,
-+                     0x0BFF, &ep.core.xram[0x0BFF], 0x789AB);
++                     0x0BFF, &guest_ram[0x0BFF], 0x789AB);
 +    ok &= check_word("EP Y last word", &ep, DSP56300_MEM_SPACE_Y,
-+                     0x00FF, &ep.core.yram[0x00FF], 0x89ABC);
++                     0x00FF, &guest_ram[0x6000 / 4 + 0x00FF], 0x89ABC);
 +    ok &= check_word("EP P last word", &ep, DSP56300_MEM_SPACE_P,
-+                     0x0FFF, &ep.core.pram[0x0FFF], 0x9ABCD);
++                     0x0FFF, &guest_ram[0xA000 / 4 + 0x0FFF], 0x9ABCD);
++    ok &= check_mmio_word("EP X window end", &ep, 0x2FFCu,
++                          &guest_ram[0x0BFF], 0xFFA12345u);
++    ok &= check_mmio_word("EP Y window end", &ep, 0x63FCu,
++                          &guest_ram[0x6000 / 4 + 0x00FF], 0xFFB23456u);
++    ok &= check_mmio_word("EP P window end", &ep, 0xDFFCu,
++                          &guest_ram[0xA000 / 4 + 0x0FFF], 0xFFC34567u);
++    {
++        uint32_t ignored;
++        if (mcpx_apu_dsp_memory_read(&ep, 0x3000u, &ignored) ||
++            mcpx_apu_dsp_memory_write(&ep, 0x3000u, 1u)) {
++            fprintf(stderr, "EP unmapped hole incorrectly aliases DSP RAM\n");
++            ok = 0;
++        }
++    }
 +
 +    mcpx_apu_dsp_engine_reset(&ep);
 +    mcpx_apu_dsp_engine_destroy(&ep);

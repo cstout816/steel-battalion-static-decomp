@@ -365,3 +365,7 @@ The platform build and translation-output bars are not evidence of a playable ga
 | Full campaign compatibility | Not verified. No mission-completion or campaign-progression testing has been completed. |
 
 **The latest verified state is not a playable game.** The title screen, graphics, sound, controller input, saves, cinematics, mission completion, and campaign progression remain unverified. We will report compatibility only after the complete campaign has been tested mission by mission.
+
+### Latest bounded DSP mapping check (2026-10-17)
+
+The optional DSP56300 bridge now aliases the GP/EP DSP memory descriptors to the ordinary guest RAM windows. Source review showed that expanding the APU protection range would break translated bulk-memory copies, so the guest RAM layout remains intact. A focused synthetic test rebuilt and passed for the GP/EP aliases and boundary behavior, and the full Windows game executable rebuilt successfully. A 15-second run initialized the APU but still stalled before title assets or the title screen; it logged no reset release, DSP execution, or audio verification. The launched test exited, and no game/emulator process remains. Progress bars remain unchanged. Milestone 3 remains active. Next capture the watchdog PC and guest call path to determine whether the game reaches APU frame service and whether reset writes are visible.

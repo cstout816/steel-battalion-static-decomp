@@ -99,3 +99,7 @@ Preserve the existing APU worker's locking, frame pacing, and shutdown lifecycle
 6. Run a Steel Battalion startup test only when the user is not playing and a test window is permitted. Capture runtime/audio logs and demonstrate real DSP processing and audible game output before advancing those progress bars.
 
 The last step does not prove campaign audio or full campaign compatibility. Those still require mission-by-mission verification.
+
+## Latest implementation checkpoint (2026-10-17)
+
+The host maps FFI X/Y/P descriptors to the untrapped GP/EP guest RAM, preserving direct writes from generated guest code. APU frame processing samples each processor's reset register and hashes guest P RAM to invalidate the FFI JIT cache after program changes. The bounded test confirms only mapping/lifecycle mechanics; the game launch initialized the APU but reached neither a reset-release log nor the title screen. Firmware bootstrap, scratch/FIFO transfers, peripheral flags, DSP cycle execution, and audible output remain unimplemented and unverified. Continue with a watchdog-PC/guest-call-path trace before implementing scheduling or DMA.
