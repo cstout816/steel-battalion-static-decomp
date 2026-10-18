@@ -10,6 +10,8 @@ The latest bounded diagnostic launch rebuilt successfully with the Vulkan path a
 
 A follow-up 60-second run added timer-thread stage markers. They continued through `before/after-vblank`, `before/after-irq`, and `before/after-dpc` at loop 3000; the isolated watchdog ended the process at 60 seconds. This rules out a timer-thread stall in those three stages for that run. The guest still had not reached the title screen, and the run does not establish why game-thread progress stopped. Diagnostics remain local and ignored. Vulkan remains the fixed renderer choice; this result does not reopen API selection.
 
+A further 60-second bounded launch traced the guest-built event at `0x0021DCE4`. All 128 logged `KeWaitForSingleObject` calls returned `STATUS_SUCCESS`; the title repeatedly reset the notification event and another runtime thread signaled it. The NV2A queue continued to drain and reached `PUT=GET=0x4E81C`; the run logged 400 draw batches and 200 clears before the watchdog. The watchdog stack happened to sample the event wrapper, which does not prove a deadlock. No title-screen, audio-output, or gameplay verification was made, and no progress bars advance. Tracing, logs, and the rebuilt binary are local under the ignored `iso/local-analysis/` and `local-tools/` paths.
+
 See [the Vulkan migration map](VULKAN_MIGRATION_MAP.md) for source call paths, verified runtime boundaries, and the remaining implementation steps.
 
 ### Detailed field progress
