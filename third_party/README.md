@@ -140,3 +140,25 @@ including those components. No game executable or runtime libraries are
 prepared for redistribution. Before distributing binaries, retain all upstream
 notices and license texts and satisfy the LGPL relinking/source requirements.
 The project license remains undecided pending the full dependency review.
+
+## Pinned Vulkan presentation dependencies
+
+The Windows Vulkan framebuffer presenter fetches two pinned dependencies
+through CMake FetchContent. No Vulkan SDK installation is required, and
+neither dependency source tree is vendored in this repository.
+
+| Dependency | Pinned revision | License used | Archive SHA-256 |
+|---|---|---|---|
+| [Volk](https://github.com/zeux/volk) | `3ca312a4f38baa63d8006b6905abbeeb89c8087d` | MIT | `8C938B390B234DDEE57C01D47933E708E5BF6F51CE8601B9E93154173C6AD5A1` |
+| [Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers) | `acbb9391c0a597272800cd3f4363661c00a27c77` | MIT option under upstream `Apache-2.0 OR MIT` licensing | `4F1526F54E1DEB260BF5BD534AE47F01ABF93155B4FCCD2609EC605207CF4428` |
+
+Retained notices and license texts are in `licenses/volk-MIT.txt`,
+`licenses/Vulkan-Headers-LICENSE.md`, and `licenses/Vulkan-Headers-MIT.txt`.
+The Vulkan-Headers notice says `parse_dependency.py` is excepted from its
+dual-license statement; this project fetches the Vulkan declarations and does
+not use that Python utility.
+
+The Vulkan adapter presents the existing guest framebuffer through a Vulkan
+swapchain. It does not yet render NV2A commands. No xemu renderer source has
+been copied. See [`../docs/VULKAN_REUSE_AUDIT.md`](../docs/VULKAN_REUSE_AUDIT.md)
+for the separate xemu shader/PGRAPH reuse and licensing review.
