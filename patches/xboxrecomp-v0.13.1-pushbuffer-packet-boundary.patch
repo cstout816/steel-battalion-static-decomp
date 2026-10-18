@@ -1,0 +1,65 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+index c65632c..c6df232 100644
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -3404,6 +3404,15 @@ static void peek_chain(void)
+     fflush(stderr);
+ }
+ 
++void nv2a_pb_exec_packet(uint32_t subch, uint32_t method,
++                         const uint32_t *params, uint32_t count, int noninc)
++{
++    for (uint32_t i = 0; i < count; i++) {
++        uint32_t current = noninc ? method : method + i * 4u;
++        nv2a_pb_exec_method(subch, current, params[i]);
++    }
++}
++
+ void nv2a_pb_exec_report(void)
+ {
+     peek_addresses();
+diff --git a/src/kernel/nv2a_pb_scan.c b/src/kernel/nv2a_pb_scan.c
+index 65bbedb..41eaa3f 100644
+--- a/src/kernel/nv2a_pb_scan.c
++++ b/src/kernel/nv2a_pb_scan.c
+@@ -47,6 +47,9 @@ static uint32_t s_tot_calls;
+ /* Executing is opt-in separately from surveying: a survey is read-only, while
+  * the executor writes to guest memory. */
+ extern void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param);
++extern void nv2a_pb_exec_packet(uint32_t subch, uint32_t method,
++                                const uint32_t *params, uint32_t count,
++                                int noninc);
+ extern void nv2a_pb_exec_report(void);
+ static int s_exec_enabled = -1;
+ 
+@@ -203,18 +206,21 @@ static uint32_t pb_walk(uint32_t va, uint32_t end_va, int in_call,
+             uint32_t method =  w & 0x1FFCu;
+             int noninc = (w & 0xE0000000u) == 0x40000000u;
+ 
+-            for (uint32_t i = 0; i < count && va < end_va; i++) {
++            const uint32_t *params = (const uint32_t *)(mem + va);
++            uint32_t packet_count = count;
++            if (packet_count > (end_va - va) / 4u)
++                packet_count = (end_va - va) / 4u;
++            for (uint32_t i = 0; i < packet_count; i++) {
+                 uint32_t m = noninc ? method : method + i * 4;
+                 note(subch, m);
+-                /* Same walk, two consumers: the survey counts, the executor
+-                 * acts. Keeping them on one decode means they can never
+-                 * disagree about what the stream said. */
+-                if (s_exec_enabled)
+-                    nv2a_pb_exec_method(subch, m,
+-                                        *(const uint32_t *)(mem + va));
+-                va += 4;
+-                words++;
+             }
++            /* Preserve the original packet for a PGRAPH method processor;
++             * the current executor still receives each method in order. */
++            if (s_exec_enabled && packet_count)
++                nv2a_pb_exec_packet(subch, method, params, packet_count,
++                                    noninc);
++            va += packet_count * 4u;
++            words += packet_count;
+             continue;
+         }
+         (*unknown)++;
