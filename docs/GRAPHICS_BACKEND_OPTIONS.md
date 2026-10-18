@@ -23,6 +23,8 @@ Milestone 3, Boot and Compatibility, remains incomplete. The clean software-rend
 
 The xemu renderer is not a drop-in library. Its PGRAPH state and renderer use QEMU services and xemu-specific data structures. A port needs a host adapter for guest RAM, pushbuffer state, surfaces, textures, shader translation, synchronization, and presentation. Source files have differing license notices; audit every reused file and dependency before integration or distribution. No distribution license has been selected. Do not install system-wide Vulkan tooling; use a project-local, reproducible dependency setup after its license review.
 
+The file-by-file xemu renderer and dependency findings are in [VULKAN_REUSE_AUDIT.md](VULKAN_REUSE_AUDIT.md). No xemu renderer code has been copied; its shader/preprocessor dependency and the project-wide license path remain under review.
+
 ## Evidence
 
 - [xemu Vulkan NV2A renderer and active work](https://github.com/xemu-project/xemu/tree/master/hw/xbox/nv2a/pgraph/vk)
