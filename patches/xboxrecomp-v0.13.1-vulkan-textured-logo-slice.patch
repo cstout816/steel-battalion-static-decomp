@@ -102,7 +102,7 @@ index be04ecc..4a220cf 100644
      T.use_rc = s_gpu.rc_seen && !no_rc;
      T.va = va; T.vb = vb; T.vc = vc;
  
-@@ -2354,20 +2314,20 @@ static int transform_vertex(uint32_t index, Nv2aVshOutput *out)
+@@ -2354,20 +2314,21 @@ static int transform_vertex(uint32_t index, Nv2aVshOutput *out)
      return nv2a_vsh_run((const float (*)[4])in, out);
  }
  
@@ -126,16 +126,20 @@ index be04ecc..4a220cf 100644
 -        || s_gpu.prim != NV_PRIM_TRIANGLE_STRIP || s_gpu.idx_count != 4
 +    if (s_gpu.prim != NV_PRIM_TRIANGLE_STRIP || s_gpu.idx_count != 4
          || s_gpu.color_mask != 0x01010101u
-         || s_gpu.texs[0].valid || s_gpu.blend_enable || s_gpu.alpha_test
+-        || s_gpu.texs[0].valid || s_gpu.blend_enable || s_gpu.alpha_test
++        || (s_gpu.texs[0].valid && s_gpu.rc.stage_program != 0)
++        || s_gpu.blend_enable || s_gpu.alpha_test
          || !s_gpu.depth_test || !s_gpu.depth_mask || s_gpu.depth_func != 0x203
-@@ -2375,8 +2335,8 @@ static int d3d12_black_depth_quad(void)
+@@ -2375,8 +2335,10 @@ static int d3d12_black_depth_quad(void)
          || s_gpu.rc.stage_program != 0
          || s_gpu.rc.final0 != 0x200C0000
          || s_gpu.rc.final1 != 0x00001C80
 -        || !s_d3d12_depth_cleared
 -        || s_d3d12_depth_clear_offset != s_gpu.zeta_offset
-+        || !s_logo_depth_cleared
-+        || s_logo_depth_clear_offset != s_gpu.zeta_offset
++        || !((s_logo_depth_cleared
++              && s_logo_depth_clear_offset == s_gpu.zeta_offset)
++             || (s_logo_depth_zero_valid
++                 && s_logo_depth_zero_offset == s_gpu.zeta_offset))
          || s_gpu.zpass_enable
          || surface_bpp() != 4)
          return 0;
@@ -256,7 +260,7 @@ index be04ecc..4a220cf 100644
                  s_gpu.clip_w, s_gpu.clip_h);
      }
      return 1;
-@@ -2630,17 +2594,17 @@ static void raster_batch_program(void)
+@@ -2630,17 +2594,19 @@ static void raster_batch_program(void)
      if (s_gpu.texs[0].valid)
          note_texture_use();
  
@@ -268,7 +272,9 @@ index be04ecc..4a220cf 100644
 -    if (d3d12_logo_fade_quad()) {
 -        s_d3d12_depth_zero_valid = 0;
 +    if (vulkan_logo_fade_quad()) {
-+        s_logo_depth_zero_valid = 0;
++        /* This exact fullscreen draw uses z=0 with LEQUAL and writes zero, so
++         * the known-zero depth invariant remains true for later same-zeta
++         * surfaces. The fast path itself records the current color target. */
          dump_program_draw_if_requested();
          return;
      }
