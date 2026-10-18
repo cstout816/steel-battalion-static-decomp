@@ -181,8 +181,12 @@ Audio cleanup: null owner traced to failed DSOUND init           [#-------------
 Audio cleanup: safe initialization and cleanup verified         [--------------------] 0 / 1 (0%)
 Audio: device initialization                               [#-------------------] 1 / 3 (33%)
 Audio: compatible DSP backend candidate researched           [#-------------------] 1 / 1 research (100%)
+Audio: GP/EP DSP MMIO windows routed                        [--------------------] 0 / 1 (0%)
+Audio: GP/EP X/Y/P memory mapped                             [--------------------] 0 / 1 (0%)
+Audio: game DSP firmware loaded and started                  [--------------------] 0 / 1 (0%)
 Audio: DSP56300 GP/EP execution integrated                  [--------------------] 0 / 1 (0%)
-Audio: DSP processing and game sound                       [--------------------] 0 / 2 (0%)
+Audio: DSP cycles, interrupts, and DMA verified               [--------------------] 0 / 1 (0%)
+Audio: game sound output verified                            [--------------------] 0 / 1 (0%)
 Input: original Steel Battalion hardware                   [--------------------] 0 / 3 (0%)
 Input: keyboard/mouse, gamepad, and HOTAS                   [--------------------] 0 / 3 (0%)
 
@@ -233,7 +237,11 @@ Texture upload and sampling                            [--------------------] 0 
 Shaders and register combiners                         [--------------------] 0 / 2 (0%)
 Correct game image presented                           [--------------------] 0 / 1 (0%)
 Audio device and APU initialization                    [#-------------------] 1 / 2 (50%)
-Audio DSP behavior and audible sound                   [--------------------] 0 / 2 (0%)
+GP/EP DSP MMIO routing                                 [--------------------] 0 / 1 (0%)
+GP/EP DSP X/Y/P memory and register mapping            [--------------------] 0 / 1 (0%)
+GP/EP guest firmware loading and execution             [--------------------] 0 / 1 (0%)
+DSP cycle, interrupt, FIFO, and DMA behavior           [--------------------] 0 / 1 (0%)
+DSP processing and audible game sound                  [--------------------] 0 / 2 (0%)
 Basic in-game input                                    [--------------------] 0 / 1 (0%)
 
 ORIGINAL STEEL BATTALION CONTROLLER AND ACCESSIBILITY
