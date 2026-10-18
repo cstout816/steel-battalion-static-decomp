@@ -4,7 +4,11 @@
 
 **A community preservation project exploring static recompilation of the original Xbox game**
 
-<img src="docs/images/project-banner.svg" alt="Steel Battalion for Windows: an experimental static recompilation project" width="100%" />
+<a href="https://www.purexbox.com/games/xbox/steel_battalion">
+  <img src="https://images.purexbox.com/screenshots/137992/large.jpg" alt="Original Xbox Steel Battalion gameplay screenshot, screenshot 2 of 20 in the Pure Xbox gallery" width="100%" />
+</a>
+
+<sub>Original Xbox gameplay screenshot · <a href="https://www.purexbox.com/games/xbox/steel_battalion">Pure Xbox screenshot gallery</a></sub>
 
 ### Experimental development · No playable build yet
 
@@ -22,7 +26,7 @@ The project is still experimental. The translated Windows program builds, but it
 
 ## See the game and its controller
 
-These are real photographs and screenshots from the original game and hardware. Screenshots are displayed from their published sources and are **not stored in this repository**. Select an image to visit its source.
+These are real photographs and screenshots from the original game and hardware. Gameplay images are shown from the published Pure Xbox gallery and are **not stored in this repository**. Select any gameplay image to visit the source. This project has not captured its own gameplay yet because it does not boot to the title screen.
 
 <table>
   <tr>
@@ -33,14 +37,34 @@ These are real photographs and screenshots from the original game and hardware. 
       <br /><sub>Original Xbox gameplay · MobyGames</sub>
     </td>
     <td align="center" width="33%">
-      <a href="https://www.purexbox.com/games/xbox/steel_battalion">
-        <img src="https://images.purexbox.com/screenshots/137981/large.jpg" alt="Steel Battalion cockpit instruments and battlefield view" width="100%" />
+      <a href="https://images.purexbox.com/screenshots/137993/large.jpg">
+        <img src="https://images.purexbox.com/screenshots/137993/large.jpg" alt="Original Xbox Steel Battalion gameplay screenshot 3 of 20" width="100%" />
       </a>
       <br /><sub>Original Xbox gameplay · Pure Xbox</sub>
     </td>
     <td align="center" width="33%">
-      <a href="https://www.purexbox.com/games/xbox/steel_battalion">
-        <img src="https://images.purexbox.com/screenshots/137988/large.jpg" alt="Steel Battalion cockpit view with an enemy vertical tank" width="100%" />
+      <a href="https://images.purexbox.com/screenshots/137994/large.jpg">
+        <img src="https://images.purexbox.com/screenshots/137994/large.jpg" alt="Original Xbox Steel Battalion gameplay screenshot 4 of 20" width="100%" />
+      </a>
+      <br /><sub>Original Xbox gameplay · Pure Xbox</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <a href="https://images.purexbox.com/screenshots/137995/large.jpg">
+        <img src="https://images.purexbox.com/screenshots/137995/large.jpg" alt="Original Xbox Steel Battalion gameplay screenshot 5 of 20" width="100%" />
+      </a>
+      <br /><sub>Original Xbox gameplay · Pure Xbox</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://images.purexbox.com/screenshots/137981/large.jpg">
+        <img src="https://images.purexbox.com/screenshots/137981/large.jpg" alt="Original Xbox Steel Battalion gameplay screenshot 6 of 20" width="100%" />
+      </a>
+      <br /><sub>Original Xbox gameplay · Pure Xbox</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://images.purexbox.com/screenshots/137982/large.jpg">
+        <img src="https://images.purexbox.com/screenshots/137982/large.jpg" alt="Original Xbox Steel Battalion gameplay screenshot 7 of 20" width="100%" />
       </a>
       <br /><sub>Original Xbox gameplay · Pure Xbox</sub>
     </td>
@@ -57,7 +81,7 @@ These are real photographs and screenshots from the original game and hardware. 
   </tr>
 </table>
 
-Browse the [Steel Battalion screenshot gallery at Pure Xbox](https://www.purexbox.com/games/xbox/steel_battalion) for more views. Image sources, creator credits, and licenses are listed in [Image credits](docs/ATTRIBUTIONS.md). No AI-generated photos or mockup images are used.
+Browse the [Steel Battalion screenshot gallery at Pure Xbox](https://www.purexbox.com/games/xbox/steel_battalion) for all 20 views. Image sources, creator credits, and licenses are listed in [Image credits](docs/ATTRIBUTIONS.md). No AI-generated photos or mockup images are used.
 
 ## What you can do here
 

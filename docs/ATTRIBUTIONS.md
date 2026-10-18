@@ -26,10 +26,10 @@ The creator does not endorse this project.
 - **Use:** The README embeds an image loaded from MobyGames' page. The screenshot is not copied into this repository; rights and hosting remain with their respective holders.
 
 - **Source:** [Pure Xbox — Steel Battalion screenshot gallery](https://www.purexbox.com/games/xbox/steel_battalion)
-- **Use:** The README embeds screenshots hosted by Pure Xbox and links each image back to the gallery. No screenshot files are copied into this repository; rights and hosting remain with their respective holders.
+- **Use:** The README hero and five gallery images are hosted by Pure Xbox. Each image links to its published source. No screenshot files are copied into this repository; rights and hosting remain with their respective holders.
 
-## Project banner
+The README hero uses screenshot 2 of 20; the gallery shows screenshots 3–7 of 20.
 
-- **Creator:** Steel Battalion Static Decomp project.
-- **Source:** Original text-and-shape SVG; it contains no game imagery, generated photography, or mockup images.
-- **Purpose:** Describes the static-recompilation project and its current experimental status. It is not a screenshot or representation of running game footage.
+## README banner
+
+The banner is an externally hosted screenshot from the Pure Xbox gallery above. It is an authentic published game image, not an AI-generated image or a mockup. The repository does not contain the screenshot.
