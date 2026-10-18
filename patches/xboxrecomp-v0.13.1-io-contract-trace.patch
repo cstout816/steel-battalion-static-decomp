@@ -1,0 +1,51 @@
+diff --git a/src/kernel/kernel_bridge.c b/src/kernel/kernel_bridge.c
+index ac6c136..3a556a8 100644
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -2850,6 +2850,13 @@ static void bridge_RtlNtStatusToDosError(void)
+ 
+     default:         g_eax = 317; break;         /* ERROR_MR_MID_NOT_FOUND (generic) */
+     }
++
++    if (getenv("RECOMP_IO_CONTRACT_TRACE") && status == STATUS_PENDING) {
++        fprintf(stderr,
++                "[IO-TRACE] RtlNtStatusToDosError status=%08X error=%u tid=%lu\n",
++                status, g_eax, (unsigned long)GetCurrentThreadId());
++        fflush(stderr);
++    }
+ }
+ 
+ /* ── File I/O bridge helpers ─────────────────────────────── */
+@@ -3183,6 +3190,15 @@ static void bridge_NtCreateFile(void)
+     if (g_eax == 0 && handle_va && (options & 0x30u) == 0u)
+         bridge_note_async_handle(BRIDGE_MEM32(handle_va));
+ 
++    if (getenv("RECOMP_IO_CONTRACT_TRACE") && g_eax == 0) {
++        uint32_t token = handle_va ? BRIDGE_MEM32(handle_va) : 0;
++        fprintf(stderr,
++                "[IO-TRACE] NtCreateFile token=%08X options=%08X syncFlags=%02X async=%d\n",
++                token, options, options & 0x30u,
++                bridge_handle_is_async(token));
++        fflush(stderr);
++    }
++
+     /* An FMV the host can decode itself.
+      *
+      * The title's own decoder is emulated like everything else, but it only
+@@ -3583,6 +3599,16 @@ static void bridge_NtReadFile(void)
+      * synchronous handle the kernel waits and returns the final status. */
+     if (bridge_async_io_enabled() && bridge_handle_is_async(STACK_ARG(0)))
+         g_eax = STATUS_PENDING;
++
++    if (getenv("RECOMP_IO_CONTRACT_TRACE") &&
++        (g_eax == STATUS_PENDING || (NTSTATUS)ios.Status == STATUS_SUCCESS)) {
++        fprintf(stderr,
++                "[IO-TRACE] NtReadFile tid=%lu caller=%08X token=%08X async=%d iosb=%08X status=%08X bytes=%u return=%08X\n",
++                (unsigned long)GetCurrentThreadId(), g_xbox_kernel_caller,
++                STACK_ARG(0), bridge_handle_is_async(STACK_ARG(0)), iostatus,
++                (uint32_t)ios.Status, (uint32_t)ios.Information, g_eax);
++        fflush(stderr);
++    }
+ }
+ 
+ /* ── NtWriteFile (ordinal 236, 8 args = 32 bytes) ─────── */
