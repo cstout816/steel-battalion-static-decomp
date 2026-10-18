@@ -46,4 +46,4 @@ This is a reasoned architecture choice, **not a measured API benchmark**. The lo
 4. Measure CPU and GPU frame time on identical splash and title-screen captures; compare frame pacing and image differences.
 5. Do not infer campaign performance from the intro or advance graphics/boot progress bars until a repeatable title-screen run and the corresponding behavior are verified.
 
-No implementation starts until the user approves moving from research into renderer work.
+The user has continued the project after this research and selected the Windows backend; limited experimental renderer work remains within Milestone 3. Do not advance the milestone until the game reaches a verified title screen with rendering, audio, and input checked.
