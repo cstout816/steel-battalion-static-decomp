@@ -122,7 +122,7 @@ NV2A startup: PCRTC vblank clear/enable sequence observed    [#-----------------
 NV2A runtime: opt-in modeled periodic vblank observed         [#-------------------] 1 / 1 diagnostic (100%)
 NV2A bridge: opt-in modeled IRQ reached ISR and DPC           [#-------------------] 1 / 1 diagnostic (100%)
 NV2A bridge: startup event setter called by guest DPC          [#-------------------] 1 / 1 diagnostic (100%)
-NV2A bridge: startup wait release verified                    [--------------------] 0 / 1 (0%)
+NV2A bridge: startup wait release verified                    [#-------------------] 1 / 1 diagnostic (100%)
 NV2A runtime: default, hardware-valid delivery verified       [--------------------] 0 / 1 (0%)
 NV2A executor: semaphore target resolved in guest trace        [#-------------------] 1 / 1 diagnostic (100%)
 Audio cleanup: same access violation with vblank on and off    [####################] 2 / 2 diagnostic runs (100%)
@@ -366,6 +366,10 @@ The platform build and translation-output bars are not evidence of a playable ga
 
 **The latest verified state is not a playable game.** The title screen, graphics, sound, controller input, saves, cinematics, mission completion, and campaign progression remain unverified. We will report compatibility only after the complete campaign has been tested mission by mission.
 
-### Latest bounded startup and DSP mapping check (2026-10-17)
+### Prior bounded startup and DSP mapping check (2026-10-17)
 
-The optional DSP56300 bridge aliases the GP/EP DSP memory descriptors to the ordinary guest RAM windows. A focused synthetic test passed for those aliases and their boundaries. With the pushbuffer executor enabled, the guest semaphore advances and both GP and EP reset-release transitions are visible. The next guest wait posts DSP commands at 0x803B8810; real firmware bootstrap and DSP cycles remain absent. The diagnostic fake ACK can advance file and GPU work but does not calculate DSP output. No recognizable Steel Battalion title screen, audio, controller, save, or campaign behavior is verified. The bounded process exited, and a subsequent check found no project game/emulator process active. Progress bars remain unchanged; Milestone 3 remains active. Next map the stalled guest timer/event wait and implement observable DSP bootstrap/command behavior without bypassing the wait.
+The optional DSP56300 bridge aliases the GP/EP DSP memory descriptors to the ordinary guest RAM windows. A focused synthetic test passed for those aliases and their boundaries. With the pushbuffer executor enabled, the guest semaphore advances and both GP and EP reset-release transitions are visible. The next guest wait posts DSP commands at 0x803B8810; real firmware bootstrap and DSP cycles remain absent. The diagnostic fake ACK can advance file and GPU work but does not calculate DSP output. No recognizable Steel Battalion title screen, audio, controller, save, or campaign behavior is verified. The bounded process exited, and a subsequent check found no project game/emulator process active. At that checkpoint, the timer/event wait release and real DSP bootstrap remained unresolved. The later opt-in event/GPU check below verifies only the diagnostic wait release; real DSP firmware/cycles remain absent. Milestone 3 remains active.
+
+### Latest opt-in event and GPU executor check (2026-10-17)
+
+The title-built event wait returned success and advanced its guest signal/counter state under the opt-in event bridge. A separate 45-second watchdog-bounded run continued consuming NV2A commands through GET `0x9ED0` while PUT reached `0xA968`, counting 28 vertex-program batches and 56 triangles. It did not produce a recognizable Steel Battalion title screen: the raster trace still reports degenerate coordinates and no usable textured batches. The event/vblank paths and AC'97/DSP shortcuts were diagnostic only; default synchronization, real DSP/audio, correct rendering, input, and campaign remain unverified. The specific opt-in wait-release diagnostic bar is now 1/1; all playable-feature and default-compatibility bars remain unchanged. Next inspect the live vertex/index and texture-stage inputs for these batches without changing guest behavior.
