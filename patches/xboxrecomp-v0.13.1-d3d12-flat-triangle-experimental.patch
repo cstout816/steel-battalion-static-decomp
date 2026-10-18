@@ -22,7 +22,7 @@ index a045752..a0bc5d3 100644
      # Linux: platform layer (POSIX host primitives) + OpenSSL for crypto.
      find_package(OpenSSL REQUIRED)
 diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
-index e953132..5cb8ead 100644
+index e95313228e37761d4cb3cf0c114420dc3345fe5d..1e02fa3821cdc79247bfd4fe9f318bc9335489f2 100644
 --- a/src/kernel/nv2a_pb_exec.c
 +++ b/src/kernel/nv2a_pb_exec.c
 @@ -37,6 +37,7 @@
@@ -33,7 +33,34 @@ index e953132..5cb8ead 100644
  #if defined(_WIN32)
  #include <windows.h>
  #define NV_TLS __declspec(thread)
-@@ -1409,6 +1410,27 @@ static void raster_triangle(const float a[2], const float b[2],
+@@ -851,6 +852,26 @@ static void clear_surface(uint32_t param)
+             b[0] = s_gpu.clip_w * 0.85f; b[1] = s_gpu.clip_h * 0.85f;
+             c[0] = s_gpu.clip_w * 0.15f; c[1] = s_gpu.clip_h * 0.85f;
+             raster_triangle(a, b, c, 0xFFFF00FFu, NULL);  /* magenta: never a clear colour */
++            /* If both bring-up switches are set, submit the same known
++             * triangle through the native D3D12 path after the software
++             * reference. This checks device creation, upload, rasterization,
++             * readback, and guest-surface writes without changing normal
++             * title rendering. */
++            if (getenv("RECOMP_D3D12_RASTER") && surface_bpp() == 4
++                && s_gpu.color_offset) {
++                const float xy[3][2] = {
++                    {a[0], a[1]}, {b[0], b[1]}, {c[0], c[1]}
++                };
++                if (nv2a_d3d12_raster_triangle(
++                        mem + dma_resolve(s_gpu.color_offset),
++                        s_gpu.pitch, s_gpu.pitch / 4,
++                        s_gpu.clip_y + s_gpu.clip_h,
++                        s_gpu.clip_x, s_gpu.clip_y, s_gpu.clip_w,
++                        s_gpu.clip_h, xy, 0xFFFF00FFu))
++                    fprintf(stderr, "  [GPU] D3D12 raster self-test passed\n");
++                else
++                    fprintf(stderr, "  [GPU] D3D12 raster self-test fell back\n");
++            }
+             if (announced++ == 0)
+             fprintf(stderr, "  [GPU] raster self-test: triangle (%.0f,%.0f)"
+                             " (%.0f,%.0f) (%.0f,%.0f) into 0x%08X %ubpp\n",
+@@ -1409,6 +1430,27 @@ static void raster_triangle(const float a[2], const float b[2],
          return;
      }
  
@@ -87,10 +114,10 @@ index 0000000..d95716f3744e510925fe2779dcb2f7285d0ac6e3
 +#endif
 diff --git a/src/kernel/nv2a_d3d12_raster.c b/src/kernel/nv2a_d3d12_raster.c
 new file mode 100644
-index 0000000..4d461cee927ded3b0ea9f05e0580f60b421c05d5
+index 0000000..a864cf4f541654302c21002f7e1e0eb1afde3be8
 --- /dev/null
 +++ b/src/kernel/nv2a_d3d12_raster.c
-@@ -0,0 +1,571 @@
+@@ -0,0 +1,644 @@
 +/*
 + * Small native Direct3D 12 raster path for the NV2A pushbuffer executor.
 + *
@@ -104,6 +131,7 @@ index 0000000..4d461cee927ded3b0ea9f05e0580f60b421c05d5
 +#define COBJMACROS
 +#include <windows.h>
 +#include <d3d12.h>
++#include <d3d12sdklayers.h>
 +#include <dxgi1_4.h>
 +#include <d3dcompiler.h>
 +#include <stdint.h>
@@ -203,6 +231,29 @@ index 0000000..4d461cee927ded3b0ea9f05e0580f60b421c05d5
 +    return 1;
 +}
 +
++static void dump_debug_messages(ID3D12Device *device)
++{
++    ID3D12InfoQueue *queue = NULL;
++    UINT64 count, i;
++    if (FAILED(ID3D12Device_QueryInterface(
++            device, &IID_ID3D12InfoQueue, (void **)&queue)))
++        return;
++    count = ID3D12InfoQueue_GetNumStoredMessages(queue);
++    for (i = 0; i < count; i++) {
++        SIZE_T bytes = 0;
++        D3D12_MESSAGE *message;
++        if (FAILED(ID3D12InfoQueue_GetMessage(queue, i, NULL, &bytes)))
++            continue;
++        message = (D3D12_MESSAGE *)malloc(bytes);
++        if (!message)
++            break;
++        if (SUCCEEDED(ID3D12InfoQueue_GetMessage(queue, i, message, &bytes)))
++            fprintf(stderr, "[D3D12-D] %s\n", message->pDescription);
++        free(message);
++    }
++    ID3D12InfoQueue_Release(queue);
++}
++
 +static int create_pipeline(D3D12Raster *r)
 +{
 +    static const char vs_source[] =
@@ -210,12 +261,13 @@ index 0000000..4d461cee927ded3b0ea9f05e0580f60b421c05d5
 +        "struct O { float4 p:SV_POSITION; float4 c:COLOR; };\n"
 +        "O VSMain(V i) { O o; o.p=float4(i.p,0,1); o.c=i.c; return o; }\n";
 +    static const char ps_source[] =
-+        "float4 PSMain(float4 c:COLOR):SV_TARGET { return saturate(c); }\n";
++        "float4 PSMain(float4 c:COLOR):SV_TARGET { return saturate(c.bgra); }\n";
 +    ID3DBlob *vs = NULL, *ps = NULL, *signature = NULL, *errors = NULL;
 +    D3D12_ROOT_SIGNATURE_DESC rs_desc;
 +    D3D12_GRAPHICS_PIPELINE_STATE_DESC pso;
 +    D3D12_INPUT_ELEMENT_DESC input[2];
 +    HRESULT hr;
++    UINT rt;
 +    int ok = 0;
 +
 +    if (!compile_shader(vs_source, "VSMain", "vs_5_0", &vs)
@@ -237,8 +289,11 @@ index 0000000..4d461cee927ded3b0ea9f05e0580f60b421c05d5
 +        r->device, 0, ID3D10Blob_GetBufferPointer(signature),
 +        ID3D10Blob_GetBufferSize(signature), &IID_ID3D12RootSignature,
 +        (void **)&r->root_signature);
-+    if (FAILED(hr))
++    if (FAILED(hr)) {
++        fprintf(stderr, "[D3D12-R] root signature creation failed (0x%08lX)\n",
++                (unsigned long)hr);
 +        goto done;
++    }
 +
 +    memset(input, 0, sizeof(input));
 +    input[0].SemanticName = "POSITION";
@@ -257,24 +312,56 @@ index 0000000..4d461cee927ded3b0ea9f05e0580f60b421c05d5
 +    pso.PS.BytecodeLength = ID3D10Blob_GetBufferSize(ps);
 +    pso.BlendState.AlphaToCoverageEnable = FALSE;
 +    pso.BlendState.IndependentBlendEnable = FALSE;
-+    pso.BlendState.RenderTarget[0].RenderTargetWriteMask =
-+        D3D12_COLOR_WRITE_ENABLE_ALL;
++    for (rt = 0; rt < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; rt++) {
++        D3D12_RENDER_TARGET_BLEND_DESC *blend =
++            &pso.BlendState.RenderTarget[rt];
++        blend->BlendEnable = FALSE;
++        blend->LogicOpEnable = FALSE;
++        blend->SrcBlend = D3D12_BLEND_ONE;
++        blend->DestBlend = D3D12_BLEND_ZERO;
++        blend->BlendOp = D3D12_BLEND_OP_ADD;
++        blend->SrcBlendAlpha = D3D12_BLEND_ONE;
++        blend->DestBlendAlpha = D3D12_BLEND_ZERO;
++        blend->BlendOpAlpha = D3D12_BLEND_OP_ADD;
++        blend->LogicOp = D3D12_LOGIC_OP_NOOP;
++        blend->RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
++    }
 +    pso.SampleMask = UINT_MAX;
 +    pso.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
 +    pso.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 +    pso.RasterizerState.DepthClipEnable = TRUE;
++    pso.RasterizerState.MultisampleEnable = FALSE;
++    pso.RasterizerState.AntialiasedLineEnable = FALSE;
++    pso.RasterizerState.ForcedSampleCount = 0;
++    pso.RasterizerState.ConservativeRaster =
++        D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 +    pso.DepthStencilState.DepthEnable = FALSE;
-+    pso.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-+    pso.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
++    /* Use the DirectX SDK sample defaults, then disable the test. Keeping the
++     * otherwise-unused fields fully valid avoids driver-specific PSO rejects. */
++    pso.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
++    pso.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
++    pso.DepthStencilState.StencilEnable = FALSE;
++    pso.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
++    pso.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
++    pso.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
++    pso.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
++    pso.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
++    pso.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
++    pso.DepthStencilState.BackFace = pso.DepthStencilState.FrontFace;
 +    pso.InputLayout.pInputElementDescs = input;
 +    pso.InputLayout.NumElements = 2;
 +    pso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 +    pso.NumRenderTargets = 1;
-+    pso.RTVFormats[0] = DXGI_FORMAT_B8G8R8A8_UNORM;
++    pso.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 +    pso.SampleDesc.Count = 1;
 +    hr = ID3D12Device_CreateGraphicsPipelineState(
 +        r->device, &pso, &IID_ID3D12PipelineState, (void **)&r->pipeline);
 +    ok = SUCCEEDED(hr);
++    if (!ok)
++        fprintf(stderr, "[D3D12-R] pipeline creation failed (0x%08lX)\n",
++                (unsigned long)hr);
++    if (!ok && getenv("RECOMP_D3D12_DEBUG"))
++        dump_debug_messages(r->device);
 +
 +done:
 +    if (errors)
@@ -299,6 +386,19 @@ index 0000000..4d461cee927ded3b0ea9f05e0580f60b421c05d5
 +    r->attempted = 1;
 +    if (!setting || !*setting || strcmp(setting, "0") == 0)
 +        return 0;
++
++    if (getenv("RECOMP_D3D12_DEBUG")) {
++        ID3D12Debug *debug = NULL;
++        HRESULT debug_hr = D3D12GetDebugInterface(
++            &IID_ID3D12Debug, (void **)&debug);
++        if (SUCCEEDED(debug_hr)) {
++            ID3D12Debug_EnableDebugLayer(debug);
++            ID3D12Debug_Release(debug);
++        } else {
++            fprintf(stderr, "[D3D12-D] debug layer unavailable (0x%08lX)\n",
++                    (unsigned long)debug_hr);
++        }
++    }
 +
 +    hr = D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_11_0,
 +                           &IID_ID3D12Device, (void **)&r->device);
@@ -386,7 +486,7 @@ index 0000000..4d461cee927ded3b0ea9f05e0580f60b421c05d5
 +    texture.Height = height;
 +    texture.DepthOrArraySize = 1;
 +    texture.MipLevels = 1;
-+    texture.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
++    texture.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 +    texture.SampleDesc.Count = 1;
 +    texture.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 +    texture.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
@@ -528,7 +628,7 @@ index 0000000..4d461cee927ded3b0ea9f05e0580f60b421c05d5
 +    src.pResource = r->upload;
 +    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 +    src.PlacedFootprint.Offset = 0;
-+    src.PlacedFootprint.Footprint.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
++    src.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 +    src.PlacedFootprint.Footprint.Width = width;
 +    src.PlacedFootprint.Footprint.Height = height;
 +    src.PlacedFootprint.Footprint.Depth = 1;
@@ -587,7 +687,7 @@ index 0000000..4d461cee927ded3b0ea9f05e0580f60b421c05d5
 +    dst.pResource = r->readback;
 +    dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 +    dst.PlacedFootprint.Offset = 0;
-+    dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
++    dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 +    dst.PlacedFootprint.Footprint.Width = width;
 +    dst.PlacedFootprint.Footprint.Height = height;
 +    dst.PlacedFootprint.Footprint.Depth = 1;
