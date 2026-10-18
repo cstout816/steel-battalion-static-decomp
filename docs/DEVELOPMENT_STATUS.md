@@ -14,17 +14,17 @@ These bars separate file analysis and generated output from semantic coverage. I
 ```text
 XBE format, sections, libraries, and image map  [####################] 1 / 1 (100%)
 Kernel import ordinals named in analysis         [####################] 123 / 123 (100%)
-Function translation output emitted              [####################] 9,148 / 9,148 (100%)
+Function translation output emitted              [####################] 9,400 / 9,400 (100%)
 Unsupported instruction sites resolved           [--------------------] 0 / 243 (0%)
 Unresolved call targets implemented              [##############------] 251 / 351 (72%)
 Generated Windows executable builds              [####################] 1 / 1 (100%)
 Verified title-screen startup                    [--------------------] 0 / 1 (0%)
 ```
 
-The ordinal bar records names mapped to the kernel import table, not implementations verified against live game behavior. The build bar records a local executable build only. Startup still fails before a verified title screen; the 9,148 emitted functions do not imply complete or correct decompilation.
+The ordinal bar records names mapped to the kernel import table, not implementations verified against live game behavior. The build bar records a local executable build only. Startup still fails before a verified title screen; the 9,400 emitted functions do not imply complete or correct decompilation.
 
 ```text
-Static recompilation: functions emitted       [####################] 9,148 / 9,148 (100%)
+Static recompilation: functions emitted       [####################] 9,400 / 9,400 (100%)
 Static recompilation: unsupported ops resolved [--------------------] 0 / 243 (0%)
 Static recompilation: unresolved calls resolved [##############------] 251 / 351 (72%)
 Windows target: build completes locally         [#-------------------] 1 / 1 (100%)
@@ -103,7 +103,7 @@ This final breakdown shows the lower-level compatibility fields and the campaign
 XBE analysis: entry point and section map                  [####################] 1 / 1 (100%)
 XBE analysis: function boundaries and control flow         [--------------------] 0 / 2 (0%)
 XBE analysis: guest memory map and runtime behavior         [--------------------] 0 / 2 (0%)
-Translation: emitted functions                            [####################] 9,148 / 9,148 (100%)
+Translation: emitted functions                            [####################] 9,400 / 9,400 (100%)
 Translation: unsupported instruction sites resolved        [--------------------] 0 / 243 (0%)
 Translation: unresolved call targets implemented           [##############------] 251 / 351 (72%)
 Windows build: generated executable links                  [####################] 1 / 1 (100%)
@@ -186,7 +186,7 @@ Dependency license review complete                     [--------------------] 0 
 STATIC RECOMPILATION
 XBE sections and entry map documented                  [#-------------------] 1 / 1 (100%)
 Kernel imports named                                   [####################] 123 / 123 (100%)
-Functions emitted                                      [####################] 9,148 / 9,148 (100%)
+Functions emitted                                      [####################] 9,400 / 9,400 (100%)
 Unsupported instruction sites resolved                 [--------------------] 0 / 243 (0%)
 Unresolved call targets implemented                    [##############------] 251 / 351 (72%)
 Windows executable builds locally                      [#-------------------] 1 / 1 (100%)
@@ -292,7 +292,7 @@ These additional bars break combined requirements into separate outcomes. An out
 
 ```text
 STATIC RECOMPILATION AND RUNTIME
-Function output generated                         [####################] 9,148 / 9,148 (100%)
+Function output generated                         [####################] 9,400 / 9,400 (100%)
 Unsupported instruction sites handled             [--------------------] 0 / 243 (0%)
 Unresolved call targets implemented               [##############------] 251 / 351 (72%)
 Native Windows build produced                     [#-------------------] 1 / 1 (100%)
@@ -495,3 +495,18 @@ The 15-second bounded run continued reading the title's `.sgt`, `.wav`, and `cap
 The isolated XboxRecomp patch `patches/xboxrecomp-v0.13.1-interior-tail-continuations.patch` now checks unresolved call/tail targets against containing code ranges. It emits an additional translated entry only when the target is an instruction boundary and the reachable control-flow graph forms a complete standalone continuation; unsafe or unowned targets remain unresolved. A full regeneration emitted 9,399 function bodies, including 251 recovered interior entries, with zero translation failures. The generated unresolved-stub count fell from 351 to 100, so the engineering bars now record 251/351 recovered targets. The patch applies to the pinned checkout and the refreshed Windows x64 executable builds.
 
 A 15-second bounded startup run, with pushbuffer execution and synthetic AC'97 readiness but no fake DSP acknowledgement, returned valid guest objects through the previously corrupted audio setup path and read title `.sgt`, `.wav`, and `capcom.xpr` resources. It still produced only one NV2A clear and zero written pixels; there was no recognizable Steel Battalion title screen or verified audio output. The next logged unresolved address is `0x0010D100`, associated with the third worker's context value. XBE disassembly shows executable bytes at that address between the detected routines at `0x0010D0FA` and `0x0010D1F0`, but its ownership and call convention remain to be established. Logs and generated code are ignored under `iso/local-analysis/`; only the generic recompiler patch and this status note are tracked. Milestone 3 remains active.
+
+### Seeded worker callbacks and refreshed translation (2026-10-18)
+
+- The existing runtime-seed workflow validated two observed XBE addresses as decodable function bodies: `0x0010D100` and `0x001ABA10`. A fresh seeded disassembly recovered 9,082 functions; fresh function identification and ABI analysis were generated from that same database.
+- Full ahead-of-time translation completed with 9,400 emitted function bodies, zero translation failures, 100 unresolved target stubs, and 243 unsupported instruction sites. The trampoline `0x001914F8` and both seeded targets have generated bodies and dispatcher entries. Generated code, analysis, and logs remain ignored under `iso/local-analysis/`.
+- The Release Windows x64 target rebuilt successfully against the fresh generated directory. In the subsequent startup log, `PsCreateSystemThreadEx` created a worker using routine `0x001914F8` and context `0x001ABA10`; the run also loaded guest DSP programs, executed bounded GP/EP slices, consumed GPU commands through DMA PUT/GET `0x495C`, and reached one surface clear. The run still reported 235 unhandled NV2A methods and zero written pixels. It did not show a title screen or verify audible audio. This run did not itself show `0x0010D100` as a thread context, so its runtime reachability is still unconfirmed.
+- `RECOMP_WATCHDOG_SECS=15` did not produce a watchdog record or stop this windowed process. I stopped only the project test process after collecting its log; no project process remains. Treat internal watchdog behavior as an open debugging issue and use an independently checked process bound for the next launch.
+- All function-output bars now count 9,400 emitted bodies. No player-facing compatibility bar advances. Milestone 3 remains active.
+- Next inspect why the watchdog thread fails to fire in this build, then continue from the startup state after the worker creation. Keep static recompilation intact and avoid changing GPU/audio semantics based only on the current no-pixel result.
+
+### Watchdog bounded-path fix and callback retest (2026-10-18)
+
+The watchdog's native-PC helper suspended the guest thread and entered DbgHelp before printing its timeout record. In a 15-second startup run with that path enabled by default, the game log stopped advancing near the timeout, no watchdog record appeared, and the windowed process remained alive. I made native-PC symbolization opt-in with `RECOMP_WATCHDOG_NATIVE_PC`; the default watchdog now skips DbgHelp, prints the guest register/stack snapshot, and exits on schedule. The isolated follow-on patch forward/reverse applied against the local XboxRecomp source, and the Windows x64 target rebuilt. A fresh 15-second run then exited with code 3 and emitted `[WATCHDOG] no exit after 15s`.
+
+The bounded startup behavior was otherwise unchanged: one surface clear, GP and EP bounded DSP slices, worker creation at `0x001914F8` with context `0x001ABA10`, 235 unhandled NV2A methods, and zero pixels written. The title screen and audible sound remain unverified. The run did not observe `0x0010D100` as a thread context, so that seeded function still needs runtime reachability evidence. No player-facing bars advance; Milestone 3 remains active.

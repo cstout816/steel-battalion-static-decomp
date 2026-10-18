@@ -1,0 +1,16 @@
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -1664,6 +1664,10 @@ static DWORD WINAPI xbox_watchdog_thread(LPVOID unused)
+     mem = (const uint8_t *)g_memory_offset;
+     esp = s_watchdog_esp ? *s_watchdog_esp : 0;
+ #if defined(_WIN32)
+-    watchdog_capture_guest_pc();
++    /* DbgHelp can block while another guest thread is suspended or holds its
++     * process-wide symbol lock. Keep timeout reporting bounded by default;
++     * opt into host symbolization only when explicitly requested. */
++    if (getenv("RECOMP_WATCHDOG_NATIVE_PC"))
++        watchdog_capture_guest_pc();
+ #endif
+     fprintf(stderr, "[WATCHDOG] no exit after %us; guest esp=0x%08X\n"
+---
+

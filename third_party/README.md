@@ -108,8 +108,15 @@ the watchdog expires. It briefly suspends that thread to read its Windows
 context, resumes it before logging, then asks DbgHelp for symbol and source-line
 information when a local PDB is available. This is separate from the translated
 guest registers and does not claim to recover a guest EIP directly. The patch
-has passed a reverse-apply/whitespace check only; it has not been compiled or
-exercised.
+is supplemented by
+[`patches/xboxrecomp-v0.13.1-watchdog-bounded-default.patch`](../patches/xboxrecomp-v0.13.1-watchdog-bounded-default.patch),
+which makes native-PC symbolization opt-in through
+`RECOMP_WATCHDOG_NATIVE_PC`. This keeps DbgHelp out of the watchdog's default
+timeout path because a bounded startup run stopped producing diagnostics after
+the symbol-capture path was entered. The follow-up patch passed a forward and
+reverse application check, rebuilt the Windows x64 target, and restored the
+expected 15-second watchdog exit (code 3) with symbolization disabled. DbgHelp
+symbol capture remains opt-in and has not been revalidated.
 
 The upstream `NOTICE` identifies xemu-derived APU and NV2A components under
 LGPL-2.1-or-later. The local executable links xboxrecomp runtime libraries,
