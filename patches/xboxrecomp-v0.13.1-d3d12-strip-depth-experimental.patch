@@ -1,0 +1,348 @@
+diff --git a/src/kernel/nv2a_d3d12_raster.c b/src/kernel/nv2a_d3d12_raster.c
+index c007d509a161163daf3e998a6180f9da8a6e905c..c8d2e347ec6c73b2fac541d40f163e5ff1079f01 100644
+--- a/src/kernel/nv2a_d3d12_raster.c
++++ b/src/kernel/nv2a_d3d12_raster.c
+@@ -1,10 +1,10 @@
+ /*
+  * Small native Direct3D 12 raster path for the NV2A pushbuffer executor.
+  *
+- * This first slice deliberately handles only flat-colour, 32-bit, unblended
+- * triangles with no depth or texture state. The caller keeps every other
+- * guest state on the software reference path. It is opt-in while image parity
+- * and workload coverage are being established.
++ * This first slice deliberately handles only flat-colour, 32-bit triangles
++ * whose caller has already proved the guest state is compatible. A batch of
++ * up to two triangles shares one surface upload/readback. It remains opt-in
++ * while image parity and workload coverage are being established.
+  */
+ #if defined(_WIN32)
+ 
+@@ -352,7 +352,7 @@ static int ensure_targets(D3D12Raster *r, uint32_t width, uint32_t height)
+     UINT rows = 0;
+     UINT64 row_bytes = 0;
+     UINT descriptor_size;
+-    uint64_t vertex_bytes = sizeof(D3D12Vertex) * 3;
++    uint64_t vertex_bytes = sizeof(D3D12Vertex) * 6;
+     HRESULT hr;
+ 
+     if (r->target && r->width == width && r->height == height)
+@@ -456,11 +456,12 @@ static int wait_gpu(D3D12Raster *r)
+     return 1;
+ }
+ 
+-int nv2a_d3d12_raster_triangle(uint8_t *surface, uint32_t pitch,
+-                               uint32_t width, uint32_t height,
+-                               uint32_t clip_x, uint32_t clip_y,
+-                               uint32_t clip_w, uint32_t clip_h,
+-                               const float xy[3][2], uint32_t argb)
++int nv2a_d3d12_raster_triangles(uint8_t *surface, uint32_t pitch,
++                                uint32_t width, uint32_t height,
++                                uint32_t clip_x, uint32_t clip_y,
++                                uint32_t clip_w, uint32_t clip_h,
++                                const float xy[][2], uint32_t vertex_count,
++                                uint32_t argb)
+ {
+     D3D12Raster *r = &g_d3d12;
+     D3D12_TEXTURE_COPY_LOCATION src, dst;
+@@ -469,10 +470,11 @@ int nv2a_d3d12_raster_triangle(uint8_t *surface, uint32_t pitch,
+     D3D12_RECT scissor;
+     D3D12_VERTEX_BUFFER_VIEW vbv;
+     D3D12_RANGE read_range;
+-    uint32_t y;
++    uint32_t y, i;
+     uint8_t *mapped = NULL;
+     HRESULT hr;
+-    if (!surface || !pitch || !width || !height || !xy || pitch < width * 4
++    if (!surface || !pitch || !width || !height || !xy
++        || (vertex_count != 3 && vertex_count != 6) || pitch < width * 4
+         || !initialize(r) || !ensure_targets(r, width, height))
+         return 0;
+ 
+@@ -480,13 +482,13 @@ int nv2a_d3d12_raster_triangle(uint8_t *surface, uint32_t pitch,
+         memcpy(r->upload_map + (size_t)y * r->row_pitch,
+                surface + (size_t)y * pitch, (size_t)width * 4);
+ 
+-    for (y = 0; y < 3; y++) {
+-        r->mapped_vertices[y].x = xy[y][0] * (2.0f / (float)width) - 1.0f;
+-        r->mapped_vertices[y].y = 1.0f - xy[y][1] * (2.0f / (float)height);
+-        r->mapped_vertices[y].r = (float)((argb >> 16) & 0xFF) / 255.0f;
+-        r->mapped_vertices[y].g = (float)((argb >> 8) & 0xFF) / 255.0f;
+-        r->mapped_vertices[y].b = (float)(argb & 0xFF) / 255.0f;
+-        r->mapped_vertices[y].a = (float)(argb >> 24) / 255.0f;
++    for (i = 0; i < vertex_count; i++) {
++        r->mapped_vertices[i].x = xy[i][0] * (2.0f / (float)width) - 1.0f;
++        r->mapped_vertices[i].y = 1.0f - xy[i][1] * (2.0f / (float)height);
++        r->mapped_vertices[i].r = (float)((argb >> 16) & 0xFF) / 255.0f;
++        r->mapped_vertices[i].g = (float)((argb >> 8) & 0xFF) / 255.0f;
++        r->mapped_vertices[i].b = (float)(argb & 0xFF) / 255.0f;
++        r->mapped_vertices[i].a = (float)(argb >> 24) / 255.0f;
+     }
+ 
+     hr = ID3D12CommandAllocator_Reset(r->allocator);
+@@ -548,10 +550,10 @@ int nv2a_d3d12_raster_triangle(uint8_t *surface, uint32_t pitch,
+     ID3D12GraphicsCommandList_IASetPrimitiveTopology(
+         r->commands, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+     vbv.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(r->vertices);
+-    vbv.SizeInBytes = sizeof(D3D12Vertex) * 3;
++    vbv.SizeInBytes = sizeof(D3D12Vertex) * vertex_count;
+     vbv.StrideInBytes = sizeof(D3D12Vertex);
+     ID3D12GraphicsCommandList_IASetVertexBuffers(r->commands, 0, 1, &vbv);
+-    ID3D12GraphicsCommandList_DrawInstanced(r->commands, 3, 1, 0, 0);
++    ID3D12GraphicsCommandList_DrawInstanced(r->commands, vertex_count, 1, 0, 0);
+ 
+     memset(&barrier, 0, sizeof(barrier));
+     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+@@ -600,12 +602,23 @@ int nv2a_d3d12_raster_triangle(uint8_t *surface, uint32_t pitch,
+     }
+     if (!r->reported) {
+         r->reported = 1;
+-        fprintf(stderr, "[D3D12-R] first flat triangle completed at %ux%u\n",
+-                width, height);
++        fprintf(stderr, "[D3D12-R] first flat batch completed at %ux%u (%u vertices)\n",
++                width, height, vertex_count);
+     }
+     return 1;
+ }
+ 
++int nv2a_d3d12_raster_triangle(uint8_t *surface, uint32_t pitch,
++                               uint32_t width, uint32_t height,
++                               uint32_t clip_x, uint32_t clip_y,
++                               uint32_t clip_w, uint32_t clip_h,
++                               const float xy[3][2], uint32_t argb)
++{
++    return nv2a_d3d12_raster_triangles(surface, pitch, width, height,
++                                       clip_x, clip_y, clip_w, clip_h,
++                                       xy, 3, argb);
++}
++
+ void nv2a_d3d12_raster_shutdown(void)
+ {
+     D3D12Raster *r = &g_d3d12;
+@@ -628,16 +641,28 @@ void nv2a_d3d12_raster_shutdown(void)
+ 
+ #include "nv2a_d3d12_raster.h"
+ 
++int nv2a_d3d12_raster_triangles(uint8_t *surface, uint32_t pitch,
++                                uint32_t width, uint32_t height,
++                                uint32_t clip_x, uint32_t clip_y,
++                                uint32_t clip_w, uint32_t clip_h,
++                                const float xy[][2], uint32_t vertex_count,
++                                uint32_t argb)
++{
++    (void)surface; (void)pitch; (void)width; (void)height;
++    (void)clip_x; (void)clip_y; (void)clip_w; (void)clip_h;
++    (void)xy; (void)vertex_count; (void)argb;
++    return 0;
++}
++
+ int nv2a_d3d12_raster_triangle(uint8_t *surface, uint32_t pitch,
+                                uint32_t width, uint32_t height,
+                                uint32_t clip_x, uint32_t clip_y,
+                                uint32_t clip_w, uint32_t clip_h,
+                                const float xy[3][2], uint32_t argb)
+ {
+-    (void)surface; (void)pitch; (void)width; (void)height;
+-    (void)clip_x; (void)clip_y; (void)clip_w; (void)clip_h;
+-    (void)xy; (void)argb;
+-    return 0;
++    return nv2a_d3d12_raster_triangles(surface, pitch, width, height,
++                                       clip_x, clip_y, clip_w, clip_h,
++                                       xy, 3, argb);
+ }
+ 
+ void nv2a_d3d12_raster_shutdown(void) {}
+diff --git a/src/kernel/nv2a_d3d12_raster.h b/src/kernel/nv2a_d3d12_raster.h
+index d95716f3744e510925fe2779dcb2f7285d0ac6e3..1f89b84da0ad5b501ef5bec7ad13279cbdf18759 100644
+--- a/src/kernel/nv2a_d3d12_raster.h
++++ b/src/kernel/nv2a_d3d12_raster.h
+@@ -3,10 +3,18 @@
+ 
+ #include <stdint.h>
+ 
+-/* Draw a flat-colour triangle into an Xbox 32-bit guest surface through a
+- * native D3D12 render target. Returns nonzero only when the draw completed
+- * and the result was copied back into guest memory. Unsupported states must
+- * remain on the software reference path. */
++/* Draw a flat-colour triangle batch into an Xbox 32-bit guest surface through
++ * one native D3D12 render-target upload, submission, and readback. The batch
++ * must contain 1-2 triangles (3 or 6 vertices). Returns nonzero only when the
++ * draw completed and the result was copied back into guest memory. */
++int nv2a_d3d12_raster_triangles(uint8_t *surface, uint32_t pitch,
++                                uint32_t width, uint32_t height,
++                                uint32_t clip_x, uint32_t clip_y,
++                                uint32_t clip_w, uint32_t clip_h,
++                                const float xy[][2], uint32_t vertex_count,
++                                uint32_t argb);
++
++/* Convenience wrapper for one triangle. */
+ int nv2a_d3d12_raster_triangle(uint8_t *surface, uint32_t pitch,
+                                uint32_t width, uint32_t height,
+                                uint32_t clip_x, uint32_t clip_y,
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+index c9287c8eef965531d338845c29a1aeae23fbc15c..9190b68a0ff72c96345b46bdea8ff138972e24f2 100644
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -584,6 +584,18 @@ static uint32_t surface_bpp(void)
+  * the sequence. */
+ static int s_flip_dumping;
+ 
++static void dump_surface_bmp(void);
++
++static void dump_program_draw_if_requested(void)
++{
++    static unsigned count;
++    if (!getenv("RECOMP_FB_DUMP_PROGRAM_DRAWS") || s_flip_dumping
++        || count >= 16)
++        return;
++    count++;
++    dump_surface_bmp();
++}
++
+ static void dump_surface_bmp(void)
+ {
+     const char *prefix = getenv("RECOMP_FB_DUMP");
+@@ -1836,10 +1848,11 @@ typedef struct {
+     const float *a, *b, *c;
+     float iw[3], uv[3][2], stc[3][4][4], vfog[3], fogc[4], inv_area;
+     float *zb;
+-    int minx, maxx, miny, maxy, use_rc, textured;
++    int minx, maxx, miny, maxy, use_rc, textured, depth_only;
+ } XfTri;
+ 
+ typedef struct { uint64_t depth_fail, pixels; uint32_t zpass; } XfCount;
++static int s_d3d12_depth_only_draw;
+ 
+ /* Rows y0, y0+step, ... < maxy of triangle T. */
+ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+@@ -1872,6 +1885,15 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+                     cnt->depth_fail++;
+                     continue;
+                 }
++                if (T->depth_only) {
++                    if (zp && s_gpu.depth_mask)
++                        *zp = z;
++                    if (s_gpu.zpass_enable)
++                        cnt->zpass++;
++                    if (s_gpu.color_mask & 0x01010101u)
++                        cnt->pixels++;
++                    continue;
++                }
+                 argb = 0;
+                 if (shade) {
+                     for (k = 0; k < 4; k++)
+@@ -2044,6 +2066,7 @@ static void raster_xf_triangle(const Nv2aVshOutput *va, const Nv2aVshOutput *vb,
+     T.mem = (uint8_t *)xbox_GetMemoryOffset();
+     T.bpp = surface_bpp();
+     T.textured = s_gpu.texs[0].valid;
++    T.depth_only = s_d3d12_depth_only_draw;
+     T.use_rc = s_gpu.rc_seen && !no_rc;
+     T.va = va; T.vb = vb; T.vc = vc;
+ 
+@@ -2113,6 +2136,8 @@ static void raster_xf_triangle(const Nv2aVshOutput *va, const Nv2aVshOutput *vb,
+     T.inv_area = 1.0f / area;
+ 
+     xf_rows_parallel(&T, &cnt);
++    if (T.depth_only)
++        s_gpu.pixels += cnt.pixels;
+     s_gpu.xf_depth_fail += cnt.depth_fail;
+     s_gpu.xf_pixels += cnt.pixels;
+     s_gpu.zpass_count += cnt.zpass;
+@@ -2218,9 +2243,68 @@ static int transform_vertex(uint32_t index, Nv2aVshOutput *out)
+     return nv2a_vsh_run((const float (*)[4])in, out);
+ }
+ 
++static int d3d12_black_depth_quad(void)
++{
++    float tex[4][4] = {{0}}, fog[4] = {0, 0, 0, 0}, out[4];
++    float xy[6][2], left, top, right, bottom;
++    uint32_t v, width, height;
++    uint8_t *mem = (uint8_t *)xbox_GetMemoryOffset();
++    static int reported;
++    if (!getenv("RECOMP_D3D12_RASTER")
++        || s_gpu.prim != NV_PRIM_TRIANGLE_STRIP || s_gpu.idx_count != 4
++        || s_gpu.color_mask != 0x01010101u || s_gpu.texs[0].valid
++        || s_gpu.blend_enable || s_gpu.alpha_test || !s_gpu.depth_test
++        || !s_gpu.depth_mask || s_gpu.depth_func != 0x203
++        || !s_gpu.rc_seen || s_gpu.rc.control != 0x00011101
++        || s_gpu.rc.stage_program != 0 || s_gpu.rc.final0 != 0x200C0000
++        || s_gpu.rc.final1 != 0x00001C80 || surface_bpp() != 4)
++        return 0;
++    left = (float)s_gpu.clip_x; top = (float)s_gpu.clip_y;
++    right = left + (float)s_gpu.clip_w; bottom = top + (float)s_gpu.clip_h;
++    if (s_xf[0].pos[0] != left || s_xf[0].pos[1] != top
++        || s_xf[1].pos[0] != left || s_xf[1].pos[1] != bottom
++        || s_xf[2].pos[0] != right || s_xf[2].pos[1] != top
++        || s_xf[3].pos[0] != right || s_xf[3].pos[1] != bottom)
++        return 0;
++    for (v = 0; v < 4; v++)
++        if (s_xf[v].pos[2] != 0.0f || s_xf[v].pos[3] != 1.0f
++            || s_xf[v].d0[0] != 0.0f || s_xf[v].d0[1] != 0.0f
++            || s_xf[v].d0[2] != 0.0f || s_xf[v].d0[3] != 1.0f)
++            return 0;
++    tex[0][3] = 1.0f;
++    nv2a_rc_eval(&s_gpu.rc, s_xf[0].d0, s_xf[0].d1, fog,
++                 (const float (*)[4])tex, out);
++    if (pack_color(out) != 0xFF000000u)
++        return 0;
++    xy[0][0] = s_xf[0].pos[0]; xy[0][1] = s_xf[0].pos[1];
++    xy[1][0] = s_xf[1].pos[0]; xy[1][1] = s_xf[1].pos[1];
++    xy[2][0] = s_xf[2].pos[0]; xy[2][1] = s_xf[2].pos[1];
++    xy[3][0] = s_xf[1].pos[0]; xy[3][1] = s_xf[1].pos[1];
++    xy[4][0] = s_xf[2].pos[0]; xy[4][1] = s_xf[2].pos[1];
++    xy[5][0] = s_xf[3].pos[0]; xy[5][1] = s_xf[3].pos[1];
++    width = s_gpu.pitch / 4; height = s_gpu.clip_y + s_gpu.clip_h;
++    if (!surface_begin_batch(mem)
++        || !nv2a_d3d12_raster_triangles(s_surface, s_gpu.pitch, width, height,
++             s_gpu.clip_x, s_gpu.clip_y, s_gpu.clip_w, s_gpu.clip_h,
++             (const float (*)[2])xy, 6, 0xFF000000u))
++        return 0;
++    s_d3d12_depth_only_draw = 1;
++    raster_xf_triangle(&s_xf[0], &s_xf[1], &s_xf[2]);
++    raster_xf_triangle(&s_xf[1], &s_xf[2], &s_xf[3]);
++    s_d3d12_depth_only_draw = 0;
++    if (!reported) {
++        reported = 1;
++        fprintf(stderr,
++                "[D3D12-R] actual opaque-black depth strip completed at %ux%u\n",
++                s_gpu.clip_w, s_gpu.clip_h);
++    }
++    return 1;
++}
++
+ static void raster_batch_program(void)
+ {
+     uint32_t i, n = s_gpu.idx_count;
++    uint32_t tris_before = s_gpu.tris_drawn;
+ 
+     for (i = 0; i < n; i++)
+         if (!transform_vertex(s_gpu.idx[i], &s_xf[i]))
+@@ -2286,6 +2370,11 @@ static void raster_batch_program(void)
+     if (s_gpu.texs[0].valid)
+         note_texture_use();
+ 
++    if (d3d12_black_depth_quad()) {
++        dump_program_draw_if_requested();
++        return;
++    }
++
+     switch (s_gpu.prim) {
+     case NV_PRIM_TRIANGLES:
+         for (i = 0; i + 2 < n; i += 3)
+@@ -2315,6 +2404,8 @@ static void raster_batch_program(void)
+     default:
+         break;
+     }
++    if (s_gpu.tris_drawn != tris_before)
++        dump_program_draw_if_requested();
+ }
+ 
+ static void raster_batch(void)
+@@ -3485,7 +3576,7 @@ void nv2a_pb_exec_report(void)
+             s_gpu.min_x, s_gpu.max_x, s_gpu.min_y, s_gpu.max_y);
+     /* One picture per report rather than per clear: a title clears hundreds of
+      * times a second and nobody wants that many files. */
+-    if (!s_flip_dumping)
++    if (!s_flip_dumping && !getenv("RECOMP_FB_DUMP_PROGRAM_DRAWS"))
+         dump_surface_bmp();
+ 
+     /* Drawn and skipped separately: "nothing appeared" and "every batch needed
