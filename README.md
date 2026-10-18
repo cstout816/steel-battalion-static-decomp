@@ -288,7 +288,84 @@ Insignia/XLink Kai compatibility assessed              [--------------------] 0 
 Separate game profile and multiplayer verified        [--------------------] 0 / 2 (0%)
 ```
 
-This detailed tracker supplements the milestone and summary bars. The project remains in Milestone 3, before a verified title screen; no unverified feature or partial campaign run advances these counts.
+### Individual requirement progress
+
+These additional bars break combined requirements into separate outcomes. An outcome advances only after it is implemented and verified; planning, code presence, and diagnostic activity alone do not count.
+
+```text
+STATIC RECOMPILATION AND RUNTIME
+Function output generated                         [####################] 9,148 / 9,148 (100%)
+Unsupported instruction sites handled             [--------------------] 0 / 243 (0%)
+Unresolved call targets implemented               [--------------------] 0 / 351 (0%)
+Native Windows build produced                     [#-------------------] 1 / 1 (100%)
+Game runs without a separate emulator             [--------------------] 0 / 1 (0%)
+Title screen reached and visually verified        [--------------------] 0 / 1 (0%)
+Correct in-game image rendered                    [--------------------] 0 / 1 (0%)
+Game audio heard                                   [--------------------] 0 / 1 (0%)
+
+STEEL BATTALION CONTROLLER AND ACCESSIBILITY
+Original USB controller detected through adapter  [--------------------] 0 / 1 (0%)
+Original buttons and toggles mapped               [--------------------] 0 / 1 (0%)
+Original gear selection works                     [--------------------] 0 / 1 (0%)
+Original analog controls calibrated               [--------------------] 0 / 1 (0%)
+Original indicator lights receive output          [--------------------] 0 / 1 (0%)
+Keyboard and mouse work in game                   [--------------------] 0 / 1 (0%)
+Xbox controller works                             [--------------------] 0 / 1 (0%)
+PlayStation controller works                      [--------------------] 0 / 1 (0%)
+HOTAS and pedals work                             [--------------------] 0 / 1 (0%)
+Dual-stick and custom HID devices work            [--------------------] 0 / 1 (0%)
+Multiple USB devices work together                [--------------------] 0 / 1 (0%)
+Labeled controller editor and remapping work      [--------------------] 0 / 1 (0%)
+Default profiles and profile import/export work   [--------------------] 0 / 1 (0%)
+
+CAMPAIGN RELIABILITY
+Mission loading verified                          [--------------------] 0 / 1 (0%)
+Gameplay stability verified                       [--------------------] 0 / 1 (0%)
+Cinematics verified                               [--------------------] 0 / 1 (0%)
+Mission audio verified                            [--------------------] 0 / 1 (0%)
+Controller behavior verified                      [--------------------] 0 / 1 (0%)
+Save and load verified                            [--------------------] 0 / 1 (0%)
+Frame pacing verified                             [--------------------] 0 / 1 (0%)
+Mission completion verified                       [--------------------] 0 / 1 (0%)
+Campaign progression verified                     [--------------------] 0 / 1 (0%)
+Full campaign completed end to end                [--------------------] 0 / 1 (0%)
+
+GRAPHICS AND PERFORMANCE
+Original appearance preset verified              [--------------------] 0 / 1 (0%)
+1080p output verified                             [--------------------] 0 / 1 (0%)
+1440p output verified                             [--------------------] 0 / 1 (0%)
+4K output verified                                [--------------------] 0 / 1 (0%)
+4:3 presentation verified                         [--------------------] 0 / 1 (0%)
+16:9 presentation verified                        [--------------------] 0 / 1 (0%)
+16:10 presentation verified                       [--------------------] 0 / 1 (0%)
+HUD, menus, and cinematics preserve layout         [--------------------] 0 / 1 (0%)
+Field-of-view adjustment works                    [--------------------] 0 / 1 (0%)
+Windowed, borderless, and exclusive modes work    [--------------------] 0 / 1 (0%)
+Texture filtering and anisotropic filtering work  [--------------------] 0 / 1 (0%)
+Anti-aliasing, VSync, and scaling work            [--------------------] 0 / 1 (0%)
+Original, 30, and 60 FPS modes verified           [--------------------] 0 / 1 (0%)
+120, 144, and safe uncapped modes verified        [--------------------] 0 / 1 (0%)
+Frame times, 1% lows, and pacing measured         [--------------------] 0 / 1 (0%)
+
+LAUNCHER, COMMUNITY, UPDATES, AND PRESERVATION
+ISO selection and validation work                 [--------------------] 0 / 1 (0%)
+Supported game version identification works      [--------------------] 0 / 1 (0%)
+Graphics and controller settings work             [--------------------] 0 / 1 (0%)
+Launch, version, logs, reset, and shortcut options [--------------------] 0 / 1 (0%)
+Add game to Steam library option works            [--------------------] 0 / 1 (0%)
+GitHub update check and release notes work        [--------------------] 0 / 1 (0%)
+Update install requires consent                    [--------------------] 0 / 1 (0%)
+Update verification and settings preservation work [--------------------] 0 / 1 (0%)
+Portable mode and no-ISO launcher work             [--------------------] 0 / 1 (0%)
+Community profiles and troubleshooting available  [--------------------] 0 / 1 (0%)
+Crash report sharing requires consent              [--------------------] 0 / 1 (0%)
+Repository excludes user game data                   [#-------------------] 1 / 1 (100%)
+Dependency licenses reviewed                     [--------------------] 0 / 1 (0%)
+Line of Contact network compatibility researched  [#-------------------] 1 / 1 (100%)
+ChatGPT Codex majority authorship disclosed       [#-------------------] 1 / 1 (100%)
+```
+
+The platform build and translation-output bars are not evidence of a playable game. The project remains in Milestone 3, before a verified title screen; no unverified feature or partial campaign run advances these counts. This detailed tracker supplements the milestone and summary bars.
 
 | Area | Status |
 | --- | --- |
