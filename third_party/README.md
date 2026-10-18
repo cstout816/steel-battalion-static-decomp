@@ -13,6 +13,18 @@ It masks counts, preserves zero-count no-op behavior, and avoids out-of-range C
 shifts when recovering carry. Keep this change separate from upstream source
 and revalidate it when changing xboxrecomp versions.
 
+Startup tracing found several call and tail-jump targets inside detected
+functions. The default fallback stubs made the Windows build link but returned
+without executing those guest blocks. The separate patch
+[`patches/xboxrecomp-v0.13.1-interior-tail-continuations.patch`](../patches/xboxrecomp-v0.13.1-interior-tail-continuations.patch)
+adds instruction-boundary and reachable-CFG checks, then emits a translated
+continuation only when the block can safely stand alone. Full regeneration
+emitted 251 such entries and reduced unresolved stubs from 351 to 100; the
+Windows target built and a bounded run continued through the affected audio
+setup into title-media reads. This is not proof of a title-screen boot, audio
+output, or correctness of every recovered continuation. The patch contains
+generic recompiler logic only; generated game code remains local and ignored.
+
 The xboxrecomp new-game template contains an NV2A MMIO decoder and register
 model, but the template host did not initialize or route faults to it. The
 project-specific integration is kept separately in

@@ -16,7 +16,7 @@ XBE format, sections, libraries, and image map  [####################] 1 / 1 (10
 Kernel import ordinals named in analysis         [####################] 123 / 123 (100%)
 Function translation output emitted              [####################] 9,148 / 9,148 (100%)
 Unsupported instruction sites resolved           [--------------------] 0 / 243 (0%)
-Unresolved call targets implemented              [--------------------] 0 / 351 (0%)
+Unresolved call targets implemented              [##############------] 251 / 351 (72%)
 Generated Windows executable builds              [####################] 1 / 1 (100%)
 Verified title-screen startup                    [--------------------] 0 / 1 (0%)
 ```
@@ -26,7 +26,7 @@ The ordinal bar records names mapped to the kernel import table, not implementat
 ```text
 Static recompilation: functions emitted       [####################] 9,148 / 9,148 (100%)
 Static recompilation: unsupported ops resolved [--------------------] 0 / 243 (0%)
-Static recompilation: unresolved calls resolved [--------------------] 0 / 351 (0%)
+Static recompilation: unresolved calls resolved [##############------] 251 / 351 (72%)
 Windows target: build completes locally         [#-------------------] 1 / 1 (100%)
 Xbox runtime: guest entry and asset read         [##------------------] 2 / 4 (50%)
 Xbox runtime: title screen and gameplay frame    [--------------------] 0 / 2 (0%)
@@ -105,7 +105,7 @@ XBE analysis: function boundaries and control flow         [--------------------
 XBE analysis: guest memory map and runtime behavior         [--------------------] 0 / 2 (0%)
 Translation: emitted functions                            [####################] 9,148 / 9,148 (100%)
 Translation: unsupported instruction sites resolved        [--------------------] 0 / 243 (0%)
-Translation: unresolved call targets implemented           [--------------------] 0 / 351 (0%)
+Translation: unresolved call targets implemented           [##############------] 251 / 351 (72%)
 Windows build: generated executable links                  [####################] 1 / 1 (100%)
 
 Kernel: threads and scheduling                             [--------------------] 0 / 1 (0%)
@@ -188,7 +188,7 @@ XBE sections and entry map documented                  [#-------------------] 1 
 Kernel imports named                                   [####################] 123 / 123 (100%)
 Functions emitted                                      [####################] 9,148 / 9,148 (100%)
 Unsupported instruction sites resolved                 [--------------------] 0 / 243 (0%)
-Unresolved call targets implemented                    [--------------------] 0 / 351 (0%)
+Unresolved call targets implemented                    [##############------] 251 / 351 (72%)
 Windows executable builds locally                      [#-------------------] 1 / 1 (100%)
 Title-screen boot verified                             [--------------------] 0 / 1 (0%)
 
@@ -294,7 +294,7 @@ These additional bars break combined requirements into separate outcomes. An out
 STATIC RECOMPILATION AND RUNTIME
 Function output generated                         [####################] 9,148 / 9,148 (100%)
 Unsupported instruction sites handled             [--------------------] 0 / 243 (0%)
-Unresolved call targets implemented               [--------------------] 0 / 351 (0%)
+Unresolved call targets implemented               [##############------] 251 / 351 (72%)
 Native Windows build produced                     [#-------------------] 1 / 1 (100%)
 Game runs without a separate emulator             [--------------------] 0 / 1 (0%)
 Title screen reached and visually verified        [--------------------] 0 / 1 (0%)
@@ -488,3 +488,10 @@ Startup still fails later. Callsite `0x001BC307` dispatches `sub_001BD290` on ob
 A second bounded run isolated the later register failure to another unresolved interior target. `sub_001AA305` allocates a per-index audio object and tail-jumps to `0x001AA35D`; the generated unresolved stub had returned early instead of executing the block. In a local-only diagnostic build, that stub was temporarily made to continue through the already translated body beginning at `0x001AA35A`. The six nested calls then advanced the object's count from zero through six and returned success (`EAX=1`) from `sub_001BD290`, while preserving the caller's ESI/EDI (`0x006C9750`/`0x006C9754`). Startup objects at `0x00106C73` and `0x00106C7F` consequently resolved to valid guest objects and vtables. This confirms the `0x001AA35D` no-op stub caused the second observed register-corruption path.
 
 The 15-second bounded run continued reading the title's `.sgt`, `.wav`, and `capcom.xpr` resources and executed DSP slices, but GPU diagnostics still showed only one clear and zero written pixels. No Steel Battalion title screen or audible sound was verified. Synthetic AC'97 readiness and pushbuffer execution were enabled; no fake DSP acknowledgement was used. The local generated-code workaround and opt-in traces are ignored under `iso/`; they are diagnostic only and are not a general recompiler fix. No progress bars advance. Next inspect the recompiler's function-boundary and tail-jump handling so reachable interior blocks can be translated generally, then retest ordinary startup without one-off game stub bodies. Milestone 3 remains active.
+
+
+### Interior-tail continuation recovery and runtime retest (2026-10-18)
+
+The isolated XboxRecomp patch `patches/xboxrecomp-v0.13.1-interior-tail-continuations.patch` now checks unresolved call/tail targets against containing code ranges. It emits an additional translated entry only when the target is an instruction boundary and the reachable control-flow graph forms a complete standalone continuation; unsafe or unowned targets remain unresolved. A full regeneration emitted 9,399 function bodies, including 251 recovered interior entries, with zero translation failures. The generated unresolved-stub count fell from 351 to 100, so the engineering bars now record 251/351 recovered targets. The patch applies to the pinned checkout and the refreshed Windows x64 executable builds.
+
+A 15-second bounded startup run, with pushbuffer execution and synthetic AC'97 readiness but no fake DSP acknowledgement, returned valid guest objects through the previously corrupted audio setup path and read title `.sgt`, `.wav`, and `capcom.xpr` resources. It still produced only one NV2A clear and zero written pixels; there was no recognizable Steel Battalion title screen or verified audio output. The next logged unresolved address is `0x0010D100`, associated with the third worker's context value. XBE disassembly shows executable bytes at that address between the detected routines at `0x0010D0FA` and `0x0010D1F0`, but its ownership and call convention remain to be established. Logs and generated code are ignored under `iso/local-analysis/`; only the generic recompiler patch and this status note are tracked. Milestone 3 remains active.

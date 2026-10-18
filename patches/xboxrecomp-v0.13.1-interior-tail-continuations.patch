@@ -1,0 +1,100 @@
+diff --git a/tools/recomp/translator.py b/tools/recomp/translator.py
+index 3cd9250..036723a 100644
+--- a/tools/recomp/translator.py
++++ b/tools/recomp/translator.py
+@@ -2986,6 +2987,95 @@ class BatchTranslator:
+                 translations.append((addr, name, stub))
+                 stats["failed"] += 1
+ 
++        # A direct or tail call can enter an instruction inside a detected
++        # function rather than at its recorded start. The fallback stub below
++        # keeps such a translation linkable but silently returns before the
++        # guest block executes. Materialize decodable, complete interior
++        # entries as separate translated continuations. When analysis ranges
++        # overlap, use the smallest containing range. This is deliberately
++        # conservative: an entry that cannot be proven to start on an
++        # instruction boundary or whose reachable CFG cannot stand alone
++        # remains an unresolved stub.
++        defined_addrs = {addr for addr, _, _ in translations}
++        defined_addrs.update(manual_decls)
++        continuation_count = 0
++        examined = set()
++        while True:
++            pending = [
++                (addr, name)
++                for addr, name in self.translator.lifter.referenced_calls.items()
++                if addr not in defined_addrs and addr not in examined
++                and addr not in self.translator.func_db
++            ]
++            if not pending:
++                break
++            progress = False
++            for addr, name in sorted(pending):
++                examined.add(addr)
++                owners = [
++                    (start, info)
++                    for start, info in self.translator.func_db.items()
++                    if start < addr < info.get("end", start)
++                ]
++                if not owners:
++                    continue
++                owner_start, owner_info = min(
++                    owners,
++                    key=lambda item: (item[1].get("end", item[0]) - item[0],
++                                      item[0]))
++                owner_end = owner_info.get("end", owner_start)
++                owner_instructions, _ = self.translator.decode_function(
++                    owner_start, owner_info.get("end", owner_start))
++                if addr not in {insn.address for insn in owner_instructions}:
++                    continue
++                recovered = self.translator._recover_cfg(
++                    addr, owner_end, set(), set())
++                if (recovered is None or not recovered[0]
++                        or recovered[0][0].address != addr
++                        or not self.translator._arm_is_whole(addr, recovered[0])):
++                    continue
++
++                info = {
++                    "_addr": addr,
++                    "start": f"0x{addr:08X}",
++                    "end": owner_end,
++                    "size": owner_end - addr,
++                    "name": name,
++                    "section": owner_info.get("section", ""),
++                    "confidence": 0.9,
++                    "detection_method": "verified_interior_continuation",
++                    "num_instructions": len(recovered[0]),
++                    "has_prologue": False,
++                    "calls_to": [],
++                    "called_by": [],
++                }
++                self.translator.func_db[addr] = info
++                self.translator._recovered_cfg[addr] = {
++                    "end": owner_end,
++                    "instructions": recovered[0],
++                    "jump_tables": recovered[1],
++                }
++                code = self.translator.translate_function(addr, info)
++                if not code:
++                    del self.translator.func_db[addr]
++                    self.translator._recovered_cfg.pop(addr, None)
++                    continue
++                translations.append((addr, name, code))
++                defined_addrs.add(addr)
++                stats["total"] += 1
++                stats["translated"] += 1
++                stats["total_lines"] += code.count("\n")
++                continuation_count += 1
++                progress = True
++                if verbose:
++                    print(f"  Translated interior entry 0x{addr:08X} "
++                          f"from 0x{owner_start:08X}-0x{owner_end:08X}",
++                          file=sys.stderr)
++            if not progress:
++                break
++
++        stats["interior_continuations"] = continuation_count
++
+         # A wrapped function's body is sub_X_gen; the hand-written sub_X is
+         # what callers and indirect dispatch must reach, so declare it like
+         # any hand-written function.
