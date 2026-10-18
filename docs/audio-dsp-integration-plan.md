@@ -1,6 +1,6 @@
 # MCPX GP/EP DSP integration plan
 
-**Status:** research and interface analysis only. No DSP core has been integrated, and no audio behavior is verified.
+**Status:** the optional C FFI engine-lifecycle scaffold is available as an unverified patch in `patches/xboxrecomp-v0.13.1-dsp56300-ffi-lifecycle.patch`. It has not been built, applied to the active dependency checkout, or enabled in the game runtime. No DSP execution or audio behavior is verified.
 
 ## Execution architecture
 
@@ -29,6 +29,10 @@ The Xbox x86 game remains statically translated by XboxRecomp and runs against i
 ### Adapter decision
 
 Use the MIT-licensed DSP56300 C FFI as the processor core and write a small XboxRecomp-specific C bridge around it. Reuse xemu for the LGPL APU code already present in XboxRecomp and for behavioral reference; do not copy xemu's GPL `dsp_jit.c` into this bridge. The existing wrapper is tied to xemu's private structures, and directly importing it would add GPL-covered source without making the XboxRecomp integration drop-in. This choice preserves the static x86 game path and avoids introducing a new GPL component. It does not settle the project's overall license; the existing LGPL components and every future dependency still need a full distribution review.
+
+### Unverified engine-lifecycle scaffold
+
+The patch file above adds an off-by-default CMake option that builds the pinned FFI and creates/resets/destroys GP and EP JIT instances over the APU's existing state-owned X/Y/P and mixbin buffers. It checks the dependency revision and clean checkout at configure time. The patch applies to a fresh XboxRecomp v0.13.1 worktree and passes `git diff --check`, but has not been compiled or linked. It does not connect guest MMIO, load/bootstrap firmware, schedule cycles, transfer FIFO/DMA data, or run the core. The existing pass-through remains the runtime behavior; this patch is groundwork only and must not advance audio or FFI lifecycle verification bars.
 
 ### Guest-visible memory windows
 

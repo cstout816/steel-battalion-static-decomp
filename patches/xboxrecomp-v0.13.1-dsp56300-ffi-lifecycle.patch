@@ -1,0 +1,362 @@
+diff --git a/src/apu/CMakeLists.txt b/src/apu/CMakeLists.txt
+index 0bd4ebd..f32c11e 100644
+--- a/src/apu/CMakeLists.txt
++++ b/src/apu/CMakeLists.txt
+@@ -13,6 +13,78 @@ add_library(xbox_apu STATIC
+     apu_xaudio2.c
+ )
+ 
++# The pinned DSP56300 FFI is an optional core-lifecycle integration step.
++# GP/EP MMIO, firmware bootstrap, cycle scheduling, and DMA are not yet wired,
++# so leave it disabled until the complete behavior is implemented and tested.
++option(XBOXRECOMP_ENABLE_DSP56300 "Create MCPX GP/EP engines with the MIT DSP56300 FFI" OFF)
++if(XBOXRECOMP_ENABLE_DSP56300)
++    if(NOT WIN32 OR NOT MSVC)
++        message(FATAL_ERROR "The DSP56300 FFI bridge currently targets Windows x64 with MSVC")
++    endif()
++    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
++        message(FATAL_ERROR "The DSP56300 FFI bridge requires a 64-bit Windows build")
++    endif()
++
++    set(DSP56300_SOURCE_DIR "" CACHE PATH "Path to xemu-project/dsp56300 at the reviewed commit")
++    if(NOT EXISTS "${DSP56300_SOURCE_DIR}/crates/emu-ffi/Cargo.toml")
++        message(FATAL_ERROR "Set DSP56300_SOURCE_DIR to the reviewed dsp56300 checkout")
++    endif()
++    find_package(Git REQUIRED)
++    execute_process(
++        COMMAND "${GIT_EXECUTABLE}" -C "${DSP56300_SOURCE_DIR}" rev-parse HEAD
++        OUTPUT_VARIABLE DSP56300_ACTUAL_REVISION
++        OUTPUT_STRIP_TRAILING_WHITESPACE
++        RESULT_VARIABLE DSP56300_REVISION_RESULT)
++    execute_process(
++        COMMAND "${GIT_EXECUTABLE}" -C "${DSP56300_SOURCE_DIR}" status --porcelain
++        OUTPUT_VARIABLE DSP56300_WORKTREE_CHANGES
++        OUTPUT_STRIP_TRAILING_WHITESPACE
++        RESULT_VARIABLE DSP56300_STATUS_RESULT)
++    if(NOT DSP56300_REVISION_RESULT EQUAL 0 OR
++       NOT DSP56300_ACTUAL_REVISION STREQUAL "82fb25a6917a36ac66212ae31f02aab62211f979" OR
++       NOT DSP56300_STATUS_RESULT EQUAL 0 OR
++       NOT DSP56300_WORKTREE_CHANGES STREQUAL "")
++        message(FATAL_ERROR
++            "DSP56300_SOURCE_DIR must be a clean checkout at reviewed commit 82fb25a6917a36ac66212ae31f02aab62211f979")
++    endif()
++    find_program(CARGO_EXECUTABLE cargo REQUIRED)
++
++    set(DSP56300_TARGET_TRIPLE "x86_64-pc-windows-msvc")
++    set(DSP56300_CARGO_TARGET_DIR "${CMAKE_BINARY_DIR}/dsp56300-cargo")
++    set(DSP56300_STATIC_LIBRARY
++        "${DSP56300_CARGO_TARGET_DIR}/${DSP56300_TARGET_TRIPLE}/release/dsp56300_emu_ffi.lib")
++    file(GLOB_RECURSE DSP56300_BUILD_INPUTS CONFIGURE_DEPENDS
++        "${DSP56300_SOURCE_DIR}/Cargo.toml"
++        "${DSP56300_SOURCE_DIR}/Cargo.lock"
++        "${DSP56300_SOURCE_DIR}/crates/*.toml"
++        "${DSP56300_SOURCE_DIR}/crates/*.rs"
++        "${DSP56300_SOURCE_DIR}/crates/*.c"
++        "${DSP56300_SOURCE_DIR}/crates/*.h")
++
++    add_custom_command(
++        OUTPUT "${DSP56300_STATIC_LIBRARY}"
++        COMMAND "${CMAKE_COMMAND}" -E env
++            "CARGO_TARGET_DIR=${DSP56300_CARGO_TARGET_DIR}"
++            "${CARGO_EXECUTABLE}" build --locked --release --no-default-features
++                --target "${DSP56300_TARGET_TRIPLE}"
++                --manifest-path "${DSP56300_SOURCE_DIR}/Cargo.toml"
++                -p dsp56300-emu-ffi
++        DEPENDS ${DSP56300_BUILD_INPUTS}
++        WORKING_DIRECTORY "${DSP56300_SOURCE_DIR}"
++        COMMENT "Building the pinned DSP56300 Windows x64 C FFI"
++        VERBATIM)
++    add_custom_target(dsp56300_ffi_build DEPENDS "${DSP56300_STATIC_LIBRARY}")
++    add_library(dsp56300_ffi STATIC IMPORTED GLOBAL)
++    set_target_properties(dsp56300_ffi PROPERTIES
++        IMPORTED_LOCATION "${DSP56300_STATIC_LIBRARY}")
++    add_dependencies(xbox_apu dsp56300_ffi_build)
++    target_sources(xbox_apu PRIVATE apu_dsp56300_bridge.c)
++    target_include_directories(xbox_apu PRIVATE
++        "${DSP56300_SOURCE_DIR}/crates/emu-ffi/include")
++    target_compile_definitions(xbox_apu PRIVATE MCPX_APU_USE_DSP56300=1)
++    target_link_libraries(xbox_apu PRIVATE dsp56300_ffi)
++endif()
++
+ target_include_directories(xbox_apu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ 
+ # qemu_shim.h lives in nv2a/ - shared QEMU type abstraction
+diff --git a/src/apu/README.md b/src/apu/README.md
+index 04c6b06..6a7512f 100644
+--- a/src/apu/README.md
++++ b/src/apu/README.md
+@@ -8,16 +8,33 @@ Hardware emulation of the Xbox's MCPX APU (Audio Processing Unit), extracted fro
+ 
+ Audio output uses Windows `waveOut` at 48kHz stereo 16-bit.
+ 
++## DSP56300 FFI bridge status
++
++The optional `XBOXRECOMP_ENABLE_DSP56300` CMake setting builds the MIT-licensed
++`dsp56300-emu-ffi` static library from a separately checked-out upstream
++revision and creates GP/EP engine instances over the APU's existing backing
++arrays. The reviewed source revision is
++`82fb25a6917a36ac66212ae31f02aab62211f979`; set `DSP56300_SOURCE_DIR` to that
++clean checkout and make the Rust 1.99 toolchain available to CMake.
++
++This is only engine-lifecycle groundwork. The optional path does not yet route
++GP/EP MMIO, load/bootstrap firmware, schedule cycles, perform FIFO/DMA, or
++generate DSP audio. It remains off by default and is not playable-audio support.
++Do not enable it for a game run until those behaviors are implemented and
++verified. The existing passthrough remains the default.
++
+ ## Files
+ 
+ | File | LOC | Purpose |
+ |------|-----|---------|
+ | `apu.h` | 70 | **Public API** — init, shutdown, MMIO, mixer voices |
+-| `apu_state.h` | 525 | APU state struct (VP, GP, EP, DSP core, 256 voices) |
++| `apu_state.h` | 537 | APU state struct (VP, GP, EP, DSP core, 256 voices) |
+ | `apu_regs.h` | 366 | MCPX APU register definitions and field masks |
+ | `apu_core.c` | 762 | MMIO handlers, frame thread, waveOut output, test tone |
+ | `apu_vp.c` | 1,247 | Voice Processor — decode, resample, mix, envelopes, HRTF |
+-| `apu_dsp.c` | 90 | GP/EP stubs (mixbin 0/1 passthrough) |
++| `apu_dsp.c` | 259 | GP/EP lifecycle and current passthrough stub |
++| `apu_dsp56300_bridge.c` | 96 | Optional FFI engine creation/reset/destruction and memory map |
++| `apu_dsp56300_bridge.h` | 13 | Optional bridge declarations |
+ | `apu_mmio_hook.c` | 253 | VEH x86-64 instruction decoder for 0xFE800000+ MMIO |
+ | `apu_shim.h` | 431 | QEMU compatibility (threads, atomics, clocks → Win32) |
+ | `apu_debug.h` | 104 | Debug logging macros |
+diff --git a/src/apu/apu_core.c b/src/apu/apu_core.c
+index 258048c..544d7ac 100644
+--- a/src/apu/apu_core.c
++++ b/src/apu/apu_core.c
+@@ -639,15 +639,7 @@ static void mcpx_apu_reset_locked(MCPXAPUState *d)
+ {
+     memset(d->regs, 0, sizeof(d->regs));
+     mcpx_apu_vp_reset(d);
+-
+-    if (d->gp.dsp) {
+-        memset((void *)d->gp.dsp->core.pram_opcache, 0,
+-               sizeof(d->gp.dsp->core.pram_opcache));
+-    }
+-    if (d->ep.dsp) {
+-        memset((void *)d->ep.dsp->core.pram_opcache, 0,
+-               sizeof(d->ep.dsp->core.pram_opcache));
+-    }
++    mcpx_apu_dsp_reset(d);
+     d->set_irq = false;
+ }
+ 
+@@ -721,6 +713,7 @@ void mcpx_apu_shutdown(MCPXAPUState *d)
+ 
+     qemu_thread_join(&d->apu_thread);
+     mcpx_apu_vp_finalize(d);
++    mcpx_apu_dsp_finalize(d);
+     mcpx_apu_monitor_finalize(d);
+ 
+     free(d);
+diff --git a/src/apu/apu_dsp.c b/src/apu/apu_dsp.c
+index 7156be9..b2a5103 100644
+--- a/src/apu/apu_dsp.c
++++ b/src/apu/apu_dsp.c
+@@ -25,6 +25,10 @@
+ #include "apu_state.h"
+ #include "fpconv.h"
+ 
++#ifdef MCPX_APU_USE_DSP56300
++#include "apu_dsp56300_bridge.h"
++#endif
++
+ #include <stdlib.h>
+ #include <string.h>
+ 
+@@ -125,12 +129,51 @@ void mcpx_apu_dsp_init(MCPXAPUState *d)
+     if (d->gp.dsp) d->gp.dsp->is_gp = true;
+     if (d->ep.dsp) d->ep.dsp->is_gp = false;
+ 
++#ifdef MCPX_APU_USE_DSP56300
++    if (d->gp.dsp && !mcpx_apu_dsp_engine_init(d->gp.dsp)) {
++        fprintf(stderr, "[APU] GP DSP56300 engine creation failed; retaining stub\n");
++    }
++    if (d->ep.dsp && !mcpx_apu_dsp_engine_init(d->ep.dsp)) {
++        fprintf(stderr, "[APU] EP DSP56300 engine creation failed; retaining stub\n");
++    }
++#endif
++
+     d->gp.realtime = false;
+     d->ep.realtime = false;
+ 
+     fprintf(stderr, "[APU] DSP GP/EP initialized (STUBBED - passthrough mode)\n");
+ }
+ 
++void mcpx_apu_dsp_finalize(MCPXAPUState *d)
++{
++    if (!d) return;
++#ifdef MCPX_APU_USE_DSP56300
++    mcpx_apu_dsp_engine_destroy(d->gp.dsp);
++    mcpx_apu_dsp_engine_destroy(d->ep.dsp);
++#endif
++    free(d->gp.dsp);
++    free(d->ep.dsp);
++    d->gp.dsp = NULL;
++    d->ep.dsp = NULL;
++}
++
++void mcpx_apu_dsp_reset(MCPXAPUState *d)
++{
++    if (!d) return;
++#ifdef MCPX_APU_USE_DSP56300
++    mcpx_apu_dsp_engine_reset(d->gp.dsp);
++    mcpx_apu_dsp_engine_reset(d->ep.dsp);
++#endif
++    if (d->gp.dsp) {
++        memset((void *)d->gp.dsp->core.pram_opcache, 0,
++               sizeof(d->gp.dsp->core.pram_opcache));
++    }
++    if (d->ep.dsp) {
++        memset((void *)d->ep.dsp->core.pram_opcache, 0,
++               sizeof(d->ep.dsp->core.pram_opcache));
++    }
++}
++
+ void mcpx_apu_update_dsp_preference(MCPXAPUState *d)
+ {
+     /* In the real xemu, this reads settings to decide whether
+diff --git a/src/apu/apu_dsp56300_bridge.c b/src/apu/apu_dsp56300_bridge.c
+new file mode 100644
+index 0000000..881e221
+--- /dev/null
++++ b/src/apu/apu_dsp56300_bridge.c
+@@ -0,0 +1,96 @@
++/*
++ * XboxRecomp-owned adapter between the MCPX APU state and the MIT DSP56300 C FFI.
++ * The FFI receives stable backing arrays owned by DSPState. This file only
++ * creates, resets, and destroys the core; it does not yet route GP/EP MMIO,
++ * bootstrap firmware, schedule DSP cycles, perform DMA, or produce audio.
++ */
++#include "apu_dsp56300_bridge.h"
++
++#include "apu_state.h"
++#include "dsp56300.h"
++
++#include <string.h>
++
++#define GP_X_RAM_WORDS 0x1000u
++#define GP_MIXBUF_START 0x1400u
++#define GP_MIXBUF_WORDS 0x0400u
++#define GP_Y_RAM_WORDS 0x0800u
++#define EP_X_RAM_WORDS 0x0C00u
++#define EP_Y_RAM_WORDS 0x0100u
++#define DSP_P_RAM_WORDS 0x1000u
++
++_Static_assert(DSP_XRAM_SIZE >= GP_X_RAM_WORDS,
++               "GP DSP X backing storage is too small");
++_Static_assert(DSP_YRAM_SIZE >= GP_Y_RAM_WORDS,
++               "GP DSP Y backing storage is too small");
++_Static_assert(DSP_PRAM_SIZE >= DSP_P_RAM_WORDS,
++               "DSP P backing storage is too small");
++_Static_assert(DSP_MIXBUFFER_SIZE == GP_MIXBUF_WORDS,
++               "GP mixbin window and backing storage differ");
++
++static void set_buffer_region(Dsp56300MemoryRegion *region,
++                              uint32_t start,
++                              uint32_t end,
++                              uint32_t *base)
++{
++    memset(region, 0, sizeof(*region));
++    region->start = start;
++    region->end = end;
++    region->kind = DSP56300_REGION_BUFFER;
++    region->data.buffer.base = base;
++    region->data.buffer.offset = 0;
++}
++
++bool mcpx_apu_dsp_engine_init(DSPState *dsp)
++{
++    Dsp56300MemoryRegion x_regions[2];
++    Dsp56300MemoryRegion y_region;
++    Dsp56300MemoryRegion p_region;
++    Dsp56300CreateInfo info;
++
++    if (!dsp || dsp->jit) {
++        return dsp && dsp->jit;
++    }
++
++    memset(&info, 0, sizeof(info));
++    if (dsp->is_gp) {
++        set_buffer_region(&x_regions[0], 0, GP_X_RAM_WORDS, dsp->core.xram);
++        set_buffer_region(&x_regions[1], GP_MIXBUF_START,
++                          GP_MIXBUF_START + GP_MIXBUF_WORDS,
++                          dsp->core.mixbuffer);
++        set_buffer_region(&y_region, 0, GP_Y_RAM_WORDS, dsp->core.yram);
++        info.memory_map.x_regions = x_regions;
++        info.memory_map.x_count = 2;
++    } else {
++        set_buffer_region(&x_regions[0], 0, EP_X_RAM_WORDS, dsp->core.xram);
++        set_buffer_region(&y_region, 0, EP_Y_RAM_WORDS, dsp->core.yram);
++        info.memory_map.x_regions = x_regions;
++        info.memory_map.x_count = 1;
++    }
++
++    set_buffer_region(&p_region, 0, DSP_P_RAM_WORDS, dsp->core.pram);
++    info.memory_map.y_regions = &y_region;
++    info.memory_map.y_count = 1;
++    info.memory_map.p_regions = &p_region;
++    info.memory_map.p_count = 1;
++
++    /* The FFI copies region descriptors but retains all buffer pointers. The
++     * DSPState and its arrays must therefore outlive the returned JIT handle. */
++    dsp->jit = dsp56300_create(&info);
++    return dsp->jit != NULL;
++}
++
++void mcpx_apu_dsp_engine_destroy(DSPState *dsp)
++{
++    if (dsp && dsp->jit) {
++        dsp56300_destroy(dsp->jit);
++        dsp->jit = NULL;
++    }
++}
++
++void mcpx_apu_dsp_engine_reset(DSPState *dsp)
++{
++    if (dsp && dsp->jit) {
++        dsp56300_reset(dsp->jit);
++    }
++}
+diff --git a/src/apu/apu_dsp56300_bridge.h b/src/apu/apu_dsp56300_bridge.h
+new file mode 100644
+index 0000000..b58af45
+--- /dev/null
++++ b/src/apu/apu_dsp56300_bridge.h
+@@ -0,0 +1,13 @@
++/*
++ * XboxRecomp-owned adapter between the MCPX APU state and the MIT DSP56300 C FFI.
++ * No xemu GPL bridge code is copied here.
++ */
++#pragma once
++
++#include "apu_state.h"
++
++#include <stdbool.h>
++
++bool mcpx_apu_dsp_engine_init(DSPState *dsp);
++void mcpx_apu_dsp_engine_destroy(DSPState *dsp);
++void mcpx_apu_dsp_engine_reset(DSPState *dsp);
+diff --git a/src/apu/apu_state.h b/src/apu/apu_state.h
+index 871ff5d..21ce9b0 100644
+--- a/src/apu/apu_state.h
++++ b/src/apu/apu_state.h
+@@ -136,6 +136,8 @@ typedef struct DSPState {
+     int save_cycles;
+     uint32_t interrupts;
+     bool is_gp;
++    /* Optional MIT DSP56300 FFI engine, owned by the APU bridge. */
++    void *jit;
+ } DSPState;
+ 
+ /* ============================================================
+@@ -522,6 +524,8 @@ void mcpx_apu_vp_reset(MCPXAPUState *d);
+ 
+ /* DSP functions (stubbed) */
+ void mcpx_apu_dsp_init(MCPXAPUState *d);
++void mcpx_apu_dsp_finalize(MCPXAPUState *d);
++void mcpx_apu_dsp_reset(MCPXAPUState *d);
+ void mcpx_apu_update_dsp_preference(MCPXAPUState *d);
+ void mcpx_apu_dsp_frame(MCPXAPUState *d, float mixbins[NUM_MIXBINS][NUM_SAMPLES_PER_FRAME]);
+ void mcpx_apu_dsp_ack_poll(MCPXAPUState *d);
