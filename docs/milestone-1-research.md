@@ -514,3 +514,10 @@ Therefore the 4627 candidate requires more than adding a version folder: a new l
 - Added an opt-in CMake target `XBOXRECOMP_BUILD_DSP56300_TESTS`, disabled by default, and regenerated `patches/xboxrecomp-v0.13.1-dsp56300-ffi-lifecycle.patch`.
 - Verified the updated patch applies to a fresh worktree at pinned XboxRecomp commit `193e2995ffaec871bb3be43a43bd66aa5fccfeb1` and passes `git diff --check`. The harness has not been configured, compiled, linked, or run. The three `your_game_recomp` processes (PIDs 3596, 23600, and 43720) remain live; no builds/tests or game process changes were made.
 - The test target and lifecycle bar remain unverified until a safe build window is available. The engine still has no GP/EP MMIO routing, firmware bootstrap, DSP scheduling, FIFO/DMA, or audible output.
+
+### GP/EP MMIO byte ranges cross-checked (2026-10-17)
+
+- Cross-checked XboxRecomp's `apu_regs.h`, its current dispatcher, the xemu LGPL `gp_ep.c` register handlers, and the DSP FFI word-addressed memory API. XboxRecomp still dispatches only the main APU and VP windows; GP `+0x30000` and EP `+0x50000` return zero or drop writes.
+- Recorded the subwindow byte ranges and corresponding DSP word ranges in `docs/audio-dsp-integration-plan.md`, including separate GP mixbuffer aliasing and the shared GP/EP reset offset. This is an upstream-derived map, not a Steel Battalion runtime trace.
+- The future MMIO path must route program-memory writes through the FFI write API for JIT invalidation, preserve a pass-through memory fallback when the optional core is disabled, and keep reset/bootstrap transition behavior distinct. The current scaffold does not yet implement these paths.
+- Three game processes remain active. This was source review and documentation only; the C harness has not been built or run and no process was changed.

@@ -38,6 +38,24 @@ The patch file above adds an off-by-default CMake option that builds the pinned 
 
 The local runtime currently routes main APU and Voice Processor MMIO, while GP (`APU base + 0x30000`) and EP (`APU base + 0x50000`) are ignored. Add separate GP and EP dispatch paths for those 64 KiB windows. Keep the current XboxRecomp API's exact access widths and offsets visible in traces while mapping the windows.
 
+The pinned APU register definitions express these subwindow addresses in **bytes**, while the DSP FFI and backing arrays use **24-bit words**. The upstream xemu LGPL APU handler maps the following byte ranges to DSP word addresses; use these boundaries in the future host-access tests:
+
+| Processor | Register window (APU-relative bytes) | Bytes | DSP word addresses |
+| --- | --- | ---: | --- |
+| GP X memory | `0x0000–0x3FFF` | `0x4000` | X `[0, 0x1000)` |
+| GP mixbuffer | `0x5000–0x5FFF` | `0x1000` | X `[0x1400, 0x1800)` |
+| GP Y memory | `0x6000–0x7FFF` | `0x2000` | Y `[0, 0x800)` |
+| GP P memory | `0xA000–0xDFFF` | `0x4000` | P `[0, 0x1000)` |
+| GP reset | `0xFFFC–0xFFFF` | `4` | register, not DSP RAM |
+| EP X memory | `0x0000–0x2FFF` | `0x3000` | X `[0, 0xC00)` |
+| EP Y memory | `0x6000–0x63FF` | `0x400` | Y `[0, 0x100)` |
+| EP P memory | `0xA000–0xDFFF` | `0x4000` | P `[0, 0x1000)` |
+| EP reset | `0xFFFC–0xFFFF` | `4` | register, not DSP RAM |
+
+The range ends above are exclusive. Each mapped RAM access is a four-byte aligned register transaction in the upstream handler; XboxRecomp's VEH path supplies a size, so the first tests must establish the game's actual access widths before enforcing the upstream assertion. DSP P writes must go through `dsp56300_write_memory` (or its run variant) when the optional core exists so JIT code is invalidated; directly modifying `core.pram` is only valid for the pass-through fallback. The xemu LGPL `gp_ep.c` is an implementation reference and is not copied by the current patch. Its reset handler resets while either required bit is low and bootstraps on the low-to-high transition of both bits. That bootstrap transition remains deferred until firmware and scratch-transfer behavior are implemented.
+
+Source reference: [xemu GP/EP APU handler](https://github.com/xemu-project/xemu/blob/master/hw/xbox/mcpx/apu/dsp/gp_ep.c) and the pinned XboxRecomp `src/apu/apu_regs.h`. These are upstream semantics; Steel Battalion's complete transaction sequence still needs runtime traces.
+
 The xemu model provides the first address-space map to reconcile with the pinned DSP core:
 
 | Processor | DSP memory exposed through APU MMIO | Initial size indicated by xemu |
