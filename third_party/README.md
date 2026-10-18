@@ -162,3 +162,8 @@ The Vulkan adapter presents the existing guest framebuffer through a Vulkan
 swapchain. It does not yet render NV2A commands. No xemu renderer source has
 been copied. See [`../docs/VULKAN_REUSE_AUDIT.md`](../docs/VULKAN_REUSE_AUDIT.md)
 for the separate xemu shader/PGRAPH reuse and licensing review.
+
+The follow-up
+[`patches/xboxrecomp-v0.13.1-vulkan-aspect-fit.patch`](../patches/xboxrecomp-v0.13.1-vulkan-aspect-fit.patch)
+preserves the guest image's aspect ratio in the swapchain and clears the
+letterbox bars. Apply it after the presenter patch.

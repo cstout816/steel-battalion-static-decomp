@@ -1,0 +1,77 @@
+diff --git a/src/video/fb_vulkan_present.c b/src/video/fb_vulkan_present.c
+--- a/src/video/fb_vulkan_present.c
++++ b/src/video/fb_vulkan_present.c
+@@ -648,10 +648,13 @@ int xbox_vulkan_presenter_present(const uint32_t *bgra_pixels)
+     VkCommandBufferBeginInfo begin;
+     VkBufferImageCopy copy;
+     VkImageBlit blit;
++    VkClearColorValue clear_color;
++    VkImageSubresourceRange clear_range;
+     VkSubmitInfo submit;
+     VkPresentInfoKHR present;
+     VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+     uint32_t *dst;
++    uint32_t dst_width, dst_height, dst_x, dst_y;
+ 
+     if (!s_vp.ready || !bgra_pixels)
+         return 0;
+@@ -666,6 +669,26 @@ int xbox_vulkan_presenter_present(const uint32_t *bgra_pixels)
+     if (result != VK_SUCCESS)
+         return vp_error("acquiring swapchain image", result) ? 1 : -1;
+ 
++    /* Fit the guest image inside the window without changing its aspect
++     * ratio. Xbox surfaces are commonly 4:3; stretching them to a 16:9 or
++     * 16:10 swapchain distorts the scene, UI, and cinematics. */
++    if ((uint64_t)s_vp.swapchain_extent.width * s_vp.guest_height
++            > (uint64_t)s_vp.swapchain_extent.height * s_vp.guest_width) {
++        dst_height = s_vp.swapchain_extent.height;
++        dst_width = (uint32_t)((uint64_t)dst_height * s_vp.guest_width
++                               / s_vp.guest_height);
++    } else {
++        dst_width = s_vp.swapchain_extent.width;
++        dst_height = (uint32_t)((uint64_t)dst_width * s_vp.guest_height
++                                / s_vp.guest_width);
++    }
++    if (!dst_width)
++        dst_width = 1;
++    if (!dst_height)
++        dst_height = 1;
++    dst_x = (s_vp.swapchain_extent.width - dst_width) / 2;
++    dst_y = (s_vp.swapchain_extent.height - dst_height) / 2;
++
+     dst = (uint32_t *)frame->mapped;
+     for (i = 0; i < s_vp.guest_width * s_vp.guest_height; ++i) {
+         uint32_t pixel = bgra_pixels[i];
+@@ -709,6 +732,19 @@ int xbox_vulkan_presenter_present(const uint32_t *bgra_pixels)
+         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+         0, VK_ACCESS_TRANSFER_WRITE_BIT,
+         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
++    memset(&clear_color, 0, sizeof(clear_color));
++    clear_color.float32[3] = 1.0f;
++    memset(&clear_range, 0, sizeof(clear_range));
++    clear_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++    clear_range.levelCount = 1;
++    clear_range.layerCount = 1;
++    vkCmdClearColorImage(frame->command,
++        s_vp.swapchain_images[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++        &clear_color, 1, &clear_range);
++    vp_image_barrier(frame->command, s_vp.swapchain_images[image_index],
++        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
++        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+     memset(&blit, 0, sizeof(blit));
+     blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+     blit.srcSubresource.layerCount = 1;
+@@ -717,8 +753,10 @@ int xbox_vulkan_presenter_present(const uint32_t *bgra_pixels)
+     blit.srcOffsets[1].z = 1;
+     blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+     blit.dstSubresource.layerCount = 1;
+-    blit.dstOffsets[1].x = (int32_t)s_vp.swapchain_extent.width;
+-    blit.dstOffsets[1].y = (int32_t)s_vp.swapchain_extent.height;
++    blit.dstOffsets[0].x = (int32_t)dst_x;
++    blit.dstOffsets[0].y = (int32_t)dst_y;
++    blit.dstOffsets[1].x = (int32_t)(dst_x + dst_width);
++    blit.dstOffsets[1].y = (int32_t)(dst_y + dst_height);
+     blit.dstOffsets[1].z = 1;
+     vkCmdBlitImage(frame->command,
+         s_vp.guest_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
