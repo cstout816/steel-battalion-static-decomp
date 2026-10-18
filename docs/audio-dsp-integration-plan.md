@@ -41,7 +41,19 @@ The xemu model provides the first address-space map to reconcile with the pinned
 | GP | X memory, Y memory, P program memory, and the X mixbin window | X 0x1000 words, Y 0x800 words, P 0x1000 words; mixbin window starts at X address 0x1400 |
 | EP | X memory, Y memory, and P program memory | X 0xC00 words, Y 0x100 words, P 0x1000 words |
 
-Use independently owned word buffers or stable callback state for each DSP instance. The C FFI requires mapped buffers and callback context to remain valid for the instance lifetime. Route guest P-memory writes through the core's write API or batch-write API so its translated-code cache is invalidated correctly. Confirm the upstream APU's address units, 24-bit masking, unmapped ranges, and overlapping mixbin semantics before adopting these sizes verbatim.
+The v0.13.1 XboxRecomp `DSPState` already allocates GP/EP-compatible backing arrays: XRAM 0x1000, YRAM 0x800, PRAM 0x1000, and a separate 0x400-word mix buffer. A direct FFI memory map can therefore use stable state-owned buffers instead of allocating parallel memory:
+
+| DSP address space | FFI buffer view |
+| --- | --- |
+| GP X `[0, 0x1000)` | `DSPState.core.xram` |
+| GP X `[0x1400, 0x1800)` | `DSPState.core.mixbuffer` |
+| GP Y `[0, 0x800)` | `DSPState.core.yram` |
+| GP P `[0, 0x1000)` | `DSPState.core.pram` |
+| EP X `[0, 0xC00)` | `DSPState.core.xram` |
+| EP Y `[0, 0x100)` | `DSPState.core.yram` |
+| EP P `[0, 0x1000)` | `DSPState.core.pram` |
+
+These are candidate FFI regions derived from the pinned crate's half-open range contract and XboxRecomp's allocation sizes, reconciled with the existing xemu register definitions; they have not been validated by a C build or guest memory trace. The FFI copies region descriptors during instance creation, but its buffer pointers must remain valid until the instance is destroyed. Route guest P-memory writes through the core's write API or batch-write API so the translated-code cache is invalidated correctly. Confirm the upstream APU's address units, 24-bit masking, unmapped ranges, and overlapping mixbin semantics before runtime use.
 
 ### Reset and bootstrap behavior
 
