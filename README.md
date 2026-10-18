@@ -18,13 +18,9 @@ The goal is to translate the original Xbox version of *Steel Battalion* (2002) a
 
 The project is still experimental. The translated Windows program builds, but it has not reached the title screen. Graphics, sound, controls, saving, and campaign play are not verified. The tracker records observed engineering work separately from features players can use.
 
-## The original controller
+## Controller compatibility
 
-The original 40-button controller is a central compatibility target. This reference photo shows the controller and pedals the project aims to support; it is credited in [image attributions](docs/ATTRIBUTIONS.md).
-
-<p align="center">
-  <img src="docs/images/steel-battalion-controller.jpg" alt="Original Steel Battalion controller with dual joysticks and foot pedals" width="720" />
-</p>
+The original 40-button Steel Battalion controller and pedals are central compatibility targets, alongside keyboard, mouse, gamepad, HOTAS, and custom controller profiles. These are planned capabilities and have not yet been implemented or verified.
 
 ## What you can do here
 

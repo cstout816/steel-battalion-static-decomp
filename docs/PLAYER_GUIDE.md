@@ -32,7 +32,6 @@ Reaching the title screen will not count as a playable release. The campaign nee
 - [Project overview and current status](../README.md)
 - [Research and architecture notes](milestone-1-research.md)
 - [Community compatibility and preservation plan](community-compatibility-preservation.md)
-- [Image credits](ATTRIBUTIONS.md)
 - [Detailed progress tracker](DEVELOPMENT_STATUS.md)
 - [Steel Battalion Online community](https://www.reddit.com/r/steelbattaliononline/)
 - [Project discussions on Discord](https://discord.gg/steelbattalion)
