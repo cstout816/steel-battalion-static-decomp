@@ -19,12 +19,14 @@ The XboxRecomp umbrella target links `xbox_kernel`, `xbox_d3d8`, `xbox_nv2a`, an
 
 The most direct path for the observed game workload is the decoded draw state in `nv2a_pb_exec.c`. The CPU vertex interpreter and software rasterizer provide a behavior reference. A Vulkan implementation can consume decoded vertices, texture data, combiner state, surface state, and depth/blend state at that boundary. It must preserve the guest's Xbox x86 execution and kernel/runtime behavior.
 
+The concrete extraction point is `raster_batch_program()`: it transforms the current `s_gpu.idx[]` vertices once into `s_xf[]` (`Nv2aVshOutput`), then dispatches triangle, strip, fan, quad, and quad-strip topology to `raster_xf_clipped()`. Each vertex contains screen/depth position, two diffuse outputs, fog, and four texture-coordinate outputs. The global decoded state supplies the color surface and pitch, clip rectangle, texture sources, combiner words, depth test/write, blending, and alpha test. The `XfTri` structure then packages the three transformed vertices and interpolation/raster bounds used by the CPU pixel loop. A backend-neutral packet should capture the transformed vertex array plus this per-draw state before topology expansion; Vulkan can expand topology and preserve clipping/interpolation while the CPU path remains the pixel-reference implementation.
+
 The current framebuffer presenter is a separate display path. It copies an already completed CPU framebuffer into host staging memory, then uses Vulkan to blit it to a swapchain image. It cannot be counted as a Vulkan NV2A renderer. A production path should submit guest draws to Vulkan and keep the rendered image on the GPU through presentation; a readback and re-upload loop would add overhead and is suitable only for diagnostics.
 
 ## Migration order
 
 1. Keep the CPU implementation as a correctness reference and add explicit instrumentation to identify which guest graphics paths execute.
-2. Define a backend-neutral decoded draw packet at the `nv2a_pb_exec` boundary. Include the guest surface, clip/viewport, vertex output, texture sources, combiner state, depth, blending, and primitive topology.
+2. Define a backend-neutral decoded draw packet at the `raster_batch_program()` boundary. Include transformed `Nv2aVshOutput` vertices, primitive topology, guest surface/pitch, clip/viewport, texture sources, combiner words, depth, blending, and alpha-test state.
 3. Create one Vulkan device/resource owner shared by guest rendering and presentation. Keep the Vulkan API fixed; do not add runtime backend selection.
 4. Implement the first supported guest clear and untextured draw with matching clipping, color/depth writes, and ordering. Compare Vulkan output against the CPU reference using captured guest state.
 5. Add textures, vertex-program semantics, combiners, depth/blend details, and cache/synchronization coverage until the observed Steel Battalion frame has matching pixels.
