@@ -1,8 +1,8 @@
 diff --git a/src/apu/CMakeLists.txt b/src/apu/CMakeLists.txt
-index 0bd4ebd..f32c11e 100644
+index 0bd4ebd..b165e4c 100644
 --- a/src/apu/CMakeLists.txt
 +++ b/src/apu/CMakeLists.txt
-@@ -13,6 +13,78 @@ add_library(xbox_apu STATIC
+@@ -13,6 +13,88 @@ add_library(xbox_apu STATIC
      apu_xaudio2.c
  )
  
@@ -16,6 +16,16 @@ index 0bd4ebd..f32c11e 100644
 +    endif()
 +    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
 +        message(FATAL_ERROR "The DSP56300 FFI bridge requires a 64-bit Windows build")
++    endif()
++    if(DEFINED CMAKE_C_COMPILER_ARCHITECTURE_ID)
++        string(TOLOWER "${CMAKE_C_COMPILER_ARCHITECTURE_ID}" DSP56300_C_ARCH)
++        if(NOT DSP56300_C_ARCH MATCHES "^(x64|amd64|x86_64)$")
++            message(FATAL_ERROR "The DSP56300 FFI bridge requires the x64 MSVC ABI")
++        endif()
++    endif()
++    if(CMAKE_GENERATOR_PLATFORM AND
++       NOT CMAKE_GENERATOR_PLATFORM MATCHES "^(x64|X64|x86_64|AMD64)$")
++        message(FATAL_ERROR "Select the x64 MSVC generator platform for the DSP56300 FFI")
 +    endif()
 +
 +    set(DSP56300_SOURCE_DIR "" CACHE PATH "Path to xemu-project/dsp56300 at the reviewed commit")
