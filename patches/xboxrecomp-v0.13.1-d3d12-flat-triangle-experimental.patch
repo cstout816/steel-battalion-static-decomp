@@ -114,10 +114,10 @@ index 0000000..d95716f3744e510925fe2779dcb2f7285d0ac6e3
 +#endif
 diff --git a/src/kernel/nv2a_d3d12_raster.c b/src/kernel/nv2a_d3d12_raster.c
 new file mode 100644
-index 0000000..a864cf4f541654302c21002f7e1e0eb1afde3be8
+index 0000000..c007d509a161163daf3e998a6180f9da8a6e905c
 --- /dev/null
 +++ b/src/kernel/nv2a_d3d12_raster.c
-@@ -0,0 +1,644 @@
+@@ -0,0 +1,645 @@
 +/*
 + * Small native Direct3D 12 raster path for the NV2A pushbuffer executor.
 + *
@@ -257,11 +257,12 @@ index 0000000..a864cf4f541654302c21002f7e1e0eb1afde3be8
 +static int create_pipeline(D3D12Raster *r)
 +{
 +    static const char vs_source[] =
-+        "struct V { float2 p:POSITION; float4 c:COLOR; };\n"
-+        "struct O { float4 p:SV_POSITION; float4 c:COLOR; };\n"
++        "struct V { float2 p:POSITION; float4 c:TEXCOORD; };\n"
++        "struct O { float4 p:SV_POSITION; float4 c:TEXCOORD; };\n"
 +        "O VSMain(V i) { O o; o.p=float4(i.p,0,1); o.c=i.c; return o; }\n";
 +    static const char ps_source[] =
-+        "float4 PSMain(float4 c:COLOR):SV_TARGET { return saturate(c.bgra); }\n";
++        "struct P { float4 p:SV_POSITION; float4 c:TEXCOORD; };\n"
++        "float4 PSMain(P i):SV_TARGET { return saturate(i.c.bgra); }\n";
 +    ID3DBlob *vs = NULL, *ps = NULL, *signature = NULL, *errors = NULL;
 +    D3D12_ROOT_SIGNATURE_DESC rs_desc;
 +    D3D12_GRAPHICS_PIPELINE_STATE_DESC pso;
@@ -299,7 +300,7 @@ index 0000000..a864cf4f541654302c21002f7e1e0eb1afde3be8
 +    input[0].SemanticName = "POSITION";
 +    input[0].Format = DXGI_FORMAT_R32G32_FLOAT;
 +    input[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-+    input[1].SemanticName = "COLOR";
++    input[1].SemanticName = "TEXCOORD";
 +    input[1].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
 +    input[1].AlignedByteOffset = 8;
 +    input[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
