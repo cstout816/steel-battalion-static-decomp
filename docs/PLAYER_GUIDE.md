@@ -10,7 +10,7 @@ Please do not download an unofficial build or expect an ISO to be included here.
 
 The goal is a Windows application that translates the original Xbox game ahead of time and supplies the Xbox services it needs. This approach is called **static recompilation**. It is not a separate Xbox emulator bundled under a different name.
 
-The project is primarily made with ChatGPT Codex, guided by project owner Connor Stout (`cstout816`). The owner sets priorities and approves architecture and release decisions. Progress reports distinguish code that has merely been written or built from behavior that has actually been tested.
+Most of the project's research, code, and documentation have been produced with ChatGPT Codex. Connor Stout (`cstout816`) maintains the project. Progress reports distinguish work that has been written or built from game behavior that has actually been tested.
 
 ## What will I need when a tested release is available?
 
@@ -33,5 +33,6 @@ Reaching the title screen will not count as a playable release. The campaign nee
 - [Research and architecture notes](milestone-1-research.md)
 - [Community compatibility and preservation plan](community-compatibility-preservation.md)
 - [Image credits](ATTRIBUTIONS.md)
+- [Detailed progress tracker](DEVELOPMENT_STATUS.md)
 - [Steel Battalion Online community](https://www.reddit.com/r/steelbattaliononline/)
 - [Project discussions on Discord](https://discord.gg/steelbattalion)
