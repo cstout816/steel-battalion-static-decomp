@@ -79,7 +79,7 @@ These are candidate FFI regions derived from the pinned crate's half-open range 
 
 ### Reset and bootstrap behavior
 
-Static analysis of the user's XBE found GP and EP setup sequences that write reset/control value 1 followed by 3. The xemu reference resets a DSP while either required reset bit is low and bootstraps it on the transition to both bits high. The C FFI does not provide a named bootstrap operation. xemu's bridge implements bootstrap in host code by loading scratch memory into P memory, masking words to 24 bits, and invalidating the JIT cache. Adapt this behavior to XboxRecomp's memory layout only after confirming its scratch DMA and bootstrap contract. Do not treat a command-doorbell clear as DSP execution.
+Static analysis of the user's XBE found GP and EP setup sequences that write reset/control value 1 followed by 3. The xemu reference resets a DSP while either required reset bit is low and bootstraps it on the transition to both bits high. The C FFI does not provide a named bootstrap operation. xemu's bridge implements bootstrap in host code by loading scratch memory into P memory, masking words to 24 bits, and invalidating the JIT cache. Adapt this behavior to XboxRecomp's memory layout only after confirming its scratch DMA and bootstrap contract. xemu's 512-byte MCPX boot ROM is loaded into the Xbox CPU BIOS address space; its APU initializer receives RAM and does not receive this image. Its presence is therefore not evidence of DSP firmware availability or DSP scratch contents. First establish which guest/kernel or DirectSound effect-image path populates the scratch descriptors. Do not treat a command-doorbell clear as DSP execution.
 
 ### Peripheral callbacks, DMA, and frame scheduling
 
