@@ -13,13 +13,13 @@ The RTX 4070 SUPER exposes the Vulkan features the inspected xemu renderer requi
 - Adapt the xemu NV2A/PGRAPH Vulkan graphics subsystem to the XboxRecomp guest-memory and pushbuffer interfaces.
 - Reuse only the GPU subsystem and individually license-reviewed files. Do not bring in xemu's CPU, kernel, machine boot, or full-system emulator loop.
 - Keep the statically recompiled x86 game and existing Xbox runtime architecture.
-- Use the software rasterizer only as a local correctness reference during bring-up. It is not a fallback or alternate production backend.
-- Retire the earlier D3D11/D3D12 renderer experiments from the active path. Existing D3D12 experiment patches remain isolated historical records and must not be applied to the production build.
+- The present NV2A path still renders on the CPU while Vulkan is being brought up. Keep it as the comparison baseline during the port; it is not the selected final renderer.
+- Do not develop D3D11 or D3D12 as alternate NV2A renderers. The inherited XboxRecomp D3D8 compatibility library currently builds its Windows implementation on D3D11, and the local NV2A source still contains an opt-in D3D12 experiment. Neither is the selected NV2A backend. Retire the D3D12 experiment from the active build as Vulkan scene coverage replaces it; keep experiment patches clearly marked historical.
 - Keep one Vulkan renderer path from initial boot through campaign play. Do not add API selection or backend switching.
 
 ## Current state and constraints
 
-Milestone 3, Boot and Compatibility, remains incomplete. The clean software-rendered build advances through the Steel Battalion logo sequence at about 0.4 guest FPS; the latest captured frame still shows CAPCOM. No Vulkan renderer code has been copied or integrated, no title-screen boot is verified, and audio output and physical Steel Battalion controller behavior remain unverified.
+Milestone 3, Boot and Compatibility, remains incomplete. The clean software-rendered build advances through the Steel Battalion logo sequence at about 0.4 guest FPS; the latest captured frame still shows CAPCOM. A project-owned Vulkan host presenter now selects the RTX 4070 SUPER, creates a 640x480 swapchain, and successfully presents a swapchain image. It does not render NV2A scenes; correct game pixels and title-screen boot remain unverified. Audio output and physical Steel Battalion controller behavior also remain unverified.
 
 The xemu renderer is not a drop-in library. Its PGRAPH state and renderer use QEMU services and xemu-specific data structures. A port needs a host adapter for guest RAM, pushbuffer state, surfaces, textures, shader translation, synchronization, and presentation. Source files have differing license notices; audit every reused file and dependency before integration or distribution. No distribution license has been selected. Do not install system-wide Vulkan tooling; use a project-local, reproducible dependency setup after its license review.
 
