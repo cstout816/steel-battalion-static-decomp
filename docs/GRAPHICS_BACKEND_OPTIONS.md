@@ -1,6 +1,6 @@
 # Graphics Backend Decision
 
-**Fixed target: Vulkan.** The project has one graphics-backend decision and no runtime backend selector. The migration is incomplete: the current Windows guest-rendering path still uses XboxRecomp's D3D8-to-D3D11 compatibility layer, while the project-owned Vulkan module only uploads and presents a copied framebuffer. Vulkan does not yet render NV2A scenes or replace the D3D11-backed XDK graphics calls. Complete that migration before describing the game runtime as Vulkan-rendered. Keep the XboxRecomp static-recompilation CPU, kernel, filesystem, audio, and input architecture; this graphics decision does not introduce full-system emulation.
+**Fixed target: Vulkan.** The project has one graphics-backend decision and no runtime backend selector. The Windows build includes XboxRecomp's D3D8-to-D3D11 compatibility library, but the observed Steel Battalion pushbuffer path in `nv2a_pb_scan.c` dispatches to a CPU executor and software rasterizer. The project-owned Vulkan module only uploads and presents a copied framebuffer. Vulkan does not yet render NV2A scenes or replace the Windows D3D8 compatibility implementation. Complete that migration before describing the game runtime as Vulkan-rendered. Keep the XboxRecomp static-recompilation CPU, kernel, filesystem, audio, and input architecture; this graphics decision does not introduce full-system emulation.
 
 ## Why Vulkan
 
@@ -20,17 +20,17 @@ The RTX 4070 SUPER exposes the Vulkan features the inspected xemu renderer requi
 
 ## Current state and constraints
 
-Milestone 3, Boot and Compatibility, remains incomplete. The clean software-rendered build advances through the Steel Battalion logo sequence at about 0.4 guest FPS; the latest captured frame still shows CAPCOM. A project-owned Vulkan presenter selects the RTX 4070 SUPER, creates a 640x480 swapchain, and presents a copied guest framebuffer. This verifies Vulkan presentation plumbing only. Current Windows game graphics still pass through D3D11, and Vulkan NV2A rendering, correct game pixels, and title-screen boot remain unverified. Audio output and physical Steel Battalion controller behavior also remain unverified.
+Milestone 3, Boot and Compatibility, remains incomplete. The clean software-rendered build advances through the Steel Battalion logo sequence at about 0.4 guest FPS; the latest captured frame still shows CAPCOM. A project-owned Vulkan presenter selects the RTX 4070 SUPER, creates a 640x480 swapchain, and presents a copied guest framebuffer. This verifies Vulkan presentation plumbing only. The Windows build includes D3D11-backed compatibility code, but the latest startup traces do not show the D3D8 or D3D11 path being initialized; the observed guest pushbuffer path is CPU-rasterized. Vulkan NV2A rendering, correct game pixels, and title-screen boot remain unverified. Audio output and physical Steel Battalion controller behavior also remain unverified.
 
 The xemu renderer is not a drop-in library. Its PGRAPH state and renderer use QEMU services and xemu-specific data structures. A port needs a host adapter for guest RAM, pushbuffer state, surfaces, textures, shader translation, synchronization, and presentation. Source files have differing license notices; audit every reused file and dependency before integration or distribution. No distribution license has been selected. Do not install system-wide Vulkan tooling; use a project-local, reproducible dependency setup after its license review.
 
-The file-by-file xemu renderer and dependency findings are in [VULKAN_REUSE_AUDIT.md](VULKAN_REUSE_AUDIT.md). No xemu renderer code has been copied; its shader/preprocessor dependency and the project-wide license path remain under review.
+The file-by-file xemu renderer and dependency findings are in [VULKAN_REUSE_AUDIT.md](VULKAN_REUSE_AUDIT.md). The source-level implementation map is in [VULKAN_MIGRATION_MAP.md](VULKAN_MIGRATION_MAP.md). No xemu renderer code has been copied; its shader/preprocessor dependency and the project-wide license path remain under review.
 
 ## Evidence
 
 - [xemu Vulkan NV2A renderer and active work](https://github.com/xemu-project/xemu/tree/master/hw/xbox/nv2a/pgraph/vk)
 - [xemu's Vulkan/OpenGL performance issue](https://github.com/xemu-project/xemu/issues/1838), which shows results vary by game and hardware.
-- [XboxRecomp](https://github.com/sp00nznet/xboxrecomp), the selected static-recompilation foundation. Its current Windows D3D8 compatibility layer uses D3D11; replacing that path is required for the selected Vulkan direction.
+- [XboxRecomp](https://github.com/sp00nznet/xboxrecomp), the selected static-recompilation foundation. Its Windows D3D8 compatibility library is D3D11-backed; the Steel Battalion pushbuffer executor is a separate CPU-raster path.
 
 ## Decision history
 

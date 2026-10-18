@@ -4,7 +4,9 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
-**Fixed target graphics backend: Vulkan. Migration is incomplete.** Current source inspection confirms the Windows Xbox D3D8 compatibility layer compiles shaders and renders through D3D11, and the NV2A PGRAPH translator issues calls into that layer. The project-owned Vulkan component only uploads and presents a copy of the guest framebuffer; it does not render guest commands. D3D12 code is disabled in the active build. No runtime backend selector is planned. Historical dated entries below record earlier experiments. Milestone 3 remains active.
+**Fixed target graphics backend: Vulkan. Migration is incomplete.** The Windows build includes XboxRecomp's D3D8-to-D3D11 compatibility library and a separate PGRAPH-to-D3D11 translator. Steel Battalion's observed pushbuffer scan path dispatches to `nv2a_pb_exec`, which currently rasterizes on the CPU. Recent startup logs show Vulkan presentation only and do not show D3D8/D3D11 initialization. The Vulkan component uploads and presents a copy of the guest framebuffer; it does not render guest commands. D3D12 code is disabled in the active build. No runtime backend selector is planned. Historical dated entries below record earlier experiments. Milestone 3 remains active.
+
+See [the Vulkan migration map](VULKAN_MIGRATION_MAP.md) for source call paths, verified runtime boundaries, and the remaining implementation steps.
 
 ### Detailed field progress
 
@@ -37,7 +39,7 @@ Xbox kernel and synchronization                  [--------------------] 0 / 3 (0
 Filesystem and ISO validation                    [--------------------] 0 / 3 (0%)
 Vulkan/NV2A: full scene rendering                 [--------------------] 0 / 3 (0%)
 Vulkan host presentation: device/swapchain/present  [####################] 3 / 3 (100%)
-Windows graphics migration: D3D8 calls routed through Vulkan [--------------------] 0 / 1 (0%)
+Windows graphics migration: guest draws rendered by Vulkan [--------------------] 0 / 1 (0%)
 Audio: guest DSP execution and audible output     [##########----------] 1 / 2 (50%)
 
 Original SB controller: input, mapping, lights   [--------------------] 0 / 3 (0%)
