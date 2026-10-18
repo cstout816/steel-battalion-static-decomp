@@ -1,7 +1,7 @@
 # Graphics Backend Decision Record
 
-**Status:** Research complete; implementation approval required  
-**Current milestone:** Milestone 3, Boot and Compatibility  
+**Status:** Backend selected by performance and platform review; no renderer implementation started
+**Current milestone:** Milestone 3, Boot and Compatibility
 **Static recompilation architecture:** Retained. The options below change only how translated NV2A rendering is produced; none replaces the project with full-system emulation.
 
 ## Evidence from the current build
@@ -24,14 +24,25 @@
 
 ## Recommended decision
 
-**Option B, a native D3D12 NV2A raster backend, is the recommendation** because Direct3D 12 is the requested target API. It best matches the stated end state, although the local XboxRecomp tree does not provide a ready-made D3D12 backend and the renderer semantics will need substantial implementation and validation. The Xbox x86 code would remain statically translated, and the NV2A command stream would remain handled by compatibility code.
+**Select native Direct3D 12 for the Windows NV2A backend.** The available evidence does not establish a universal performance winner between D3D12 and Vulkan on NVIDIA GPUs. NVIDIA describes both as explicit, low-overhead APIs and notes that performance depends on resource binding and workload choices; its tooling supports profiling both APIs. The decisive performance evidence in this project is that the current software rasterizer spends 2.18–2.40 seconds per sampled splash frame in `raster_batch()`. Replacing that CPU pixel loop with a correct hardware renderer is expected to matter far more than a presumed API-wide speed difference.
 
-Option A remains an interim-only alternative if a D3D11 boot experiment is preferred despite leaving the final API migration open. Option C should not proceed without the project-wide license decision and review described above. No implementation starts until one option is approved.
+D3D12 is the strongest evidence-based fit for this Windows-only application and RTX 4070 Super: it is a native Windows API, matches the requested target, and avoids porting the xemu Vulkan renderer. The Steel Battalion community fork [Xemu-SB-VK](https://github.com/quizerno/Xemu-SB-VK) provides useful controller and Vulkan implementation research, but its README says original Steel Battalion performance is inconsistent and does not publish a controlled Vulkan-versus-D3D12 benchmark. Reusing xemu's Vulkan NV2A implementation would also conflict with the checked-out XboxRecomp contribution policy against porting GPL code. A fresh Vulkan backend would require substantial independent work without evidence it would run faster here.
 
-## Validation gates after approval
+This is a reasoned architecture choice, **not a measured API benchmark**. No Direct3D 12 backend is implemented or verified. The Windows static-recompilation CPU/kernel architecture stays unchanged. D3D11 remains an interim-only option and is not the selected final backend.
+
+### Research sources
+
+- [NVIDIA Advanced API Performance: Descriptors](https://developer.nvidia.com/blog/advanced-api-performance-descriptors/) — discusses resource-binding performance practices for Direct3D 12 and Vulkan.
+- [NVIDIA Nsight Graphics](https://developer.nvidia.com/nsight-graphics) — supports profiling Direct3D 12 and Vulkan applications, enabling a later matched-workload comparison.
+- [Xemu-SB-VK project notes](https://github.com/quizerno/Xemu-SB-VK) — community Steel Battalion fork and its stated Vulkan/non-Vulkan limitations.
+- [xemu NV2A Vulkan renderer](https://github.com/xemu-project/xemu/tree/master/hw/xbox/nv2a/pgraph/vk) — reference implementation for research; licensing and project policy constrain direct reuse.
+
+## Validation gates
 
 1. Keep the software renderer available as the reference path.
 2. Compare identical guest frames at 640×480 before changing resolution or effects.
 3. Verify clear, depth, blend, texture sampling, vertex-program outputs, and guest framebuffer/surface updates independently.
-4. Measure frame time and image differences across the splash and title screen; do not infer gameplay compatibility from the intro.
-5. Advance no graphics or boot progress bars until a repeatable title-screen run and the corresponding feature behavior are verified.
+4. Measure CPU and GPU frame time on identical splash and title-screen captures; compare frame pacing and image differences.
+5. Do not infer campaign performance from the intro or advance graphics/boot progress bars until a repeatable title-screen run and the corresponding behavior are verified.
+
+No implementation starts until the user approves moving from research into renderer work.
