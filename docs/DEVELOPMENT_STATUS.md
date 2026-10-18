@@ -3,6 +3,9 @@
 This page is for people who want the detailed engineering tracker. The project is experimental and has **not** reached a playable title screen. Progress bars describe tracked work; they do not mean that a game feature is playable.
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
+
+**Final graphics backend: Vulkan only.** This is the settled production choice for NV2A and graphics compatibility; no D3D11/D3D12 alternatives or runtime backend switch will be developed. The older dated entries below are a chronological record of superseded experiments, not current directions. Milestone 3 is still in progress.
+
 ### Detailed field progress
 
 These smaller bars expose progress across the individual work areas requested for the project. Each denominator is a short list of verifiable outcomes, not an estimate of effort. A 0% bar means no outcome in that field has been verified yet; it does not mean the work is impossible.
@@ -774,7 +777,7 @@ The checked-out local XboxRecomp tree (`v0.13.1-dirty`) identifies the toolkit a
 
 The viable research paths are to implement a semantics-preserving hardware raster backend against the existing decoded NV2A state using original code, or to pursue an explicitly approved GPL-compatible integration after reviewing project-wide distribution obligations and the XboxRecomp upstream policy. Continue with original-code feasibility and method-coverage analysis first; do not begin a GPL-derived port or change the license implicitly. Milestone 3 and all progress bars remain unchanged.
 
-The current option comparison is in [`GRAPHICS_BACKEND_OPTIONS.md`](GRAPHICS_BACKEND_OPTIONS.md). It recommends a native D3D12 NV2A raster backend to match the requested target API. D3D11 is listed only as an interim boot experiment if explicitly preferred; Vulkan remains an alternative subject to implementation and license review. No implementation or API change is approved by this research note. The next code change depends on approval of the backend direction.
+At this earlier checkpoint, the option comparison in [`GRAPHICS_BACKEND_OPTIONS.md`](GRAPHICS_BACKEND_OPTIONS.md) recommended D3D12 and listed Vulkan as an alternative. That recommendation has since been superseded by the final Vulkan-only decision at the top of this status page and in the current backend decision record.
 
 ### USB input and startup follow-up (2026-10-18)
 
@@ -798,7 +801,7 @@ Static XBE call-graph analysis narrowed the five-minute checkpoint: startup func
 
 A closer decode of the five-minute guest stack resolves the sampled instruction pointer `0x000DFE75` inside `sub_000DFBC0` (function range `0x000DFBC0–0x000DFE83`), the draw routine reached from `sub_000DFF40`; return address `0x000E0362` is the caller continuation after the second logo-helper call. This is a point-in-time guest PC inside the draw call, not evidence that a timer or input wait is the active instruction. In the same run, the GPU report had only 117 flips after 300 seconds, and the isolated raster timing probe measured 2.18–2.40 seconds in `raster_batch()` for each sampled splash frame. Together these observations make CPU software rasterization the leading measured startup bottleneck, while not proving it is the only cause of the missing title screen.
 
-The earlier call-path note's alternatives (intentional timer wait or missed input condition) remain possible at other times but are not supported as the active watchdog location. Next implement the selected native D3D12 backend incrementally in the local compatibility runtime, keeping the software path available for comparisons and retaining guest semantics. Start by mapping the observed vertex/combiner/surface workload to a minimal GPU path; do not claim boot until the title screen is repeatable. No feature bars advance.
+The earlier call-path note's alternatives (intentional timer wait or missed input condition) remain possible at other times but are not supported as the active watchdog location. At this historical checkpoint the next-renderer proposal was an incremental D3D12 backend. That proposal is superseded; the final project renderer is Vulkan only. Do not claim boot until the title screen is repeatable. No feature bars advance.
 
 ### Native GPU API selection and prototype status (2026-10-18)
 
@@ -931,3 +934,7 @@ A first bounded launch was discarded after its log unexpectedly contained `[XBE-
 The rebuilt Release x64 executable then ran for about five minutes with pushbuffer execution, asynchronous I/O, modeled vblank/title events, diagnostic AC'97 readiness, and the virtual Steel Battalion USB profile. The clean log contains no loop-counter trace. At the last complete periodic reports it had reached 135 flips at approximately 0.41 guest FPS; NV2A DMA PUT and GET advanced together in sampled reports. The last report showed 268 draws, zero draws with valid coordinates, and 3,456 unhandled method instances. It did not reach the title screen. The run was stopped before its 600-second watchdog bound. No screenshot or title-timer trace was enabled, so the visible splash identity and fade-timer values are unverified for this run. The earlier traced-binary launch is invalid and must not be used as performance evidence. Next run a shorter bounded capture with `RECOMP_TITLE_TIMER_TRACE=1` and framebuffer dumps enabled, then compare the actual guest timer and screen across intervals. Milestone 3 and all progress bars remain unchanged.
 
 The follow-up 120-second run used that rebuilt executable with `RECOMP_TITLE_TIMER_TRACE=1` and periodic framebuffer dumps. It exited at the configured watchdog with code 3 and left no game process. Reports showed 33 flips at 0.40 guest FPS and timer samples `0.4`, `1.0`, then `0.45` (thresholds `1/0`, step `0.05`). The last sample is consistent with the second logo helper having begun after the first reached its threshold; the timer continued advancing. The final local framebuffer capture still showed the CAPCOM logo. The title screen remains unverified. This confirms a slow but progressing splash sequence rather than a fixed timer or missing semaphore release. Logs and captures are ignored in `iso/local-analysis/logs/m3-title-timer-120s-20261018/`. Do not skip or accelerate the guest's logo behavior; next progress depends on a faster, correct NV2A backend and the user's approval of the proposed Vulkan architecture. No progress bars advance.
+
+### Final graphics backend lock (2026-10-18)
+
+The user's direction is explicit: stop switching among graphics APIs and choose one. **Vulkan is the sole production backend**, for NV2A pushbuffer rendering and graphics compatibility. No D3D11 or D3D12 alternative renderer or runtime backend selection will be added. Older D3D11/D3D12 entries in this chronological log describe superseded experiments, not current plans. The next renderer work proceeds on the Vulkan adapter path while preserving static recompilation; the software rasterizer remains a local comparison aid only. Milestone 3 remains incomplete, with the clean boot reaching only the CAPCOM splash. No milestone or field progress bars advance.
