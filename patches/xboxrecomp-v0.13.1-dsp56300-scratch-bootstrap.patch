@@ -1,0 +1,380 @@
+# Follow-on patch for xboxrecomp v0.13.1; apply after dsp56300-ffi-lifecycle.patch.
+diff --git a/src/apu/apu_dsp.c b/src/apu/apu_dsp.c
+index 41dbf49..8f1f3e2 100644
+--- a/src/apu/apu_dsp.c
++++ b/src/apu/apu_dsp.c
+@@ -26,6 +26,8 @@
+ #include "fpconv.h"
+ #include "apu_regs.h"
+ #include "apu_dsp56300_bridge.h"
++#include "apu_shim.h"
++#include "../kernel/xbox_memory_layout.h"
+ 
+ #ifdef MCPX_APU_USE_DSP56300
+ #include "dsp56300.h"
+@@ -34,6 +36,16 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
++static uint8_t *apu_dsp_resolve_physical(uint64_t address, size_t size)
++{
++    size_t mapped_size = xbox_GetMappedSize();
++    if (!g_apu_ram_ptr || address > mapped_size ||
++        size > mapped_size - (size_t)address) {
++        return NULL;
++    }
++    return mcpx_apu_phys(address);
++}
++
+ static bool apu_gp_ep_trace_enabled(void)
+ {
+     static int enabled = -1;
+@@ -62,6 +74,28 @@ static void apu_gp_ep_trace(bool is_gp, bool is_write, uint32_t offset,
+     }
+ }
+ 
++static bool apu_dsp_bootstrap(MCPXAPUState *d, bool is_gp)
++{
++    static unsigned int failure_notice_count;
++    DSPState *dsp = is_gp ? d->gp.dsp : d->ep.dsp;
++    uint32_t sge_base = d->regs[is_gp ? NV_PAPU_GPSADDR : NV_PAPU_EPSADDR];
++    uint32_t max_sge = d->regs[is_gp ? NV_PAPU_GPSMAXSGE : NV_PAPU_EPSMAXSGE];
++
++    if (!mcpx_apu_dsp_bootstrap_from_scratch(
++            dsp, sge_base, max_sge, 0x0800u, apu_dsp_resolve_physical)) {
++        if (failure_notice_count++ < 4) {
++            fprintf(stderr, "[APU] %s DSP scratch bootstrap failed "
++                            "(SGE=0x%08X max=%u)\n",
++                    is_gp ? "GP" : "EP", sge_base, max_sge);
++        }
++        return false;
++    }
++    fprintf(stderr, "[APU] %s DSP bootstrapped 2048 program words "
++                    "from guest scratch DMA\n",
++            is_gp ? "GP" : "EP");
++    return true;
++}
++
+ static void mcpx_apu_dsp_sync_reset(MCPXAPUState *d, bool is_gp)
+ {
+     DSPState *dsp = is_gp ? d->gp.dsp : d->ep.dsp;
+@@ -78,24 +112,33 @@ static void mcpx_apu_dsp_sync_reset(MCPXAPUState *d, bool is_gp)
+     }
+     value = *(volatile uint32_t *)(window + reset_reg);
+     old_value = regs[reset_reg];
+-    if (value == old_value) {
+-        return;
+-    }
+-    regs[reset_reg] = value;
+-    if (!(value & NV_PAPU_GPRST_GPRST) ||
+-        !(value & NV_PAPU_GPRST_GPDSPRST)) {
++    if (value != old_value) {
++        regs[reset_reg] = value;
++        if (!(value & NV_PAPU_GPRST_GPRST) ||
++            !(value & NV_PAPU_GPRST_GPDSPRST)) {
++            if (dsp) {
++                dsp->interrupts &= ~2u;
++            }
+ #ifdef MCPX_APU_USE_DSP56300
+-        mcpx_apu_dsp_engine_reset(dsp);
++            mcpx_apu_dsp_engine_reset(dsp);
+ #endif
+-    } else if ((!(old_value & NV_PAPU_GPRST_GPRST) ||
+-                !(old_value & NV_PAPU_GPRST_GPDSPRST)) &&
+-               (value & NV_PAPU_GPRST_GPRST) &&
+-               (value & NV_PAPU_GPRST_GPDSPRST)) {
+-        fprintf(stderr, "[APU] %s DSP reset released; firmware bootstrap is not implemented\n",
+-                is_gp ? "GP" : "EP");
++            dsp->interrupts &= ~2u;
++        } else if ((!(old_value & NV_PAPU_GPRST_GPRST) ||
++                    !(old_value & NV_PAPU_GPRST_GPDSPRST)) &&
++                   (value & NV_PAPU_GPRST_GPRST) &&
++                   (value & NV_PAPU_GPRST_GPDSPRST)) {
++            fprintf(stderr, "[APU-%s] DSP reset released\n",
++                    is_gp ? "GP" : "EP");
++        }
++        if (!is_gp) {
++            d->ep_frame_div = 0;
++        }
+     }
+-    if (!is_gp) {
+-        d->ep_frame_div = 0;
++    /* The game maps GP/EP windows as direct RAM, so this frame observer owns
++     * the reset-release bootstrap. Retry if the SGE table is not ready yet. */
++    if ((value & 3u) == 3u && !(dsp->interrupts & 2u) &&
++        apu_dsp_bootstrap(d, is_gp)) {
++        dsp->interrupts |= 2u;
+     }
+ }
+ 
+@@ -236,11 +279,15 @@ void mcpx_apu_dsp_mmio_write(MCPXAPUState *d, bool is_gp,
+                     !(old_value & NV_PAPU_GPRST_GPDSPRST)) &&
+                    (value & NV_PAPU_GPRST_GPRST) &&
+                    (value & NV_PAPU_GPRST_GPDSPRST)) {
+-            /* Scratch-to-P firmware bootstrap is not implemented yet. */
++            bool bootstrapped = apu_dsp_bootstrap(d, is_gp);
++            if (dsp && bootstrapped) {
++                dsp->interrupts |= 2u;
++            }
+             static unsigned int bootstrap_notice_count;
+             if (bootstrap_notice_count++ < 4) {
+-                fprintf(stderr, "[APU] %s DSP reset released; firmware bootstrap is not implemented\n",
+-                        is_gp ? "GP" : "EP");
++                fprintf(stderr, "[APU] %s DSP reset released; program bootstrap %s\n",
++                        is_gp ? "GP" : "EP",
++                        bootstrapped ? "completed" : "failed");
+             }
+         }
+         if (!is_gp) {
+@@ -276,7 +323,11 @@ void mcpx_apu_dsp_init(MCPXAPUState *d)
+     d->gp.realtime = false;
+     d->ep.realtime = false;
+ 
+-    fprintf(stderr, "[APU] DSP GP/EP initialized (STUBBED - passthrough mode)\n");
++#ifdef MCPX_APU_USE_DSP56300
++    fprintf(stderr, "[APU] GP/EP DSP56300 FFI engines enabled; scratch bootstrap active; cycle execution pending\n");
++#else
++    fprintf(stderr, "[APU] GP/EP guest RAM mapped; scratch bootstrap active; DSP execution disabled\n");
++#endif
+ }
+ 
+ void mcpx_apu_dsp_finalize(MCPXAPUState *d)
+
+diff --git a/src/apu/apu_dsp56300_bridge.c b/src/apu/apu_dsp56300_bridge.c
+index 0c46c33..c43dce5 100644
+--- a/src/apu/apu_dsp56300_bridge.c
++++ b/src/apu/apu_dsp56300_bridge.c
+@@ -1,8 +1,9 @@
+ /*
+  * XboxRecomp-owned adapter between the MCPX APU state and the MIT DSP56300 C FFI.
+  * The FFI receives stable backing arrays owned by DSPState. This file maps
+- * guest GP/EP RAM windows and manages the optional core lifecycle. Firmware
+- * bootstrap, DSP cycle scheduling, DMA, and audio generation are not wired.
++ * guest GP/EP RAM windows, loads reset-time programs from scratch SGE pages,
++ * and manages the optional core lifecycle. DSP cycle scheduling, FIFO DMA,
++ * and audio generation are not wired.
+  */
+ #include "apu_dsp56300_bridge.h"
+ 
+@@ -21,6 +22,9 @@
+ #define EP_Y_RAM_WORDS 0x0100u
+ #define DSP_P_RAM_WORDS 0x1000u
+ #define DSP_WORD_MASK 0x00FFFFFFu
++#define DSP_BOOTSTRAP_WORDS 0x0800u
++#define DSP_SCRATCH_PAGE_BYTES 0x1000u
++#define DSP_MAX_SGE_ENTRIES 0x4000u
+ 
+ typedef enum {
+     DSP_MMIO_SPACE_X,
+@@ -262,3 +266,85 @@ bool mcpx_apu_dsp_memory_write(DSPState *dsp, uint32_t byte_offset,
+ #endif
+     return true;
+ }
++
++static uint32_t read_le32(const uint8_t *p)
++{
++    return (uint32_t)p[0] |
++           ((uint32_t)p[1] << 8) |
++           ((uint32_t)p[2] << 16) |
++           ((uint32_t)p[3] << 24);
++}
++
++static bool scratch_read_scatter_gather(
++    uint32_t sge_base, uint32_t max_sge, uint8_t *dst, size_t len,
++    mcpx_apu_dsp_phys_resolver resolve_physical)
++{
++    uint64_t scratch_address = 0;
++
++    while (len > 0) {
++        uint32_t page_entry = (uint32_t)(scratch_address / DSP_SCRATCH_PAGE_BYTES);
++        uint32_t offset_in_page = (uint32_t)(scratch_address % DSP_SCRATCH_PAGE_BYTES);
++        size_t bytes_to_copy = DSP_SCRATCH_PAGE_BYTES - offset_in_page;
++        uint64_t descriptor_address;
++        uint8_t *descriptor;
++        uint32_t physical_address;
++        uint8_t *source;
++
++        if (bytes_to_copy > len) {
++            bytes_to_copy = len;
++        }
++        if (page_entry > max_sge || page_entry >= DSP_MAX_SGE_ENTRIES) {
++            return false;
++        }
++        descriptor_address = (uint64_t)sge_base + (uint64_t)page_entry * 8u;
++        if (descriptor_address > UINT32_MAX - 4u) {
++            return false;
++        }
++        descriptor = resolve_physical(descriptor_address, sizeof(uint32_t));
++        if (!descriptor) {
++            return false;
++        }
++        physical_address = read_le32(descriptor);
++        if ((uint64_t)physical_address + offset_in_page > UINT32_MAX ||
++            (uint64_t)physical_address + offset_in_page + bytes_to_copy > UINT32_MAX) {
++            return false;
++        }
++        source = resolve_physical((uint64_t)physical_address + offset_in_page,
++                                  bytes_to_copy);
++        if (!source) {
++            return false;
++        }
++        memcpy(dst, source, bytes_to_copy);
++        dst += bytes_to_copy;
++        len -= bytes_to_copy;
++        scratch_address += bytes_to_copy;
++    }
++    return true;
++}
++
++bool mcpx_apu_dsp_bootstrap_from_scratch(
++    DSPState *dsp, uint32_t sge_base, uint32_t max_sge,
++    uint32_t program_words, mcpx_apu_dsp_phys_resolver resolve_physical)
++{
++    uint32_t scratch[DSP_BOOTSTRAP_WORDS];
++    size_t scratch_bytes;
++
++    if (!dsp || !resolve_physical || !program_words ||
++        program_words > DSP_BOOTSTRAP_WORDS ||
++        max_sge >= DSP_MAX_SGE_ENTRIES) {
++        return false;
++    }
++    scratch_bytes = (size_t)program_words * sizeof(scratch[0]);
++    if (!scratch_read_scatter_gather(sge_base, max_sge, (uint8_t *)scratch,
++                                     scratch_bytes, resolve_physical)) {
++        return false;
++    }
++    for (uint32_t i = 0; i < program_words; ++i) {
++        if (!mcpx_apu_dsp_memory_write(
++                dsp, 0xA000u + i * 4u, scratch[i] & DSP_WORD_MASK)) {
++            return false;
++        }
++    }
++    mcpx_apu_dsp_sync_program_cache(dsp);
++    return true;
++}
+
+diff --git a/src/apu/apu_dsp56300_bridge.h b/src/apu/apu_dsp56300_bridge.h
+index 95bfc09..081cc1b 100644
+--- a/src/apu/apu_dsp56300_bridge.h
++++ b/src/apu/apu_dsp56300_bridge.h
+@@ -7,6 +7,7 @@
+ #include "apu_state.h"
+ 
+ #include <stdbool.h>
++#include <stddef.h>
+ 
+ bool mcpx_apu_dsp_engine_init(DSPState *dsp);
+ void mcpx_apu_dsp_engine_destroy(DSPState *dsp);
+@@ -16,3 +17,8 @@ bool mcpx_apu_dsp_memory_read(DSPState *dsp, uint32_t byte_offset,
+ bool mcpx_apu_dsp_memory_write(DSPState *dsp, uint32_t byte_offset,
+                                uint32_t value);
+ void mcpx_apu_dsp_sync_program_cache(DSPState *dsp);
++
++typedef uint8_t *(*mcpx_apu_dsp_phys_resolver)(uint64_t address, size_t size);
++bool mcpx_apu_dsp_bootstrap_from_scratch(
++    DSPState *dsp, uint32_t sge_base, uint32_t max_sge,
++    uint32_t program_words, mcpx_apu_dsp_phys_resolver resolve_physical);
+
+diff --git a/tests/dsp56300_memory_map_test.c b/tests/dsp56300_memory_map_test.c
+index 19f93bf..0807acb 100644
+--- a/tests/dsp56300_memory_map_test.c
++++ b/tests/dsp56300_memory_map_test.c
+@@ -8,6 +8,18 @@
+ 
+ #include <stdint.h>
+ #include <stdio.h>
++#include <string.h>
++
++static uint8_t synthetic_physical_ram[0x10000];
++
++static uint8_t *resolve_synthetic_physical(uint64_t address, size_t size)
++{
++    if (address > sizeof(synthetic_physical_ram) ||
++        size > sizeof(synthetic_physical_ram) - (size_t)address) {
++        return NULL;
++    }
++    return synthetic_physical_ram + address;
++}
+ 
+ static int check_word(const char *name,
+                       const DSPState *dsp,
+@@ -131,9 +143,54 @@ static int check_ep_map(void)
+     return ok;
+ }
+ 
++static int check_scratch_bootstrap(void)
++{
++    DSPState dsp = {0};
++    uint8_t guest_ram[0xE000] = {0};
++    uint32_t *table = (uint32_t *)(synthetic_physical_ram + 0x1000u);
++    uint32_t *page0 = (uint32_t *)(synthetic_physical_ram + 0x3000u);
++    uint32_t *page1 = (uint32_t *)(synthetic_physical_ram + 0x5000u);
++    int ok = 1;
++
++    memset(synthetic_physical_ram, 0, sizeof(synthetic_physical_ram));
++    table[0] = 0x3000u;
++    table[1] = 0;
++    table[2] = 0x5000u;
++    table[3] = 0;
++    page0[0] = 0xAB112233u;
++    page0[0x3FF] = 0xCD223344u;
++    page1[0] = 0xEF334455u;
++    page1[0x3FF] = 0xAA445566u;
++
++    dsp.is_gp = true;
++    dsp.guest_mmio_base = guest_ram;
++    if (!mcpx_apu_dsp_engine_init(&dsp)) {
++        fprintf(stderr, "DSP bootstrap test engine creation failed\n");
++        return 0;
++    }
++    if (!mcpx_apu_dsp_bootstrap_from_scratch(
++            &dsp, 0x1000u, 1u, 0x0800u, resolve_synthetic_physical)) {
++        fprintf(stderr, "DSP scatter/gather scratch bootstrap failed\n");
++        ok = 0;
++    } else if (((uint32_t *)(guest_ram + 0xA000u))[0] != 0x00112233u ||
++               ((uint32_t *)(guest_ram + 0xA000u))[0x3FF] != 0x00223344u ||
++               ((uint32_t *)(guest_ram + 0xA000u))[0x400] != 0x00334455u ||
++               ((uint32_t *)(guest_ram + 0xA000u))[0x7FF] != 0x00445566u) {
++        fprintf(stderr, "DSP bootstrap did not mask/copy across SGE pages\n");
++        ok = 0;
++    }
++    if (mcpx_apu_dsp_bootstrap_from_scratch(
++            &dsp, 0x1000u, 0u, 0x0800u, resolve_synthetic_physical)) {
++        fprintf(stderr, "DSP bootstrap accepted an incomplete SGE table\n");
++        ok = 0;
++    }
++    mcpx_apu_dsp_engine_destroy(&dsp);
++    return ok;
++}
++
+ int main(void)
+ {
+-    if (!check_gp_map() || !check_ep_map()) {
++    if (!check_gp_map() || !check_ep_map() || !check_scratch_bootstrap()) {
+         return 1;
+     }
+     puts("DSP56300 FFI memory map and lifecycle checks passed");
+
+diff --git a/src/apu/README.md b/src/apu/README.md
+index cc0925e..4a9a089 100644
+--- a/src/apu/README.md
++++ b/src/apu/README.md
+@@ -19,10 +19,14 @@ clean checkout and make the Rust 1.99 toolchain available to CMake.
+ 
+ The GP and EP RAM windows are routed through the APU MMIO handler, including
+ the GP mixbuffer alias and 24-bit word masking. P-memory writes use the FFI
+-write API when that engine is enabled so translated code is invalidated. The
+-reset register is stored and reset assertion resets the core; reset release
+-does not yet load firmware. Scratch bootstrap, cycle scheduling, peripheral
+-callbacks, FIFO/DMA, and DSP audio remain unimplemented. The optional FFI core
++write API when that engine is enabled so translated code is invalidated. Reset
++release now copies 0x800 words from the guest scratch scatter/gather table into
++P memory through the runtime's bounded physical-memory resolver. A focused
++synthetic test verifies page-boundary copies, 24-bit masking, and rejection of
++an incomplete descriptor table. One bounded Steel Battalion startup with the
++optional FFI enabled logged successful GP and EP bootstraps; it did not execute
++the DSP programs or verify audible output. Cycle scheduling, peripheral
++callbacks, FIFO/DMA, and DSP audio remain incomplete. The optional FFI core
+ stays off by default, and this is not playable-audio support.
+ 
+ ## Files
