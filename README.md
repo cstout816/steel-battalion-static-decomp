@@ -168,9 +168,11 @@ Graphics: textures and shader output                       [--------------------
 Graphics: correct presented game image                     [--------------------] 0 / 1 (0%)
 NV2A analysis: PMC interrupt-enable write mapped            [#-------------------] 1 / 1 (100%)
 NV2A startup: PCRTC vblank clear/enable sequence observed    [#-------------------] 1 / 1 (100%)
-NV2A runtime: modeled periodic vblank source                 [--------------------] 0 / 1 (0%)
-NV2A bridge: PCI IRQ routed to connected guest ISR            [--------------------] 0 / 1 (0%)
-NV2A runtime: hardware-valid interrupt delivery verified    [--------------------] 0 / 1 (0%)
+NV2A runtime: opt-in modeled periodic vblank observed         [#-------------------] 1 / 1 diagnostic (100%)
+NV2A bridge: opt-in modeled IRQ reached ISR and DPC           [#-------------------] 1 / 1 diagnostic (100%)
+NV2A bridge: startup event setter called by guest DPC          [#-------------------] 1 / 1 diagnostic (100%)
+NV2A bridge: startup wait release verified                    [--------------------] 0 / 1 (0%)
+NV2A runtime: default, hardware-valid delivery verified       [--------------------] 0 / 1 (0%)
 Audio: device initialization                               [#-------------------] 1 / 3 (33%)
 Audio: DSP processing and game sound                       [--------------------] 0 / 2 (0%)
 Input: original Steel Battalion hardware                   [--------------------] 0 / 3 (0%)
@@ -186,7 +188,7 @@ Campaign matrix: frame pacing                               [-------------------
 Campaign matrix: mission completion and progression         [--------------------] 0 / 1 (0%)
 ```
 
-The XBE entry point and section map are documented; that is static analysis, not verified runtime behavior. The title-asset bar records a diagnostic read of the three title XPR files only, not complete filesystem compatibility. Pushbuffer handling records command processing and draw calls, not a correct rendered scene. The NV2A analysis bar records a traced guest write and its static call path; it does not establish valid interrupt behavior. The local compatibility shim's PCI IRQ assert/deassert functions are no-ops, and the opt-in vblank ISR call does not replace that bridge. Both guest IRQ routing and hardware-valid delivery therefore remain unverified. The campaign bars remain at zero because no mission has been verified from loading through completion and progression.
+The XBE entry point and section map are documented; that is static analysis, not verified runtime behavior. The title-asset bar records a diagnostic read of the three title XPR files only, not complete filesystem compatibility. Pushbuffer handling records command processing and draw calls, not a correct rendered scene. The NV2A analysis bar records a traced guest write and its static call path. New opt-in diagnostics now show modeled vblank, aggregate IRQ delivery through the connected ISR/DPC, and a guest DPC call to the startup event setter. They do not show that the waiting thread was released or that the IRQ timing and behavior are hardware-valid. These diagnostic hooks remain opt-in; default delivery and a verified title screen remain at zero. The campaign bars remain at zero because no mission has been verified from loading through completion and progression.
 
 ### Full project field tracker
 

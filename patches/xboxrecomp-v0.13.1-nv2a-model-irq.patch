@@ -1,0 +1,181 @@
+diff --git a/src/kernel/kernel_bridge.c b/src/kernel/kernel_bridge.c
+index c65ba43..cac2b10 100644
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -29,6 +29,7 @@
+ #include "guest_vmem.h"
+ #include "xbox_memory_layout.h"
+ #include "recomp_icall_feedback.h"
++#include "nv2a/nv2a_state.h"
+ #include <stdio.h>
+ /* stdlib.h is load-bearing, not tidiness. Without it C89 implicit declaration
+  * makes malloc return `int`, so bridge_spawn_thread truncated its heap pointer
+@@ -2201,6 +2202,16 @@ static void bridge_KeRemoveQueueDpc(void)
+  */
+ uint32_t xbox_GetConnectedInterrupt(uint32_t vector);   /* defined below */
+ 
++static volatile LONG g_nv2a_irq_line;
++
++/* Called by the NV2A model when its aggregated PCI interrupt line changes.
++ * The device side can run on the game/render thread; guest code is dispatched
++ * later by the timer worker, which owns a guest stack and TIB. */
++void xbox_nv2a_irq_line_changed(int asserted)
++{
++    InterlockedExchange(&g_nv2a_irq_line, asserted ? 1 : 0);
++}
++
+ static int kernel_raise_interrupt(uint32_t vector)
+ {
+     uint32_t kint = xbox_GetConnectedInterrupt(vector);
+@@ -2225,30 +2236,6 @@ static int kernel_raise_interrupt(uint32_t vector)
+     return (int)(g_eax & 1u);
+ }
+ 
+-/* The GPU's vertical blank, delivered rather than merely enabled.
+- *
+- * The D3D8 library linked into a title installs an ISR for this and then waits
+- * on it. Nothing ever raised it, so a title whose frame loop waits for vblank
+- * rather than polling stops after its first clear -- which is exactly where
+- * Half-Life 2's loader stops, with its videos open, its 23 MB of UI textures
+- * loaded, and no second frame.
+- *
+- * The ISR reads the NV2A's own interrupt status to decide whether the
+- * interrupt is its business, so the registers have to say vblank before the
+- * routine is called: PCRTC_INTR_0 bit 0 for the vblank itself, and PMC_INTR_0
+- * bit 24 to say the PCRTC block is the source. Without those the handler looks,
+- * finds nothing, and correctly declines.
+- *
+- * ponytail: a fixed 60 Hz off the timer tick rather than anything tied to the
+- * display mode, and no field or interlace handling. A title that measures
+- * refresh rate from this will read 60; a title that needs the real one wants
+- * the mode AvSetDisplayMode was given, which is recorded a few files away.
+- */
+-#define XBOX_NV2A_REG_BASE     0xFD000000u
+-#define NV2A_PMC_INTR_0        0x00000100u
+-#define NV2A_PMC_INTR_PCRTC    (1u << 24)
+-#define NV2A_PCRTC_INTR_0      0x00600100u
+-#define NV2A_PCRTC_INTR_VBLANK (1u << 0)
+ #define NV2A_VECTOR            3u
+ 
+ static void kernel_vblank_tick(void)
+@@ -2267,19 +2254,32 @@ static void kernel_vblank_tick(void)
+         return;
+     next_ms = now + 16;                       /* ~60 Hz */
+ 
++    /* Opt-in modeled display clock. The NV2A sets PCRTC status and aggregates
++     * enabled sources through its PCI line; the timer worker dispatches that
++     * line below rather than calling the guest ISR directly. */
++    nv2a_vblank_tick();
++}
++
++static void kernel_poll_nv2a_irq(void)
++{
++    static unsigned trace_count;
++    int claimed;
++
++    if (!InterlockedCompareExchange(&g_nv2a_irq_line, 0, 0))
++        return;
+     if (!xbox_GetConnectedInterrupt(NV2A_VECTOR))
+         return;
+ 
+-    BRIDGE_MEM32(XBOX_NV2A_REG_BASE + NV2A_PCRTC_INTR_0) |= NV2A_PCRTC_INTR_VBLANK;
+-    BRIDGE_MEM32(XBOX_NV2A_REG_BASE + NV2A_PMC_INTR_0)   |= NV2A_PMC_INTR_PCRTC;
+-
+-    {
+-        static unsigned n;
+-        int claimed = kernel_raise_interrupt(NV2A_VECTOR);
+-        if (n++ < 3)
+-            fprintf(stderr, "  [NV2A] vblank -> ISR %s\n",
+-                    claimed < 0 ? "not callable" :
+-                    claimed ? "claimed it" : "declined it");
++    claimed = kernel_raise_interrupt(NV2A_VECTOR);
++    if (getenv("RECOMP_NV2A_IRQ_TRACE") && trace_count++ < 16) {
++        NV2AState *gpu = nv2a_get_state();
++        fprintf(stderr,
++                "[NV2A-IRQ] line=1 result=%s PMC=%08X/%08X PCRTC=%08X/%08X\n",
++                claimed < 0 ? "not-callable" : claimed ? "claimed" : "declined",
++                gpu ? gpu->pmc.pending_interrupts : 0,
++                gpu ? gpu->pmc.enabled_interrupts : 0,
++                gpu ? gpu->pcrtc.pending_interrupts : 0,
++                gpu ? gpu->pcrtc.enabled_interrupts : 0);
+         fflush(stderr);
+     }
+ }
+@@ -2572,6 +2572,7 @@ static DWORD WINAPI kernel_timer_thread(LPVOID unused)
+ 
+         Sleep(10);
+         kernel_vblank_tick();  /* the GPU's frame clock */
++        kernel_poll_nv2a_irq();
+         kernel_drain_dpcs();   /* deferred work, before due timers */
+         now = (long long)GetTickCount64();
+ 
+@@ -9664,6 +9665,8 @@ void xbox_kernel_bridge_init(void)
+     int unbridged = 0;
+     DWORD old_protect;
+ 
++    nv2a_set_irq_line_callback(xbox_nv2a_irq_line_changed);
++
+     guest_cpu_join();          /* the caller goes on to run the title's entry point */
+     fprintf(stderr, "  Kernel thunk bridge: resolving %d entries at 0x%08X\n",
+             g_thunk_table_count, g_thunk_table_base);
+diff --git a/src/nv2a/nv2a_core.c b/src/nv2a/nv2a_core.c
+index 96c336b..85204a1 100644
+--- a/src/nv2a/nv2a_core.c
++++ b/src/nv2a/nv2a_core.c
+@@ -18,6 +18,7 @@
+ static NV2AState *g_nv2a = NULL;
+ static MemoryRegion g_vram_region;
+ static MemoryRegion g_ramin_region;
++static void (*g_irq_line_callback)(int asserted);
+ 
+ NV2AState *nv2a_get_state(void) {
+     return g_nv2a;
+@@ -51,12 +52,35 @@ void nv2a_update_irq(NV2AState *d)
+     }
+ 
+     if (d->pmc.pending_interrupts && d->pmc.enabled_interrupts) {
++        if (g_irq_line_callback)
++            g_irq_line_callback(1);
+         pci_irq_assert(PCI_DEVICE(d));
+     } else {
++        if (g_irq_line_callback)
++            g_irq_line_callback(0);
+         pci_irq_deassert(PCI_DEVICE(d));
+     }
+ }
+ 
++void nv2a_set_irq_line_callback(void (*callback)(int asserted))
++{
++    g_irq_line_callback = callback;
++    if (callback && g_nv2a)
++        callback(g_nv2a->pmc.pending_interrupts &&
++                 g_nv2a->pmc.enabled_interrupts);
++}
++
++void nv2a_vblank_tick(void)
++{
++    if (!g_nv2a)
++        return;
++
++    /* VBlank status is generated by the display clock independently of the
++     * source mask; nv2a_update_irq applies PCRTC and PMC enables. */
++    g_nv2a->pcrtc.pending_interrupts |= NV_PCRTC_INTR_0_VBLANK;
++    nv2a_update_irq(g_nv2a);
++}
++
+ /* ============================================================
+  * DMA helpers (from xemu nv2a.c)
+  * ============================================================ */
+diff --git a/src/nv2a/nv2a_state.h b/src/nv2a/nv2a_state.h
+index edd0453..05f752e 100644
+--- a/src/nv2a/nv2a_state.h
++++ b/src/nv2a/nv2a_state.h
+@@ -173,6 +173,8 @@ extern const NV2ABlockInfo blocktable[NV_NUM_BLOCKS];
+  * ============================================================ */
+ 
+ void nv2a_update_irq(NV2AState *d);
++void nv2a_set_irq_line_callback(void (*callback)(int asserted));
++void nv2a_vblank_tick(void);
+ 
+ /* Register block log helpers (no-op stubs since trace is disabled) */
+ static inline
