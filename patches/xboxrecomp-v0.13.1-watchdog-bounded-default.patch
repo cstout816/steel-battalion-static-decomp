@@ -12,5 +12,4 @@
 +        watchdog_capture_guest_pc();
  #endif
      fprintf(stderr, "[WATCHDOG] no exit after %us; guest esp=0x%08X\n"
----
 
