@@ -204,6 +204,8 @@ DSP cycle, interrupt, FIFO, and DMA behavior           [--------------------] 0 
 DSP processing and audible game sound                  [--------------------] 0 / 2 (0%)
 Basic in-game input                                    [--------------------] 0 / 1 (0%)
 
+An optional C harness for GP/EP memory boundaries, engine initialization, reset, and destruction is included in the DSP patch. It is source-only so far: configure, compile, link, and execution are unverified, so the verification bars remain at zero.
+
 ORIGINAL STEEL BATTALION CONTROLLER AND ACCESSIBILITY
 Original controller adapter/device detection          [--------------------] 0 / 1 (0%)
 Original buttons, toggle switches, and gear controls   [--------------------] 0 / 1 (0%)

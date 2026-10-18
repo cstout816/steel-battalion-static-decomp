@@ -1,6 +1,6 @@
 # MCPX GP/EP DSP integration plan
 
-**Status:** the optional C FFI engine-lifecycle scaffold is available as an unverified patch in `patches/xboxrecomp-v0.13.1-dsp56300-ffi-lifecycle.patch`. It has not been built, applied to the active dependency checkout, or enabled in the game runtime. No DSP execution or audio behavior is verified.
+**Status:** the optional C FFI engine-lifecycle scaffold and focused C memory-map/lifecycle harness are available in `patches/xboxrecomp-v0.13.1-dsp56300-ffi-lifecycle.patch`. The patch applies cleanly to a fresh v0.13.1 worktree and passes whitespace checks. It has not been built, applied to the active dependency checkout, or enabled in the game runtime. The harness has not been compiled or run. No DSP execution or audio behavior is verified.
 
 ## Execution architecture
 

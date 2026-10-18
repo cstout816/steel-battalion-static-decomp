@@ -1,8 +1,8 @@
 diff --git a/src/apu/CMakeLists.txt b/src/apu/CMakeLists.txt
-index 0bd4ebd..b165e4c 100644
+index 0bd4ebd..3fde598 100644
 --- a/src/apu/CMakeLists.txt
 +++ b/src/apu/CMakeLists.txt
-@@ -13,6 +13,88 @@ add_library(xbox_apu STATIC
+@@ -13,6 +13,104 @@ add_library(xbox_apu STATIC
      apu_xaudio2.c
  )
  
@@ -86,6 +86,22 @@ index 0bd4ebd..b165e4c 100644
 +        "${DSP56300_SOURCE_DIR}/crates/emu-ffi/include")
 +    target_compile_definitions(xbox_apu PRIVATE MCPX_APU_USE_DSP56300=1)
 +    target_link_libraries(xbox_apu PRIVATE dsp56300_ffi)
++
++    option(XBOXRECOMP_BUILD_DSP56300_TESTS
++        "Build focused DSP56300 C FFI memory-map and lifecycle checks" OFF)
++    if(XBOXRECOMP_BUILD_DSP56300_TESTS)
++        enable_testing()
++        add_executable(dsp56300_memory_map_test
++            apu_dsp56300_bridge.c
++            ../../tests/dsp56300_memory_map_test.c)
++        target_include_directories(dsp56300_memory_map_test PRIVATE
++            ${CMAKE_CURRENT_SOURCE_DIR}
++            ${CMAKE_CURRENT_SOURCE_DIR}/../nv2a
++            "${DSP56300_SOURCE_DIR}/crates/emu-ffi/include")
++        target_link_libraries(dsp56300_memory_map_test PRIVATE dsp56300_ffi)
++        add_dependencies(dsp56300_memory_map_test dsp56300_ffi_build)
++        add_test(NAME dsp56300_memory_map COMMAND dsp56300_memory_map_test)
++    endif()
 +endif()
 +
  target_include_directories(xbox_apu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -370,3 +386,101 @@ index 871ff5d..21ce9b0 100644
  void mcpx_apu_update_dsp_preference(MCPXAPUState *d);
  void mcpx_apu_dsp_frame(MCPXAPUState *d, float mixbins[NUM_MIXBINS][NUM_SAMPLES_PER_FRAME]);
  void mcpx_apu_dsp_ack_poll(MCPXAPUState *d);
+diff --git a/tests/dsp56300_memory_map_test.c b/tests/dsp56300_memory_map_test.c
+new file mode 100644
+index 0000000..8c58ff6
+--- /dev/null
++++ b/tests/dsp56300_memory_map_test.c
+@@ -0,0 +1,92 @@
++/*
++ * Focused C ABI check for the XboxRecomp-owned DSP56300 memory map.
++ * This does not execute firmware or claim APU audio compatibility.
++ */
++#include "apu_dsp56300_bridge.h"
++
++#include "dsp56300.h"
++
++#include <stdint.h>
++#include <stdio.h>
++
++static int check_word(const char *name,
++                      const DSPState *dsp,
++                      Dsp56300MemSpace space,
++                      uint32_t address,
++                      uint32_t *backing_word,
++                      uint32_t value)
++{
++    dsp56300_write_memory((Dsp56300Jit *)dsp->jit, space, address, value);
++    if (*backing_word != value ||
++        dsp56300_read_memory((const Dsp56300Jit *)dsp->jit, space, address) != value) {
++        fprintf(stderr, "DSP memory-map check failed: %s\n", name);
++        return 0;
++    }
++    return 1;
++}
++
++static int check_gp_map(void)
++{
++    DSPState gp = {0};
++    int ok = 1;
++
++    gp.is_gp = true;
++    if (!mcpx_apu_dsp_engine_init(&gp)) {
++        fprintf(stderr, "GP DSP56300 engine creation failed\n");
++        return 0;
++    }
++
++    ok &= check_word("GP X first word", &gp, DSP56300_MEM_SPACE_X,
++                     0x0000, &gp.core.xram[0], 0x12345);
++    ok &= check_word("GP X last word", &gp, DSP56300_MEM_SPACE_X,
++                     0x0FFF, &gp.core.xram[0x0FFF], 0x23456);
++    ok &= check_word("GP mixbuffer first word", &gp, DSP56300_MEM_SPACE_X,
++                     0x1400, &gp.core.mixbuffer[0], 0x34567);
++    ok &= check_word("GP mixbuffer last word", &gp, DSP56300_MEM_SPACE_X,
++                     0x17FF, &gp.core.mixbuffer[0x3FF], 0x45678);
++    ok &= check_word("GP Y last word", &gp, DSP56300_MEM_SPACE_Y,
++                     0x07FF, &gp.core.yram[0x07FF], 0x56789);
++    ok &= check_word("GP P last word", &gp, DSP56300_MEM_SPACE_P,
++                     0x0FFF, &gp.core.pram[0x0FFF], 0x6789A);
++
++    if (!mcpx_apu_dsp_engine_init(&gp) || !gp.jit) {
++        fprintf(stderr, "GP engine initialization is not idempotent\n");
++        ok = 0;
++    }
++    mcpx_apu_dsp_engine_reset(&gp);
++    mcpx_apu_dsp_engine_destroy(&gp);
++    mcpx_apu_dsp_engine_destroy(&gp);
++    return ok;
++}
++
++static int check_ep_map(void)
++{
++    DSPState ep = {0};
++    int ok = 1;
++
++    ep.is_gp = false;
++    if (!mcpx_apu_dsp_engine_init(&ep)) {
++        fprintf(stderr, "EP DSP56300 engine creation failed\n");
++        return 0;
++    }
++
++    ok &= check_word("EP X last word", &ep, DSP56300_MEM_SPACE_X,
++                     0x0BFF, &ep.core.xram[0x0BFF], 0x789AB);
++    ok &= check_word("EP Y last word", &ep, DSP56300_MEM_SPACE_Y,
++                     0x00FF, &ep.core.yram[0x00FF], 0x89ABC);
++    ok &= check_word("EP P last word", &ep, DSP56300_MEM_SPACE_P,
++                     0x0FFF, &ep.core.pram[0x0FFF], 0x9ABCD);
++
++    mcpx_apu_dsp_engine_reset(&ep);
++    mcpx_apu_dsp_engine_destroy(&ep);
++    return ok;
++}
++
++int main(void)
++{
++    if (!check_gp_map() || !check_ep_map()) {
++        return 1;
++    }
++    puts("DSP56300 FFI memory map and lifecycle checks passed");
++    return 0;
++}
