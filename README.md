@@ -183,6 +183,111 @@ Campaign matrix: mission completion and progression         [-------------------
 
 The XBE entry point and section map are documented; that is static analysis, not verified runtime behavior. The title-asset bar records a diagnostic read of the three title XPR files only, not complete filesystem compatibility. Pushbuffer handling records command processing and draw calls, not a correct rendered scene. The campaign bars remain at zero because no mission has been verified from loading through completion and progression.
 
+### Full project field tracker
+
+The bars below give every major work area and sub-field an individual, evidence-based status. Each bar counts verified results, not time spent, planned work, code presence, or diagnostic activity. A zero means the capability has not yet been verified.
+
+```text
+RESEARCH AND ARCHITECTURE
+XBE format and executable identified                   [#-------------------] 1 / 1 (100%)
+Static-recompilation architecture selected             [#-------------------] 1 / 1 (100%)
+Technical limits and legal boundaries documented       [#-------------------] 1 / 1 (100%)
+Dependency license review complete                     [--------------------] 0 / 1 (0%)
+
+STATIC RECOMPILATION
+XBE sections and entry map documented                  [#-------------------] 1 / 1 (100%)
+Kernel imports named                                   [####################] 123 / 123 (100%)
+Functions emitted                                      [####################] 9,148 / 9,148 (100%)
+Unsupported instruction sites resolved                 [--------------------] 0 / 243 (0%)
+Unresolved call targets implemented                    [--------------------] 0 / 351 (0%)
+Windows executable builds locally                      [#-------------------] 1 / 1 (100%)
+Title-screen boot verified                             [--------------------] 0 / 1 (0%)
+
+BOOT AND RUNTIME COMPATIBILITY
+Guest startup progression                              [#-------------------] 1 / 3 (33%)
+ISO and game-file access                               [#-------------------] 1 / 3 (33%)
+Title screen rendered correctly                        [--------------------] 0 / 1 (0%)
+Kernel threads, scheduling, and TLS                    [--------------------] 0 / 3 (0%)
+Kernel events, semaphores, and synchronization         [--------------------] 0 / 3 (0%)
+Kernel memory, exceptions, and timers                  [--------------------] 0 / 3 (0%)
+ISO mounting and XBE validation                        [--------------------] 0 / 2 (0%)
+Title asset read path                                  [#-------------------] 1 / 1 (100%)
+Save files and persistent settings                    [--------------------] 0 / 1 (0%)
+GPU pushbuffer and command handling                    [#-------------------] 1 / 3 (33%)
+Texture upload and sampling                            [--------------------] 0 / 2 (0%)
+Shaders and register combiners                         [--------------------] 0 / 2 (0%)
+Correct game image presented                           [--------------------] 0 / 1 (0%)
+Audio device and APU initialization                    [#-------------------] 1 / 2 (50%)
+Audio DSP behavior and audible sound                   [--------------------] 0 / 2 (0%)
+Basic in-game input                                    [--------------------] 0 / 1 (0%)
+
+ORIGINAL STEEL BATTALION CONTROLLER AND ACCESSIBILITY
+Original controller adapter/device detection          [--------------------] 0 / 1 (0%)
+Original buttons, toggle switches, and gear controls   [--------------------] 0 / 1 (0%)
+Original analog controls and calibration               [--------------------] 0 / 1 (0%)
+Original indicators and output feedback                [--------------------] 0 / 1 (0%)
+Labeled controller editor and remapping                [--------------------] 0 / 2 (0%)
+Keyboard/mouse profile and in-game input               [--------------------] 0 / 2 (0%)
+Xbox/PlayStation controller profile and input          [--------------------] 0 / 2 (0%)
+HOTAS, pedals, and custom HID support                  [--------------------] 0 / 2 (0%)
+Multiple USB devices and combinations                  [--------------------] 0 / 1 (0%)
+Profiles: defaults, import, export, and sharing         [--------------------] 0 / 4 (0%)
+
+CAMPAIGN RELIABILITY
+Mission loading                                       [--------------------] 0 / 1 (0%)
+Stable gameplay                                       [--------------------] 0 / 1 (0%)
+Cinematics                                            [--------------------] 0 / 1 (0%)
+Mission audio                                         [--------------------] 0 / 1 (0%)
+Controller behavior                                   [--------------------] 0 / 1 (0%)
+Save and load                                         [--------------------] 0 / 1 (0%)
+Frame pacing                                          [--------------------] 0 / 1 (0%)
+Mission completion and campaign progression           [--------------------] 0 / 1 (0%)
+Full campaign completed and verified                  [--------------------] 0 / 1 (0%)
+
+GRAPHICS AND PERFORMANCE
+Original rendering preset                             [--------------------] 0 / 1 (0%)
+1080p and 1440p output                                 [--------------------] 0 / 2 (0%)
+4K output                                             [--------------------] 0 / 1 (0%)
+4:3, widescreen, and 16:10 presentation               [--------------------] 0 / 3 (0%)
+HUD, menus, cinematics, and field-of-view handling    [--------------------] 0 / 4 (0%)
+Windowed, borderless, and exclusive display modes     [--------------------] 0 / 3 (0%)
+Filtering, anti-aliasing, VSync, and scaling          [--------------------] 0 / 4 (0%)
+Noise, film grain, and enhanced graphics options      [--------------------] 0 / 3 (0%)
+Shader and pipeline caching                           [--------------------] 0 / 1 (0%)
+Original-rate and 30/60 FPS modes                     [--------------------] 0 / 3 (0%)
+120/144 FPS and safe uncapped mode                    [--------------------] 0 / 3 (0%)
+Frame times, 1% lows, and pacing measured             [--------------------] 0 / 3 (0%)
+
+DEBUGGING AND REPLAY
+Runtime/kernel, graphics, audio, and input logs        [#-------------------] 1 / 4 (25%)
+Crash capture and repeatable diagnostics              [#-------------------] 1 / 2 (50%)
+Deterministic input recording and replay              [--------------------] 0 / 1 (0%)
+Before/after performance comparisons                  [--------------------] 0 / 1 (0%)
+
+LAUNCHER, COMMUNITY, AND DISTRIBUTION
+ISO selection, validation, and game-version detection [--------------------] 0 / 3 (0%)
+Change ISO path and explain invalid images             [--------------------] 0 / 2 (0%)
+Graphics settings and controller settings UI          [--------------------] 0 / 2 (0%)
+Launch button, version information, and repo link     [--------------------] 0 / 3 (0%)
+Logs folder, reset, and desktop shortcut              [--------------------] 0 / 3 (0%)
+Add game to Steam as a non-Steam shortcut              [--------------------] 0 / 1 (0%)
+GitHub update checks and release notes                [--------------------] 0 / 2 (0%)
+Consent-based download and installation               [--------------------] 0 / 2 (0%)
+Update file verification and settings preservation    [--------------------] 0 / 2 (0%)
+Portable mode and launcher without configured ISO      [--------------------] 0 / 2 (0%)
+Community profiles, troubleshooting, and docs          [--------------------] 0 / 3 (0%)
+Crash reporting with user consent                     [--------------------] 0 / 1 (0%)
+Dependency review and clean package                   [--------------------] 0 / 2 (0%)
+Player-ready release and installation guide           [--------------------] 0 / 2 (0%)
+
+LINE OF CONTACT FUTURE RESEARCH
+Community and network protocol research               [#-------------------] 1 / 3 (33%)
+Insignia/XLink Kai compatibility assessed              [--------------------] 0 / 1 (0%)
+Separate game profile and multiplayer verified        [--------------------] 0 / 2 (0%)
+```
+
+This detailed tracker supplements the milestone and summary bars. The project remains in Milestone 3, before a verified title screen; no unverified feature or partial campaign run advances these counts.
+
 | Area | Status |
 | --- | --- |
 | Research and architecture | Complete; static recompilation remains the chosen approach. |
