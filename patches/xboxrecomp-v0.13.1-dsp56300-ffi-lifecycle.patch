@@ -1,8 +1,8 @@
 diff --git a/src/apu/CMakeLists.txt b/src/apu/CMakeLists.txt
-index 0bd4ebd..3fde598 100644
+index 0bd4ebd..c2abf48 100644
 --- a/src/apu/CMakeLists.txt
 +++ b/src/apu/CMakeLists.txt
-@@ -13,6 +13,104 @@ add_library(xbox_apu STATIC
+@@ -13,6 +13,107 @@ add_library(xbox_apu STATIC
      apu_xaudio2.c
  )
  
@@ -80,6 +80,8 @@ index 0bd4ebd..3fde598 100644
 +    add_library(dsp56300_ffi STATIC IMPORTED GLOBAL)
 +    set_target_properties(dsp56300_ffi PROPERTIES
 +        IMPORTED_LOCATION "${DSP56300_STATIC_LIBRARY}")
++    set_property(TARGET dsp56300_ffi PROPERTY INTERFACE_LINK_LIBRARIES
++        "ws2_32;userenv;ntdll")
 +    add_dependencies(xbox_apu dsp56300_ffi_build)
 +    target_sources(xbox_apu PRIVATE apu_dsp56300_bridge.c)
 +    target_include_directories(xbox_apu PRIVATE
@@ -96,6 +98,7 @@ index 0bd4ebd..3fde598 100644
 +            ../../tests/dsp56300_memory_map_test.c)
 +        target_include_directories(dsp56300_memory_map_test PRIVATE
 +            ${CMAKE_CURRENT_SOURCE_DIR}
++            ${CMAKE_CURRENT_SOURCE_DIR}/..
 +            ${CMAKE_CURRENT_SOURCE_DIR}/../nv2a
 +            "${DSP56300_SOURCE_DIR}/crates/emu-ffi/include")
 +        target_link_libraries(dsp56300_memory_map_test PRIVATE dsp56300_ffi)
