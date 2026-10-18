@@ -134,6 +134,7 @@ Audio: device initialization                               [#-------------------
 Audio: compatible DSP backend candidate researched           [#-------------------] 1 / 1 research (100%)
 Audio: XBE GP/EP startup sequence mapped                     [#-------------------] 1 / 1 static analysis (100%)
 Audio: `DSSTDFX.BIN` read and passed to DSOUND             [#-------------------] 1 / 1 diagnostic (100%)
+Audio: effects-image mapping and command shape traced       [#-------------------] 1 / 1 static analysis (100%)
 Audio: upstream xemu GP/EP behavior mapped                   [#-------------------] 1 / 1 research (100%)
 Audio: DSP56300 C FFI capabilities and gaps reviewed          [#-------------------] 1 / 1 research (100%)
 Audio: existing xemu Rust-JIT adapter audited                 [#-------------------] 1 / 1 research (100%)
