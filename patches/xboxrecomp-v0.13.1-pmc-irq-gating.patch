@@ -1,0 +1,30 @@
+diff --git a/src/nv2a/nv2a_core.c b/src/nv2a/nv2a_core.c
+index 96c336b..0000000 100644
+--- a/src/nv2a/nv2a_core.c
++++ b/src/nv2a/nv2a_core.c
+@@ -18,5 +18,16 @@
+ static NV2AState *g_nv2a = NULL;
+ static MemoryRegion g_vram_region;
+ static MemoryRegion g_ramin_region;
++
++static int pmc_irq_line_asserted(const NV2AState *d)
++{
++    uint32_t pending = d->pmc.pending_interrupts;
++    uint32_t enabled = d->pmc.enabled_interrupts;
++    int hardware_pending = (pending & ~NV_PMC_INTR_0_SOFTWARE) != 0;
++    int software_pending = (pending & NV_PMC_INTR_0_SOFTWARE) != 0;
++
++    return (hardware_pending && (enabled & NV_PMC_INTR_EN_0_HARDWARE))
++        || (software_pending && (enabled & NV_PMC_INTR_EN_0_SOFTWARE));
++}
+ 
+ NV2AState *nv2a_get_state(void) {
+@@ -53,7 +64,7 @@ void nv2a_update_irq(NV2AState *d)
+         d->pmc.pending_interrupts &= ~NV_PMC_INTR_0_PGRAPH;
+     }
+ 
+-    if (d->pmc.pending_interrupts && d->pmc.enabled_interrupts) {
++    if (pmc_irq_line_asserted(d)) {
+         pci_irq_assert(PCI_DEVICE(d));
+     } else {
+         pci_irq_deassert(PCI_DEVICE(d));

@@ -37,6 +37,22 @@ the guest's writes. The model's RAMIN pointer aliases that shared PRAMIN via
 An optional rate-limited diagnostic is isolated in
 [`patches/steel-battalion-mmio-fault-trace.patch`](../patches/steel-battalion-mmio-fault-trace.patch).
 
+A bounded startup trace found that the guest's PCRTC hardware interrupt was
+pending with the PMC hardware-enable bit set, then the guest ISR cleared that
+enable before the trace's later state snapshot. The standalone NV2A core's old
+`pending_interrupts && enabled_interrupts` check could also cross-enable
+hardware and software interrupt classes. The minimal, reproducible PMC gate
+correction is isolated in
+[`patches/xboxrecomp-v0.13.1-pmc-irq-gating.patch`](../patches/xboxrecomp-v0.13.1-pmc-irq-gating.patch).
+It distinguishes the global hardware and software enable bits described in
+the [envytools PMC register reference](https://envytools.readthedocs.io/en/latest/hw/bus/pmc.html).
+A local instrumented run observed a PCRTC hardware pending bit with hardware
+enable `1` asserting the line, followed by enable `0` deasserting it. This
+confirms the gate behavior in that trace; it does not establish a title-screen
+boot or complete interrupt correctness. The project runtime also has a host IRQ
+callback for wiring this line to the guest kernel; that callback wiring is a
+separate local integration change and is not included in this minimal patch.
+
 The allocator stall exposed a static-lifter bug in locked XADD handling. Capstone
 reports `lock xadd`, but the flag tracker previously discarded its EFLAGS
 result. The emitted `jne` then read an uninitialized fallback flag, which made
