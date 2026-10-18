@@ -1,8 +1,16 @@
 # Graphics Backend Decision Record
 
-**Status:** Native Direct3D 12 selected as the Windows NV2A backend; direct D3D12-versus-Vulkan Steel Battalion performance is not measured
+**Status:** Vulkan recommended for the NV2A backend on performance-readiness grounds; D3D12-versus-Vulkan Steel Battalion performance is not directly measured. Implementation awaits user approval because this revises the earlier D3D12 choice.
 **Current milestone:** Milestone 3, Boot and Compatibility
 **Static recompilation architecture:** Retained. The options below change only how translated NV2A rendering is produced; none replaces the project with full-system emulation.
+
+## Updated performance recommendation (2026-10-18)
+
+**Recommendation: use xemu's Vulkan NV2A renderer as the performance backend, adapted to the existing static-recompilation runtime.** This is the strongest evidence-based choice for attainable performance today, not a claim that Vulkan is inherently faster than D3D12. xemu's Vulkan path is an actively maintained, GPU-backed NV2A implementation with ongoing work on vertex processing, shader/pipeline caching, and batching. The local D3D12 prototype handles only a narrow startup draw, performs synchronous full-surface transfers, and produced no measurable FPS improvement in the bounded splash run. That comparison measures implementation coverage, not API speed, but it makes the current D3D12 implementation an implausible performance winner without a substantial renderer build-out.
+
+There is no matched Steel Battalion scene benchmark comparing D3D12 with Vulkan. xemu's own issue tracker records Vulkan regressions in some games relative to OpenGL, so Vulkan is not universally faster. Still, for this project the best current performance route is to adapt the more complete NV2A implementation rather than continue a narrow D3D12 prototype. Keep the statically recompiled CPU, kernel, audio, filesystem, and input architecture; port only the relevant GPU subsystem and preserve software-rendered reference comparisons. Before production use, benchmark both backends on identical guest captures if a comparably complete D3D12 path is available. Until then, describe Vulkan as the selected implementation path, with API-level speed unverified.
+
+This recommendation revises the earlier D3D12 selection in the section below. It is an architecture proposal only: do not begin the substantial Vulkan port until the user approves this change at the milestone gate.
 
 ## Evidence from the current build
 
@@ -22,7 +30,7 @@
 | **B. Implement a Direct3D 12 NV2A raster backend** | Preserve the decoder and state model, but build a native D3D12 renderer and shader pipeline. | Native Windows API and fits the requested target. | Current prototype is narrow and performs synchronous full-surface transfers. It has no visible game-texture parity or performance result. |
 | **C. Integrate/adapt the xemu Vulkan NV2A renderer and PGRAPH state model** | Reuse the GPU subsystem while retaining statically recompiled game code and the Xbox runtime; omit the emulator machine/CPU loop. | Best match for campaign fidelity and hardware acceleration among the researched paths; the target RTX 4070 SUPER exposes the Vulkan feature set xemu requires. | Deeply coupled to QEMU services and local XboxRecomp has only a PGRAPH stub. Requires a substantial GPU-subsystem port plus exact LGPL/dependency compliance; not a drop-in switch. |
 
-## Recommended decision
+## Previous recommendation (superseded; retained as decision history)
 
 **Select native Direct3D 12 as the primary NV2A backend for this Windows-only target and RTX 4070 SUPER.** No public matched Steel Battalion capture compares D3D12 and Vulkan, so this is a best-supported performance architecture choice, not a measured API-level win. A native D3D12 renderer for original Xbox XBE recompilation is already documented by [XboxXBERecomp](https://github.com/TGP482/XboxXBERecomp), which translates NV2A programs and fixed-function state to HLSL and renders on a dedicated thread. That is a closer platform match than porting xemu's Vulkan subsystem, which is coupled to QEMU/PGRAPH services and has unresolved license/dependency closure in this project. Vulkan has no demonstrated performance advantage here: xemu community comparisons report mixed Vulkan/OpenGL results (including games where OpenGL is faster), and none compares D3D12. D3D12 is therefore the chosen path unless a same-scene D3D12/Vulkan benchmark later demonstrates a Vulkan win. The local D3D12 prototype is only a correctness experiment with synchronous full-surface transfers; it is not yet the performance architecture. The measured software bottleneck is 2.18–2.40 seconds in `raster_batch()` per sampled splash frame, so the implementation must replace CPU pixel work and avoid CPU/GPU synchronization.
 
@@ -50,7 +58,7 @@ The local Vulkan runtime probe (`vulkaninfo --summary`) reports Vulkan instance 
 
 This is not a drop-in renderer library. The renderer API takes xemu `NV2AState`/`PGRAPHState`, uses QEMU helpers and memory-region services, includes xemu shader/surface/texture state, and its `renderer.c` initializes an offscreen GL context for optional external-memory sharing. The checked-out XboxRecomp state structure is explicitly a minimal PGRAPH stub, and its current integrated backend is a narrow D3D11 method handler. Integrating Vulkan therefore requires either expanding the local guest GPU state model and writing a host-facing adapter, or isolating/adapting the renderer behind a smaller API; it does not require adopting QEMU's CPU, kernel, or machine-emulation loop. This is substantial work but not a technical dead end. Keep the choice provisional until the adapter can consume the real Steel Battalion pushbuffer state and pass the software-reference frame checks.
 
-#### Historical Vulkan integration proposal (superseded by native D3D12 choice)
+#### Earlier Vulkan integration proposal (superseded at that time)
 
 Use xemu's existing LGPL PGRAPH method/state model together with its Vulkan renderer, adapting the NV2A GPU subsystem to XboxRecomp's guest-memory and pushbuffer runtime. Do not build a parallel, reduced Vulkan rasterizer around the prototype's `s_gpu` packet: a second state/texture/shader implementation would duplicate the hardest correctness work and is a poor fit for complete campaign support. Retain the statically recompiled x86 game and Xbox kernel/audio/input layers; exclude xemu's CPU, machine, PFIFO thread, and full-system boot loop. The current `nv2a_pb_exec` pushbuffer front-end should supply command words to the adapted PGRAPH method processor, while the PGRAPH implementation owns complete GPU register, surface, texture, draw, and synchronization state. Keep the CPU raster as the differential reference until each exercised operation has parity.
 
@@ -96,7 +104,7 @@ The experimental D3D12 prototype is isolated from the local XboxRecomp checkout 
 3. Verify clear, depth, blend, texture sampling, vertex-program outputs, and guest framebuffer/surface updates independently.
 4. Measure CPU and GPU frame time on identical splash and title-screen captures; compare frame pacing and image differences.
 5. Do not infer campaign performance from the intro or advance graphics/boot progress bars until a repeatable title-screen run and the corresponding behavior are verified.
-6. Historical proposal (superseded): finish license/dependency review, then port the xemu PGRAPH state/method processor and renderer as one graphics subsystem connected to the XboxRecomp command intake. The active route is native D3D12; retain software captures as the image reference and do not claim parity or speed from device capability queries alone.
+6. Current proposal: after user approval, finish license/dependency review, then adapt the xemu PGRAPH state/method processor and renderer as a GPU subsystem connected to XboxRecomp command intake. Retain software captures as the image reference and do not claim parity or speed from device capability queries alone.
 
 The earlier Vulkan recommendation was superseded by the Windows D3D12 decision above. Comparative API speed remains unmeasured. Backend research remains within Milestone 3. Do not advance the milestone until the game reaches a verified title screen with rendering, audio, and input checked.
 
