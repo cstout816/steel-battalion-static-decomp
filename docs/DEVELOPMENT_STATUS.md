@@ -4,7 +4,7 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
-**Final graphics backend: Vulkan only.** This is the settled production choice for NV2A and graphics compatibility; no D3D11/D3D12 alternatives or runtime backend switch will be developed. The older dated entries below are a chronological record of superseded experiments, not current directions. Milestone 3 is still in progress. The Xbox D3D8 API compatibility surface remains necessary for translated game calls; it is not a selectable host renderer.
+**Fixed target graphics backend: Vulkan. Migration is incomplete.** Current source inspection confirms the Windows Xbox D3D8 compatibility layer compiles shaders and renders through D3D11, and the NV2A PGRAPH translator issues calls into that layer. The project-owned Vulkan component only uploads and presents a copy of the guest framebuffer; it does not render guest commands. D3D12 code is disabled in the active build. No runtime backend selector is planned. Historical dated entries below record earlier experiments. Milestone 3 remains active.
 
 ### Detailed field progress
 
@@ -37,7 +37,7 @@ Xbox kernel and synchronization                  [--------------------] 0 / 3 (0
 Filesystem and ISO validation                    [--------------------] 0 / 3 (0%)
 Vulkan/NV2A: full scene rendering                 [--------------------] 0 / 3 (0%)
 Vulkan host presentation: device/swapchain/present  [####################] 3 / 3 (100%)
-D3D12 NV2A experiment disabled in active build     [####################] 1 / 1 (100%)
+Windows graphics migration: D3D8 calls routed through Vulkan [--------------------] 0 / 1 (0%)
 Audio: guest DSP execution and audible output     [##########----------] 1 / 2 (50%)
 
 Original SB controller: input, mapping, lights   [--------------------] 0 / 3 (0%)

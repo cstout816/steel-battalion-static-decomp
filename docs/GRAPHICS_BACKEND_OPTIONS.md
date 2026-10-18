@@ -1,10 +1,10 @@
 # Graphics Backend Decision
 
-**Final choice: Vulkan is the sole host graphics backend for this project.** This applies to the NV2A pushbuffer renderer and the graphics compatibility layer as it is brought onto the selected backend. Do not develop or switch to D3D11 or D3D12 as alternate production renderers. Keep the existing XboxRecomp static-recompilation CPU, kernel, filesystem, audio, and input architecture; this decision does not introduce full-system emulation.
+**Fixed target: Vulkan.** The project has one graphics-backend decision and no runtime backend selector. The migration is incomplete: the current Windows guest-rendering path still uses XboxRecomp's D3D8-to-D3D11 compatibility layer, while the project-owned Vulkan module only uploads and presents a copied framebuffer. Vulkan does not yet render NV2A scenes or replace the D3D11-backed XDK graphics calls. Complete that migration before describing the game runtime as Vulkan-rendered. Keep the XboxRecomp static-recompilation CPU, kernel, filesystem, audio, and input architecture; this graphics decision does not introduce full-system emulation.
 
 ## Why Vulkan
 
-No matched Steel Battalion capture has measured Vulkan against D3D12, so this is not a claim that Vulkan is inherently faster. It is the firm project choice based on the best attainable performance path: xemu provides the most complete existing GPU-backed NV2A/PGRAPH implementation to adapt, while the local D3D12 work only covered two narrow splash passes, used synchronous full-surface transfers, and showed no frame-rate improvement. xemu's Vulkan/OpenGL reports are mixed across games, so the title still needs measured performance and frame-parity validation.
+Vulkan is the fixed project choice. No matched Steel Battalion capture measures its performance against another API. The implementation path is to adapt a license-compatible NV2A/PGRAPH renderer and replace the Windows D3D8 compatibility backend. xemu is a behavior and architecture reference; its Vulkan renderer is not a drop-in library, and shader license constraints prevent treating the whole path as cleared for reuse. Performance and frame parity remain unverified.
 
 The RTX 4070 SUPER exposes the Vulkan features the inspected xemu renderer requires. That verifies device capability only; it does not verify that the port initializes, renders the game correctly, or reaches the title screen.
 
@@ -13,13 +13,14 @@ The RTX 4070 SUPER exposes the Vulkan features the inspected xemu renderer requi
 - Adapt the xemu NV2A/PGRAPH Vulkan graphics subsystem to the XboxRecomp guest-memory and pushbuffer interfaces.
 - Reuse only the GPU subsystem and individually license-reviewed files. Do not bring in xemu's CPU, kernel, machine boot, or full-system emulator loop.
 - Keep the statically recompiled x86 game and existing Xbox runtime architecture.
-- The present NV2A path still renders on the CPU while Vulkan is being brought up. Keep it as the comparison baseline during the port; it is not the selected final renderer.
-- Do not develop D3D11 or D3D12 as alternate NV2A renderers. The inherited XboxRecomp D3D8 compatibility library still uses D3D11 for XDK API calls; it is not an NV2A backend selection. The local D3D12 prototype is now disabled unless `XBOXRECOMP_EXPERIMENTAL_D3D12` is explicitly defined; the project build does not define it, and the kernel no longer links D3D12 libraries. The old experiment patches remain historical.
-- Keep one Vulkan renderer path from initial boot through campaign play. Do not add API selection or backend switching.
+- The pushbuffer executor still rasterizes on the CPU; the Vulkan presenter only displays its copied framebuffer.
+- The active Windows Xbox D3D8 compatibility layer is backed by D3D11, including shader compilation and combiner calls. This is existing runtime behavior, not the selected direction. Replace it as part of the Vulkan migration; do not add an API selector or another renderer choice.
+- The D3D12 NV2A prototype is disabled in the active project build. Its old patches are historical records only.
+- Keep the selected Vulkan direction through initial boot and campaign play. The current software rasterizer may remain a temporary diagnostic/reference path until Vulkan rendering is verified.
 
 ## Current state and constraints
 
-Milestone 3, Boot and Compatibility, remains incomplete. The clean software-rendered build advances through the Steel Battalion logo sequence at about 0.4 guest FPS; the latest captured frame still shows CAPCOM. A project-owned Vulkan host presenter now selects the RTX 4070 SUPER, creates a 640x480 swapchain, and successfully presents a swapchain image. It does not render NV2A scenes; correct game pixels and title-screen boot remain unverified. Audio output and physical Steel Battalion controller behavior also remain unverified.
+Milestone 3, Boot and Compatibility, remains incomplete. The clean software-rendered build advances through the Steel Battalion logo sequence at about 0.4 guest FPS; the latest captured frame still shows CAPCOM. A project-owned Vulkan presenter selects the RTX 4070 SUPER, creates a 640x480 swapchain, and presents a copied guest framebuffer. This verifies Vulkan presentation plumbing only. Current Windows game graphics still pass through D3D11, and Vulkan NV2A rendering, correct game pixels, and title-screen boot remain unverified. Audio output and physical Steel Battalion controller behavior also remain unverified.
 
 The xemu renderer is not a drop-in library. Its PGRAPH state and renderer use QEMU services and xemu-specific data structures. A port needs a host adapter for guest RAM, pushbuffer state, surfaces, textures, shader translation, synchronization, and presentation. Source files have differing license notices; audit every reused file and dependency before integration or distribution. No distribution license has been selected. Do not install system-wide Vulkan tooling; use a project-local, reproducible dependency setup after its license review.
 
@@ -29,9 +30,8 @@ The file-by-file xemu renderer and dependency findings are in [VULKAN_REUSE_AUDI
 
 - [xemu Vulkan NV2A renderer and active work](https://github.com/xemu-project/xemu/tree/master/hw/xbox/nv2a/pgraph/vk)
 - [xemu's Vulkan/OpenGL performance issue](https://github.com/xemu-project/xemu/issues/1838), which shows results vary by game and hardware.
-- [XboxRecomp](https://github.com/sp00nznet/xboxrecomp), the selected static-recompilation foundation; its existing Windows path uses D3D11 and is not the selected production renderer.
-- Local matched splash runs: the narrow D3D12 prototype produced no measurable FPS gain; software output and the two-pass prototype capture matched for the sampled frame. Neither run reached the title screen.
+- [XboxRecomp](https://github.com/sp00nznet/xboxrecomp), the selected static-recompilation foundation. Its current Windows D3D8 compatibility layer uses D3D11; replacing that path is required for the selected Vulkan direction.
 
 ## Decision history
 
-D3D11 and D3D12 were investigated as interim or native alternatives. They are not current choices. On 2026-10-18 the project settled on Vulkan for the sole production graphics path based on renderer maturity and attainable title support, and the user's subsequent instruction made the single-backend requirement explicit. Future backend reconsideration would require new measured evidence and a direct user request; absent that, implementation stays on Vulkan.
+Earlier D3D11 and D3D12 experiments are retained in dated engineering history. The project decision is Vulkan, with no backend switching. Current source inspection confirms the Windows game graphics path has not migrated yet; work remains to route guest graphics through Vulkan.

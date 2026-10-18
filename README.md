@@ -65,7 +65,7 @@ Most of the research, code, and documentation in this repository have been produ
 
 ## Technical approach
 
-The project uses [sp00nznet/xboxrecomp](https://github.com/sp00nznet/xboxrecomp) for ahead-of-time Xbox x86 translation and has selected **Vulkan as its sole production graphics backend** for NV2A and graphics compatibility. We will not switch among D3D11, D3D12, and Vulkan. Vulkan was chosen because adapting xemu's more complete NV2A renderer is the strongest available route to accurate, hardware-accelerated game support; no matched Steel Battalion benchmark proves one API inherently faster. The CPU remains statically recompiled—this does not use full-system emulation. Kernel, graphics, audio, filesystem, and controller compatibility still need work.
+The project uses [sp00nznet/xboxrecomp](https://github.com/sp00nznet/xboxrecomp) for ahead-of-time Xbox x86 translation. **Vulkan is the fixed target graphics backend; the migration is not complete.** The current Windows runtime still renders Xbox D3D8 calls through XboxRecomp's D3D11 compatibility layer. The project-owned Vulkan module only presents a copy of the guest framebuffer and does not render NV2A scenes yet. Vulkan was selected as the sole graphics direction; there is no runtime backend choice. The CPU remains statically recompiled—this does not use full-system emulation. Kernel, graphics, audio, filesystem, and controller compatibility still need work.
 
 The work prioritizes campaign reliability and the original Steel Battalion controller before visual enhancements. See the [community compatibility and preservation plan](docs/community-compatibility-preservation.md) for planned controller support, campaign checks, accessibility, and future Line of Contact research.
 
