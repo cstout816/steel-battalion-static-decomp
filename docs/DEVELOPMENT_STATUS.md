@@ -143,8 +143,9 @@ Audio: Windows DSP FFI dependency licenses inventoried         [#---------------
 Audio: GP/EP DSP MMIO windows routed                        [--------------------] 0 / 1 (0%)
 Audio: GP/EP X/Y/P memory mapped                             [####################] 1 / 1 (100%)
 Audio: GP/EP scratch DMA and reset bootstrap integrated       [####################] 1 / 1 (100%)
-Audio: game DSP program executed                             [--------------------] 0 / 1 (0%)
-Audio: DSP56300 GP/EP execution integrated                  [--------------------] 0 / 1 (0%)
+Audio: DSP status callbacks and bounded run tested           [#-------------------] 1 / 1 (synthetic)
+Audio: game DSP instruction execution verified              [--------------------] 0 / 1 (0%)
+Audio: DSP56300 bounded run path built and linked           [#-------------------] 1 / 1 (100%)
 Audio: DSP cycles, interrupts, and DMA verified               [--------------------] 0 / 1 (0%)
 Audio: game sound output verified                            [--------------------] 0 / 1 (0%)
 Input: original Steel Battalion hardware                   [--------------------] 0 / 3 (0%)
@@ -400,3 +401,7 @@ With the opt-in pushbuffer executor enabled, the trace observed NV2A semaphore r
 ### DSP scratch-to-P bootstrap verified (2026-10-18)
 
 Implemented a bounded 0x800-word reset bootstrap using the corrected SGE registers and the guest's `0x80000000` contiguous alias. The focused Windows x64 harness passed across a two-page table, confirmed 24-bit masking and boundary copying, and rejected an incomplete SGE table. The full `your_game_recomp` target built with the optional DSP56300 FFI enabled. An 8-second watchdog-bounded run with pushbuffer execution and synthetic AC'97 readiness, but without `RECOMP_APU_DSP_ACK`, logged successful GP and EP bootstraps from guest scratch DMA and exited with expected watchdog code 3; no project game process remained. This verifies bootstrap reads real guest SGE data and writes the DSP program windows, not that the loaded program is correct or executed. The DSP cycle scheduler still bypasses GP/EP, so DSP output, audible sound, and the Steel Battalion title screen remain unverified. The X/Y/P mapping and reset-bootstrap engineering bars above now show 1/1; player-facing DSP execution and audio bars stay at 0. Next implement and test bounded GP/EP cycles, command completion, DMA/peripheral behavior, and resulting audio.
+
+### Bounded GP/EP execution scaffold (2026-10-18)
+
+The XboxRecomp-specific bridge maps the DSP peripheral-status region through callbacks, keeps program-bootstrap readiness separate from the architectural interrupt bits, and schedules a 1,000-cycle FFI run for GP each APU frame and EP every eight frames. The JIT can consume whole translated blocks, so this value is a run budget rather than a strict maximum. Synthetic Windows x64 coverage verifies GP/EP status reads and clears, DMA-register round-tripping, scratch bootstrap, and bounded loop execution. The harness, APU library, and full game target build. A corrected watchdog-bounded startup attempt with pushbuffer execution and synthetic AC'97 readiness—but without fake `RECOMP_APU_DSP_ACK`—did not reach DSP reset/bootstrap before it entered repeated unresolved indirect-call failures; it was force-closed at the 15-second outer bound, and no game process remained. A prior run that logged DSP cycles used an incorrect readiness marker in the interrupt register and is not valid compatibility evidence. DSP execution by the corrected game path, DMA/control behavior, doorbell completion, usable output, sound, title screen, and campaign remain unverified. The optional FFI remains disabled by default. Only synthetic bridge and build engineering bars advance; DSP gameplay and player-facing audio stay at zero.

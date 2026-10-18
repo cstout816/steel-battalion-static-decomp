@@ -1,0 +1,412 @@
+diff --git a/src/apu/CMakeLists.txt b/src/apu/CMakeLists.txt
+index b5eb47e..d3a019e 100644
+--- a/src/apu/CMakeLists.txt
++++ b/src/apu/CMakeLists.txt
+@@ -15,8 +15,8 @@ add_library(xbox_apu STATIC
+ )
+ 
+ # GP/EP guest RAM MMIO maps to the existing DSPState arrays in all builds.
+-# The pinned DSP56300 FFI core remains optional until bootstrap, cycle
+-# scheduling, and DMA behavior are implemented and verified.
++# The pinned DSP56300 FFI core remains optional until full DMA and game-level
++# DSP behavior are implemented and verified.
+ option(XBOXRECOMP_ENABLE_DSP56300 "Create MCPX GP/EP engines with the MIT DSP56300 FFI" OFF)
+ if(XBOXRECOMP_ENABLE_DSP56300)
+     if(NOT WIN32 OR NOT MSVC)
+@@ -95,7 +95,7 @@ if(XBOXRECOMP_ENABLE_DSP56300)
+     target_link_libraries(xbox_apu PRIVATE dsp56300_ffi ws2_32 userenv ntdll)
+ 
+     option(XBOXRECOMP_BUILD_DSP56300_TESTS
+-        "Build focused DSP56300 C FFI memory-map and lifecycle checks" OFF)
++        "Build focused DSP56300 FFI memory, peripheral, bootstrap, and run checks" OFF)
+     if(XBOXRECOMP_BUILD_DSP56300_TESTS)
+         enable_testing()
+         add_executable(dsp56300_memory_map_test
+diff --git a/src/apu/README.md b/src/apu/README.md
+index 4a9a089..3a8ac58 100644
+--- a/src/apu/README.md
++++ b/src/apu/README.md
+@@ -21,13 +21,11 @@ The GP and EP RAM windows are routed through the APU MMIO handler, including
+ the GP mixbuffer alias and 24-bit word masking. P-memory writes use the FFI
+ write API when that engine is enabled so translated code is invalidated. Reset
+ release now copies 0x800 words from the guest scratch scatter/gather table into
+-P memory through the runtime's bounded physical-memory resolver. A focused
+-synthetic test verifies page-boundary copies, 24-bit masking, and rejection of
+-an incomplete descriptor table. One bounded Steel Battalion startup with the
+-optional FFI enabled logged successful GP and EP bootstraps; it did not execute
+-the DSP programs or verify audible output. Cycle scheduling, peripheral
+-callbacks, FIFO/DMA, and DSP audio remain incomplete. The optional FFI core
+-stays off by default, and this is not playable-audio support.
++P memory through the runtime's bounded physical-memory resolver and executes
++bounded 1,000-cycle frame slices. Basic interrupt and DMA-register callbacks
++are present; scratch/FIFO DMA execution and DSP audio remain unimplemented.
++The optional FFI core stays off by default, and this is not playable-audio
++support.
+ 
+ ## Files
+ 
+diff --git a/src/apu/apu_dsp.c b/src/apu/apu_dsp.c
+index 8f1f3e2..abb3513 100644
+--- a/src/apu/apu_dsp.c
++++ b/src/apu/apu_dsp.c
+@@ -1,11 +1,13 @@
+ /*
+- * MCPX APU DSP (GP/EP) - Stub implementation
++ * MCPX APU DSP (GP/EP) - bridge and passthrough implementation
+  *
+  * The DSP Global Processor (GP) and Encode Processor (EP) handle effects
+  * processing (reverb, chorus, etc.) and final output encoding. The full
+  * DSP is ~3000 lines of DSP56300 emulation code.
+  *
+- * For initial audio, we bypass the DSP entirely:
++ * The optional DSP56300 bridge now bootstraps guest scratch code and runs
++ * bounded GP/EP instruction slices. DMA and validated DSP output are not yet
++ * wired, so the current monitor path still bypasses DSP output:
+  * - VP mixbins are passed directly to the EP output
+  * - GP effects processing is skipped
+  * - The EP just copies mixbin 0/1 (front L/R) to the monitor buffer
+@@ -116,13 +118,11 @@ static void mcpx_apu_dsp_sync_reset(MCPXAPUState *d, bool is_gp)
+         regs[reset_reg] = value;
+         if (!(value & NV_PAPU_GPRST_GPRST) ||
+             !(value & NV_PAPU_GPRST_GPDSPRST)) {
+-            if (dsp) {
+-                dsp->interrupts &= ~2u;
+-            }
++            dsp->interrupts = 0;
++            dsp->guest_program_bootstrapped = false;
+ #ifdef MCPX_APU_USE_DSP56300
+             mcpx_apu_dsp_engine_reset(dsp);
+ #endif
+-            dsp->interrupts &= ~2u;
+         } else if ((!(old_value & NV_PAPU_GPRST_GPRST) ||
+                     !(old_value & NV_PAPU_GPRST_GPDSPRST)) &&
+                    (value & NV_PAPU_GPRST_GPRST) &&
+@@ -136,9 +136,9 @@ static void mcpx_apu_dsp_sync_reset(MCPXAPUState *d, bool is_gp)
+     }
+     /* The game maps GP/EP windows as direct RAM, so this frame observer owns
+      * the reset-release bootstrap. Retry if the SGE table is not ready yet. */
+-    if ((value & 3u) == 3u && !(dsp->interrupts & 2u) &&
++    if ((value & 3u) == 3u && !dsp->guest_program_bootstrapped &&
+         apu_dsp_bootstrap(d, is_gp)) {
+-        dsp->interrupts |= 2u;
++        dsp->guest_program_bootstrapped = true;
+     }
+ }
+ 
+@@ -272,6 +272,10 @@ void mcpx_apu_dsp_mmio_write(MCPXAPUState *d, bool is_gp,
+     if (byte_offset == reset_reg) {
+         if (!(value & NV_PAPU_GPRST_GPRST) ||
+             !(value & NV_PAPU_GPRST_GPDSPRST)) {
++            if (dsp) {
++            dsp->interrupts = 0;
++            dsp->guest_program_bootstrapped = false;
++            }
+ #ifdef MCPX_APU_USE_DSP56300
+             mcpx_apu_dsp_engine_reset(dsp);
+ #endif
+@@ -280,9 +284,7 @@ void mcpx_apu_dsp_mmio_write(MCPXAPUState *d, bool is_gp,
+                    (value & NV_PAPU_GPRST_GPRST) &&
+                    (value & NV_PAPU_GPRST_GPDSPRST)) {
+             bool bootstrapped = apu_dsp_bootstrap(d, is_gp);
+-            if (dsp && bootstrapped) {
+-                dsp->interrupts |= 2u;
+-            }
++            if (dsp) dsp->guest_program_bootstrapped = bootstrapped;
+             static unsigned int bootstrap_notice_count;
+             if (bootstrap_notice_count++ < 4) {
+                 fprintf(stderr, "[APU] %s DSP reset released; program bootstrap %s\n",
+@@ -324,7 +326,7 @@ void mcpx_apu_dsp_init(MCPXAPUState *d)
+     d->ep.realtime = false;
+ 
+ #ifdef MCPX_APU_USE_DSP56300
+-    fprintf(stderr, "[APU] GP/EP DSP56300 FFI engines enabled; scratch bootstrap active; cycle execution pending\n");
++    fprintf(stderr, "[APU] GP/EP DSP56300 FFI engines enabled; bounded cycle slices active; DSP DMA pending\n");
+ #else
+     fprintf(stderr, "[APU] GP/EP guest RAM mapped; scratch bootstrap active; DSP execution disabled\n");
+ #endif
+@@ -381,6 +383,25 @@ void mcpx_apu_dsp_frame(MCPXAPUState *d,
+         mcpx_apu_dsp_sync_reset(d, false);
+         mcpx_apu_dsp_sync_program_cache(d->ep.dsp);
+     }
++    /* One bounded non-realtime GP slice per APU frame; EP runs once per eight
++     * frames. A finite budget prevents a non-yielding program from stalling
++     * the statically translated x86 guest. */
++    static unsigned int dsp_run_notice_count;
++    if (d->gp.dsp && d->gp.dsp->guest_program_bootstrapped) {
++        g_dbg.gp.cycles = (int)mcpx_apu_dsp_engine_run_frame(d->gp.dsp, 1000u);
++        if (dsp_run_notice_count++ < 4) {
++            fprintf(stderr, "[APU] GP DSP executed a bounded %d-cycle frame slice\n",
++                    g_dbg.gp.cycles);
++        }
++    }
++    if (d->ep.dsp && d->ep.dsp->guest_program_bootstrapped &&
++        d->ep_frame_div % 8 == 0) {
++        g_dbg.ep.cycles = (int)mcpx_apu_dsp_engine_run_frame(d->ep.dsp, 1000u);
++        if (dsp_run_notice_count++ < 4) {
++            fprintf(stderr, "[APU] EP DSP executed a bounded %d-cycle frame slice\n",
++                    g_dbg.ep.cycles);
++        }
++    }
+     /* Bypass DSP: take mixbin 0 (front-left) and mixbin 1 (front-right)
+      * and write them directly to the monitor frame buffer as the final
+      * EP output.
+@@ -451,6 +472,4 @@ void mcpx_apu_dsp_frame(MCPXAPUState *d,
+         }
+     }
+ 
+-    g_dbg.gp.cycles = 0;
+-    g_dbg.ep.cycles = 0;
+ }
+diff --git a/src/apu/apu_dsp56300_bridge.c b/src/apu/apu_dsp56300_bridge.c
+index c43dce5..11d433e 100644
+--- a/src/apu/apu_dsp56300_bridge.c
++++ b/src/apu/apu_dsp56300_bridge.c
+@@ -25,6 +25,8 @@
+ #define DSP_BOOTSTRAP_WORDS 0x0800u
+ #define DSP_SCRATCH_PAGE_BYTES 0x1000u
+ #define DSP_MAX_SGE_ENTRIES 0x4000u
++#define DSP_INTERRUPT_START_FRAME 0x02u
++#define DSP_INTERRUPT_DMA_EOL 0x80u
+ 
+ typedef enum {
+     DSP_MMIO_SPACE_X,
+@@ -42,6 +44,63 @@ _Static_assert(DSP_MIXBUFFER_SIZE == GP_MIXBUF_WORDS,
+                "GP mixbin window and backing storage differ");
+ 
+ #ifdef MCPX_APU_USE_DSP56300
++static uint32_t dsp_peripheral_read(void *opaque, uint32_t address)
++{
++    DSPState *dsp = (DSPState *)opaque;
++    if (!dsp) {
++        return 0x000ABABAu;
++    }
++    switch (address) {
++    case 0xFFFFB3u:
++        return 0;
++    case 0xFFFFC5u:
++        return dsp->interrupts | (dsp->dma.eol ? DSP_INTERRUPT_DMA_EOL : 0u);
++    case 0xFFFFD4u:
++        return dsp->dma.next_block;
++    case 0xFFFFD5u:
++        return dsp->dma.start_block;
++    case 0xFFFFD6u:
++        return dsp->dma.control;
++    case 0xFFFFD7u:
++        return dsp->dma.configuration;
++    default:
++        return 0x000ABABAu;
++    }
++}
++
++static void dsp_peripheral_write(void *opaque, uint32_t address, uint32_t value)
++{
++    DSPState *dsp = (DSPState *)opaque;
++    if (!dsp) {
++        return;
++    }
++    switch (address) {
++    case 0xFFFFC4u:
++        dsp->host_halt_requested = (value & 1u) != 0;
++        break;
++    case 0xFFFFC5u:
++        dsp->interrupts &= ~value;
++        if (value & DSP_INTERRUPT_DMA_EOL) {
++            dsp->dma.eol = false;
++        }
++        break;
++    case 0xFFFFD4u:
++        dsp->dma.next_block = value;
++        break;
++    case 0xFFFFD5u:
++        dsp->dma.start_block = value;
++        break;
++    case 0xFFFFD6u:
++        dsp->dma.control = value;
++        break;
++    case 0xFFFFD7u:
++        dsp->dma.configuration = value;
++        break;
++    default:
++        break;
++    }
++}
++
+ static void set_buffer_region(Dsp56300MemoryRegion *region,
+                               uint32_t start,
+                               uint32_t end,
+@@ -62,9 +121,10 @@ bool mcpx_apu_dsp_engine_init(DSPState *dsp)
+     (void)dsp;
+     return false;
+ #else
+-    Dsp56300MemoryRegion x_regions[2];
++    Dsp56300MemoryRegion x_regions[3];
+     Dsp56300MemoryRegion y_region;
+     Dsp56300MemoryRegion p_region;
++    Dsp56300MemoryRegion peripheral_region;
+     Dsp56300CreateInfo info;
+ 
+     if (!dsp || dsp->jit) {
+@@ -97,6 +157,15 @@ bool mcpx_apu_dsp_engine_init(DSPState *dsp)
+                       dsp->guest_mmio_base
+                           ? (uint32_t *)(dsp->guest_mmio_base + 0xA000u)
+                           : dsp->core.pram);
++    memset(&peripheral_region, 0, sizeof(peripheral_region));
++    peripheral_region.start = 0xFFFF80u;
++    peripheral_region.end = 0x1000000u;
++    peripheral_region.kind = DSP56300_REGION_CALLBACK;
++    peripheral_region.data.callback.opaque = dsp;
++    peripheral_region.data.callback.read = dsp_peripheral_read;
++    peripheral_region.data.callback.write = dsp_peripheral_write;
++    x_regions[info.memory_map.x_count] = peripheral_region;
++    info.memory_map.x_count++;
+     info.memory_map.y_regions = &y_region;
+     info.memory_map.y_count = 1;
+     info.memory_map.p_regions = &p_region;
+@@ -109,6 +178,30 @@ bool mcpx_apu_dsp_engine_init(DSPState *dsp)
+ #endif
+ }
+ 
++uint32_t mcpx_apu_dsp_engine_run_frame(DSPState *dsp, uint32_t cycle_budget)
++{
++#ifdef MCPX_APU_USE_DSP56300
++    if (!dsp || !dsp->jit || cycle_budget == 0 ||
++        cycle_budget > (uint32_t)INT32_MAX) {
++        return 0;
++    }
++    dsp->interrupts |= DSP_INTERRUPT_START_FRAME;
++    dsp->host_halt_requested = false;
++    dsp56300_set_halt_requested((Dsp56300Jit *)dsp->jit, false);
++    dsp56300_set_cycle_count((Dsp56300Jit *)dsp->jit, 0);
++    dsp56300_run((Dsp56300Jit *)dsp->jit, (int32_t)cycle_budget);
++    if (dsp->host_halt_requested) {
++        dsp56300_set_halt_requested((Dsp56300Jit *)dsp->jit, true);
++    }
++    dsp->core.cycle_count = dsp56300_cycle_count((Dsp56300Jit *)dsp->jit);
++    return dsp->core.cycle_count;
++#else
++    (void)dsp;
++    (void)cycle_budget;
++    return 0;
++#endif
++}
++
+ void mcpx_apu_dsp_engine_destroy(DSPState *dsp)
+ {
+ #ifdef MCPX_APU_USE_DSP56300
+diff --git a/src/apu/apu_dsp56300_bridge.h b/src/apu/apu_dsp56300_bridge.h
+index 081cc1b..221f0c4 100644
+--- a/src/apu/apu_dsp56300_bridge.h
++++ b/src/apu/apu_dsp56300_bridge.h
+@@ -12,6 +12,7 @@
+ bool mcpx_apu_dsp_engine_init(DSPState *dsp);
+ void mcpx_apu_dsp_engine_destroy(DSPState *dsp);
+ void mcpx_apu_dsp_engine_reset(DSPState *dsp);
++uint32_t mcpx_apu_dsp_engine_run_frame(DSPState *dsp, uint32_t cycle_budget);
+ bool mcpx_apu_dsp_memory_read(DSPState *dsp, uint32_t byte_offset,
+                               uint32_t *value);
+ bool mcpx_apu_dsp_memory_write(DSPState *dsp, uint32_t byte_offset,
+diff --git a/src/apu/apu_state.h b/src/apu/apu_state.h
+index 97e1bad..0fe0614 100644
+--- a/src/apu/apu_state.h
++++ b/src/apu/apu_state.h
+@@ -140,6 +140,9 @@ typedef struct DSPState {
+     uint8_t *guest_mmio_base;
+     uint64_t guest_program_hash;
+     bool guest_program_hash_valid;
++    bool guest_program_bootstrapped;
++    /* Set by DSP peripheral writes and applied to the JIT after its run call. */
++    bool host_halt_requested;
+     /* Optional MIT DSP56300 FFI engine, owned by the APU bridge. */
+     void *jit;
+ } DSPState;
+diff --git a/tests/dsp56300_memory_map_test.c b/tests/dsp56300_memory_map_test.c
+index 0807acb..058b54b 100644
+--- a/tests/dsp56300_memory_map_test.c
++++ b/tests/dsp56300_memory_map_test.c
+@@ -1,6 +1,7 @@
+ /*
+- * Focused C ABI check for the XboxRecomp-owned DSP56300 memory map.
+- * This does not execute firmware or claim APU audio compatibility.
++ * Focused C ABI check for the XboxRecomp-owned DSP56300 bridge.
++ * Synthetic code checks a bounded run; this does not claim title DSP
++ * compatibility or APU audio output.
+  */
+ #include "apu_dsp56300_bridge.h"
+ 
+@@ -117,6 +118,19 @@ static int check_ep_map(void)
+         return 0;
+     }
+ 
++    ep.interrupts = 0x02u;
++    if (dsp56300_read_memory((Dsp56300Jit *)ep.jit,
++                             DSP56300_MEM_SPACE_X, 0xFFFFC5u) != 0x02u) {
++        fprintf(stderr, "EP start-frame peripheral status was not readable\n");
++        ok = 0;
++    }
++    dsp56300_write_memory((Dsp56300Jit *)ep.jit,
++                          DSP56300_MEM_SPACE_X, 0xFFFFC5u, 0x02u);
++    if (ep.interrupts != 0) {
++        fprintf(stderr, "EP peripheral status did not clear requested bits\n");
++        ok = 0;
++    }
++
+     ok &= check_word("EP X last word", &ep, DSP56300_MEM_SPACE_X,
+                      0x0BFF, &guest_ram[0x0BFF], 0x789AB);
+     ok &= check_word("EP Y last word", &ep, DSP56300_MEM_SPACE_Y,
+@@ -188,11 +202,54 @@ static int check_scratch_bootstrap(void)
+     return ok;
+ }
+ 
++static int check_peripheral_bridge_and_bounded_run(void)
++{
++    DSPState gp = {0};
++    uint32_t status;
++    int ok = 1;
++
++    gp.is_gp = true;
++    if (!mcpx_apu_dsp_engine_init(&gp)) {
++        fprintf(stderr, "DSP peripheral test engine creation failed\n");
++        return 0;
++    }
++    gp.interrupts = 0x02u;
++    if (dsp56300_read_memory((Dsp56300Jit *)gp.jit,
++                             DSP56300_MEM_SPACE_X, 0xFFFFC5u) != 0x02u) {
++        fprintf(stderr, "DSP start-frame peripheral status was not readable\n");
++        ok = 0;
++    }
++    dsp56300_write_memory((Dsp56300Jit *)gp.jit,
++                          DSP56300_MEM_SPACE_X, 0xFFFFC5u, 0x02u);
++    if (gp.interrupts != 0) {
++        fprintf(stderr, "DSP peripheral status did not clear requested bits\n");
++        ok = 0;
++    }
++    dsp56300_write_memory((Dsp56300Jit *)gp.jit,
++                          DSP56300_MEM_SPACE_X, 0xFFFFD5u, 0x1234u);
++    status = dsp56300_read_memory((Dsp56300Jit *)gp.jit,
++                                  DSP56300_MEM_SPACE_X, 0xFFFFD5u);
++    if (status != 0x1234u) {
++        fprintf(stderr, "DSP DMA start-block register did not round-trip\n");
++        ok = 0;
++    }
++    dsp56300_write_memory((Dsp56300Jit *)gp.jit,
++                          DSP56300_MEM_SPACE_P, 0, 0x0C0000u); /* jmp $0 */
++    status = mcpx_apu_dsp_engine_run_frame(&gp, 1000u);
++    if (status == 0 || status > 1024u) {
++        fprintf(stderr, "DSP frame run exceeded or missed its cycle budget\n");
++        ok = 0;
++    }
++    mcpx_apu_dsp_engine_destroy(&gp);
++    return ok;
++}
++
+ int main(void)
+ {
+-    if (!check_gp_map() || !check_ep_map() || !check_scratch_bootstrap()) {
++    if (!check_gp_map() || !check_ep_map() || !check_scratch_bootstrap() ||
++        !check_peripheral_bridge_and_bounded_run()) {
+         return 1;
+     }
+-    puts("DSP56300 FFI memory map and lifecycle checks passed");
++    puts("DSP56300 FFI memory, peripheral, bootstrap, and bounded-run checks passed");
+     return 0;
+ }
