@@ -12,6 +12,23 @@
 
 > **For players:** there is no game to download yet. The project has not reached the title screen, and there is no installer or launcher. Please do not download unofficial builds or send game files.
 
+## The game and its controller
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="https://commons.wikimedia.org/wiki/File:Steel_Battalion_controllers.jpg"><img src="https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e7/Steel_Battalion_controllers.jpg/1280px-Steel_Battalion_controllers.jpg" alt="Original Steel Battalion controller and foot pedals" width="100%" /></a><br />
+      <sub>Original controller and pedals · Photo by John Tregoning · <a href="https://creativecommons.org/licenses/by/2.0/">CC BY 2.0</a></sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="https://www.purexbox.com/games/xbox/steel_battalion"><img src="https://images.purexbox.com/screenshots/137992/large.jpg" alt="Gameplay screenshot from the original Xbox version of Steel Battalion" width="100%" /></a><br />
+      <sub>Original Xbox gameplay · <a href="https://www.purexbox.com/games/xbox/steel_battalion">Pure Xbox screenshot gallery</a></sub>
+    </td>
+  </tr>
+</table>
+
+These externally hosted images show the original hardware and game. They are not stored in this repository; image rights remain with their respective creators and publishers.
+
 ## What this project is
 
 The goal is to translate the original Xbox version of *Steel Battalion* (2002) ahead of time into a Windows application and recreate the Xbox services it needs. This is called **static recompilation**. The project is not an emulator packaged under another name.
