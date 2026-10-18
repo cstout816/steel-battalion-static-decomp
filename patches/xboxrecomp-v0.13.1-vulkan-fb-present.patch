@@ -212,7 +212,7 @@ index 08bae4b..57c432b 100644
      s_rgb = NULL;
 diff --git a/src/video/fb_vulkan_present.c b/src/video/fb_vulkan_present.c
 new file mode 100644
-index 0000000..aab3b04
+index 0000000..32e6565
 --- /dev/null
 +++ b/src/video/fb_vulkan_present.c
 @@ -0,0 +1,806 @@
@@ -979,7 +979,7 @@ index 0000000..aab3b04
 +    if (result != VK_SUCCESS)
 +        return vp_error("presenting guest frame", result) ? 1 : -1;
 +    if (s_vp.frame_index == 1) {
-+        fprintf(stderr, "[Vulkan] first guest frame submitted and presented successfully\n");
++        fprintf(stderr, "[Vulkan] first swapchain image presented successfully\n");
 +        fflush(stderr);
 +    }
 +    return 1;

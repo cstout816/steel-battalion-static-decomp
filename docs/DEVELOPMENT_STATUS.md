@@ -36,6 +36,7 @@ Xbox runtime: title screen and gameplay frame    [--------------------] 0 / 2 (0
 Xbox kernel and synchronization                  [--------------------] 0 / 3 (0%)
 Filesystem and ISO validation                    [--------------------] 0 / 3 (0%)
 Vulkan/NV2A: full scene rendering                 [--------------------] 0 / 3 (0%)
+Vulkan host presentation: device/swapchain/present  [####################] 3 / 3 (100%)
 Audio: guest DSP execution and audible output     [##########----------] 1 / 2 (50%)
 
 Original SB controller: input, mapping, lights   [--------------------] 0 / 3 (0%)
@@ -943,7 +944,7 @@ The user's direction is explicit: stop switching among graphics APIs and choose 
 
 Added the downstream patch `patches/xboxrecomp-v0.13.1-vulkan-fb-present.patch`. It adds a project-local Vulkan loader/declaration dependency and an opt-in Win32 window that uploads the completed guest framebuffer to a Vulkan swapchain. It is a host presentation adapter only: it does not implement NV2A scene rendering, shader translation, accurate display output, or title-screen boot. The patch applies cleanly in a reverse/check/reapply validation against the local XboxRecomp checkout, and the Release x64 game target builds successfully with it.
 
-The earlier bounded smoke log confirms Vulkan loader/device setup and creation of a 640x480, three-image swapchain. The latest 45-second diagnostic attempt did not reach the Vulkan window before it was stopped; it emitted an untranslated guest `wbinvd` diagnostic. Thus the new selected-device and first-successful-present messages are compile-verified but not runtime-verified. No game process remains. The captured guest framebuffer remains black, title-screen boot and correct rendering are unverified, and no progress bars advance. Keep Vulkan as the one production graphics API; Xbox D3D8 calls are compatibility inputs to that renderer, not an alternate host backend.
+The earlier bounded smoke log confirmed Vulkan loader/device setup and creation of a 640x480, three-image swapchain. A subsequent bounded run with the documented startup switches selected the NVIDIA GeForce RTX 4070 SUPER and logged a successful first swapchain present. The process was stopped after that check; no game process remains. This verifies Vulkan host presentation plumbing, not that the presented startup image contains correct game graphics or that any NV2A scene has rendered. Title-screen boot and visual correctness remain unverified. The separate host-presentation bar advances to 3/3; full Vulkan/NV2A scene rendering remains 0/3. Logs remain local/ignored under `iso/local-analysis/logs/m3-vulkan-presenter-confirm-20261018/`. Keep Vulkan as the one production graphics API; Xbox D3D8 calls are compatibility inputs to that renderer, not an alternate host backend.
 
 ### Bounded splash recheck after backend lock (2026-10-18)
 
