@@ -56,6 +56,22 @@ Checkpoint details: research covers XBE identification, architecture selection, 
 
 These smaller bars expose progress across the individual work areas requested for the project. Each denominator is a short list of verifiable outcomes, not an estimate of effort. A 0% bar means no outcome in that field has been verified yet; it does not mean the work is impossible.
 
+#### XBE analysis and static recompilation
+
+These bars separate file analysis and generated output from semantic coverage. In particular, the function-output percentage only measures emitted functions; unsupported instructions and unresolved calls remain visible as separate gaps.
+
+```text
+XBE format, sections, libraries, and image map  [####################] 1 / 1 (100%)
+Kernel import ordinals named in analysis         [####################] 123 / 123 (100%)
+Function translation output emitted              [####################] 9,148 / 9,148 (100%)
+Unsupported instruction sites resolved           [--------------------] 0 / 243 (0%)
+Unresolved call targets implemented              [--------------------] 0 / 351 (0%)
+Generated Windows executable builds              [####################] 1 / 1 (100%)
+Verified title-screen startup                    [--------------------] 0 / 1 (0%)
+```
+
+The ordinal bar records names mapped to the kernel import table, not implementations verified against live game behavior. The build bar records a local executable build only. Startup still fails before a verified title screen; the 9,148 emitted functions do not imply complete or correct decompilation.
+
 ```text
 Static recompilation: functions emitted       [####################] 9,148 / 9,148 (100%)
 Static recompilation: unsupported ops resolved [--------------------] 0 / 243 (0%)
