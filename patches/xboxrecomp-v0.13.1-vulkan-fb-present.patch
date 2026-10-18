@@ -1,0 +1,1043 @@
+diff --git a/src/video/CMakeLists.txt b/src/video/CMakeLists.txt
+index 2189a3b..c0c5183 100644
+--- a/src/video/CMakeLists.txt
++++ b/src/video/CMakeLists.txt
+@@ -10,5 +10,43 @@ target_include_directories(xbox_video PUBLIC
+ )
+ target_link_libraries(xbox_video PUBLIC xbox_d3d8)
+ if(WIN32)
++    # Project-local Vulkan declarations and loader. Pin source archives by
++    # commit and hash so the game build needs no machine-wide Vulkan SDK.
++    include(FetchContent)
++    if(POLICY CMP0169)
++        cmake_policy(SET CMP0169 OLD)
++    endif()
++    if(POLICY CMP0135)
++        cmake_policy(SET CMP0135 NEW)
++    endif()
++    FetchContent_Declare(vulkan_headers
++        URL https://codeload.github.com/KhronosGroup/Vulkan-Headers/tar.gz/acbb9391c0a597272800cd3f4363661c00a27c77
++        URL_HASH SHA256=4F1526F54E1DEB260BF5BD534AE47F01ABF93155B4FCCD2609EC605207CF4428
++    )
++    FetchContent_GetProperties(vulkan_headers)
++    if(NOT vulkan_headers_POPULATED)
++        FetchContent_Populate(vulkan_headers)
++    endif()
++    FetchContent_Declare(volk
++        URL https://codeload.github.com/zeux/volk/tar.gz/3ca312a4f38baa63d8006b6905abbeeb89c8087d
++        URL_HASH SHA256=8C938B390B234DDEE57C01D47933E708E5BF6F51CE8601B9E93154173C6AD5A1
++    )
++    FetchContent_GetProperties(volk)
++    if(NOT volk_POPULATED)
++        FetchContent_Populate(volk)
++    endif()
++    add_library(xbox_vulkan_volk STATIC ${volk_SOURCE_DIR}/volk.c)
++    target_include_directories(xbox_vulkan_volk PUBLIC
++        ${volk_SOURCE_DIR}
++        ${vulkan_headers_SOURCE_DIR}/include
++    )
++    target_compile_definitions(xbox_vulkan_volk PRIVATE VK_USE_PLATFORM_WIN32_KHR)
++    target_sources(xbox_video PRIVATE fb_vulkan_present.c)
++    target_include_directories(xbox_video PRIVATE
++        ${volk_SOURCE_DIR}
++        ${vulkan_headers_SOURCE_DIR}/include
++    )
++    target_compile_definitions(xbox_video PRIVATE VK_USE_PLATFORM_WIN32_KHR)
++    target_link_libraries(xbox_video PRIVATE xbox_vulkan_volk)
+     target_link_libraries(xbox_video PUBLIC mfplat mfreadwrite mfuuid mf ole32)
+ endif()
+diff --git a/src/video/fb_present.c b/src/video/fb_present.c
+index 08bae4b..57c432b 100644
+--- a/src/video/fb_present.c
++++ b/src/video/fb_present.c
+@@ -7,10 +7,9 @@
+  * implemented, none of it is observable. This is the other half: a window that
+  * reads that memory and puts it on screen.
+  *
+- * Deliberately plain GDI rather than the D3D8 layer. The point is to display
+- * whatever the guest actually wrote, so the fewer stages between guest memory
+- * and the screen the better -- and it must keep working while the D3D8 layer
+- * is busy with something else, such as the FMV player's own window.
++ * The Vulkan presenter displays the completed image from guest memory without
++ * routing this framebuffer through the D3D8 compatibility layer. It runs
++ * independently from the FMV player's separate window.
+  *
+  * Off unless RECOMP_FB_WINDOW is set.
+  */
+@@ -21,12 +20,13 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include "fb_vulkan_present.h"
+ 
+ extern ptrdiff_t xbox_GetMemoryOffset(void);
+ 
+ static volatile LONG s_fb_running;
+ static uint32_t      s_fb_va, s_fb_pitch, s_fb_width = 640, s_fb_height = 480;
+-static uint32_t     *s_rgb;           /* converted 32-bit copy for GDI */
++static uint32_t     *s_rgb;           /* converted copy uploaded to Vulkan */
+ 
+ /* A finished frame, taken at the flip and shown until the next one.
+  *
+@@ -102,7 +102,7 @@ void xbox_FramebufferWindowPresent(uint32_t fb_va, uint32_t pitch)
+  *
+  * GetAsyncKeyState looked like the cheaper way to ask and does not work
+  * here: it reads a state Wine keeps for the X server, and a guest process
+- * drawing through GDI never sees it change. The window that has the focus
++ * polling thread never sees it change. The window that has the focus
+  * is the thing that receives the keys, so that is what has to remember
+  * them.
+  *
+@@ -212,11 +212,11 @@ static void fb_convert(const uint8_t *src, uint32_t bpp)
+     }
+ }
+ 
+-/* Write what the window is currently showing to a 24-bit BMP.
++/* Write the framebuffer pixels queued for the Vulkan window to a 24-bit BMP.
+  *
+  * A black window is ambiguous: it means either that the read path is wrong or
+  * that the title really did render black. Dumping the same converted pixels
+- * the window draws settles which, and does it without a screenshot. */
++ * the Vulkan window presents settles which, without a screenshot. */
+ int xbox_FramebufferDumpBmp(const char *path)
+ {
+     FILE *f;
+@@ -259,9 +259,9 @@ int xbox_FramebufferDumpBmp(const char *path)
+ static DWORD WINAPI fb_thread(LPVOID unused)
+ {
+     HWND hwnd;
+-    HDC hdc;
+-    BITMAPINFO bi;
+     RECT r;
++    const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
++    LONG shown_frame = -2;
+ 
+     (void)unused;
+ 
+@@ -275,9 +275,9 @@ static DWORD WINAPI fb_thread(LPVOID unused)
+         RegisterClassA(&wc);
+     }
+     r.left = 0; r.top = 0; r.right = (LONG)s_fb_width; r.bottom = (LONG)s_fb_height;
+-    AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
++    AdjustWindowRect(&r, style, FALSE);
+     hwnd = CreateWindowExA(0, "XboxRecompFramebuffer", "Xbox Recomp - Framebuffer",
+-                           WS_OVERLAPPEDWINDOW | WS_VISIBLE,
++                           style | WS_VISIBLE,
+                            CW_USEDEFAULT, CW_USEDEFAULT,
+                            r.right - r.left, r.bottom - r.top,
+                            NULL, NULL, GetModuleHandleA(NULL), NULL);
+@@ -285,19 +285,17 @@ static DWORD WINAPI fb_thread(LPVOID unused)
+         InterlockedExchange(&s_fb_running, 0);
+         return 0;
+     }
+-    hdc = GetDC(hwnd);
+-
+-    memset(&bi, 0, sizeof(bi));
+-    bi.bmiHeader.biSize        = sizeof(bi.bmiHeader);
+-    bi.bmiHeader.biWidth       = (LONG)s_fb_width;
+-    bi.bmiHeader.biHeight      = -(LONG)s_fb_height;   /* top-down */
+-    bi.bmiHeader.biPlanes      = 1;
+-    bi.bmiHeader.biBitCount    = 32;
+-    bi.bmiHeader.biCompression = BI_RGB;
+-
+     s_rgb = (uint32_t *)calloc((size_t)s_fb_width * s_fb_height, 4);
++    if (!s_rgb || !xbox_vulkan_presenter_start(hwnd, s_fb_width, s_fb_height)) {
++        fprintf(stderr, "  [FBWIN] Vulkan framebuffer presenter could not start\n");
++        free(s_rgb);
++        s_rgb = NULL;
++        DestroyWindow(hwnd);
++        InterlockedExchange(&s_fb_running, 0);
++        return 0;
++    }
+ 
+-    fprintf(stderr, "  [FBWIN] framebuffer window open (%ux%u)\n",
++    fprintf(stderr, "  [FBWIN] Vulkan framebuffer window open (%ux%u)\n",
+             s_fb_width, s_fb_height);
+ 
+     while (InterlockedCompareExchange(&s_fb_running, 1, 1)) {
+@@ -307,25 +305,35 @@ static DWORD WINAPI fb_thread(LPVOID unused)
+             DispatchMessageA(&msg);
+         }
+         if (s_present_idx >= 0 && s_rgb) {
+-            /* A finished frame, published by the flip. Copied into s_rgb so
+-             * the dump path and GDI see one consistent image even if the
+-             * next flip lands mid-blit. */
++            /* Copy the completed flip before uploading so the next guest
++             * frame cannot tear the image being presented. */
+             LONG idx = s_present_idx;
+-            if (s_present[idx])
++            if (s_present[idx] && idx != shown_frame) {
+                 memcpy(s_rgb, s_present[idx],
+                        (size_t)s_fb_width * s_fb_height * 4);
+-            StretchDIBits(hdc, 0, 0, (int)s_fb_width, (int)s_fb_height,
+-                          0, 0, (int)s_fb_width, (int)s_fb_height,
+-                          s_rgb, &bi, DIB_RGB_COLORS, SRCCOPY);
++                if (xbox_vulkan_presenter_present(s_rgb) < 0) {
++                    InterlockedExchange(&s_fb_running, 0);
++                    break;
++                }
++                shown_frame = idx;
++            }
+         } else if (s_fb_va && s_fb_pitch && s_rgb) {
+             /* No flip yet, or pinned with RECOMP_FB_VA: read guest memory as
+              * before, which is also what a title that never flips needs. */
+             const uint8_t *src =
+                 (const uint8_t *)((uintptr_t)s_fb_va + xbox_GetMemoryOffset());
+             fb_convert(src, s_fb_pitch / s_fb_width);
+-            StretchDIBits(hdc, 0, 0, (int)s_fb_width, (int)s_fb_height,
+-                          0, 0, (int)s_fb_width, (int)s_fb_height,
+-                          s_rgb, &bi, DIB_RGB_COLORS, SRCCOPY);
++            if (xbox_vulkan_presenter_present(s_rgb) < 0) {
++                InterlockedExchange(&s_fb_running, 0);
++                break;
++            }
++        } else if (shown_frame == -2 && s_rgb) {
++            /* Present a defined black frame before the guest flips. */
++            if (xbox_vulkan_presenter_present(s_rgb) < 0) {
++                InterlockedExchange(&s_fb_running, 0);
++                break;
++            }
++            shown_frame = -1;
+         }
+         {
+             /* One dump a few seconds in, so the title has had time to render
+@@ -368,7 +376,7 @@ static DWORD WINAPI fb_thread(LPVOID unused)
+         Sleep(16);
+     }
+ 
+-    ReleaseDC(hwnd, hdc);
++    xbox_vulkan_presenter_stop();
+     DestroyWindow(hwnd);
+     free(s_rgb);
+     s_rgb = NULL;
+diff --git a/src/video/fb_vulkan_present.c b/src/video/fb_vulkan_present.c
+new file mode 100644
+index 0000000..aab3b04
+--- /dev/null
++++ b/src/video/fb_vulkan_present.c
+@@ -0,0 +1,806 @@
++/* Win32 Vulkan presentation for the completed Xbox guest framebuffer.
++ * NV2A state interpretation remains in the runtime; this module only uploads
++ * and presents the completed guest image. */
++
++#if defined(_WIN32)
++#ifndef VK_USE_PLATFORM_WIN32_KHR
++#define VK_USE_PLATFORM_WIN32_KHR
++#endif
++#include <windows.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "volk.h"
++#include "fb_vulkan_present.h"
++
++#define VP_FRAMES_IN_FLIGHT 2
++
++typedef struct VpFrame {
++    VkCommandBuffer command;
++    VkBuffer staging;
++    VkDeviceMemory staging_memory;
++    uint8_t *mapped;
++    VkSemaphore image_available;
++    VkFence fence;
++} VpFrame;
++
++typedef struct VpState {
++    int volk_ready;
++    HWND window;
++    uint32_t guest_width;
++    uint32_t guest_height;
++    VkInstance instance;
++    VkSurfaceKHR surface;
++    VkPhysicalDevice physical_device;
++    VkDevice device;
++    VkQueue graphics_queue;
++    VkQueue present_queue;
++    uint32_t graphics_family;
++    uint32_t present_family;
++    VkCommandPool command_pool;
++    VkSwapchainKHR swapchain;
++    VkFormat swapchain_format;
++    VkExtent2D swapchain_extent;
++    VkImage *swapchain_images;
++    VkSemaphore *render_finished;
++    uint32_t swapchain_image_count;
++    VkImage guest_image;
++    VkDeviceMemory guest_image_memory;
++    VkImageLayout guest_image_layout;
++    VpFrame frames[VP_FRAMES_IN_FLIGHT];
++    uint64_t staging_size;
++    uint32_t frame_index;
++    int ready;
++} VpState;
++
++static VpState s_vp;
++
++static int vp_error(const char *where, VkResult result)
++{
++    fprintf(stderr, "[Vulkan] %s failed (VkResult %d)\n", where, (int)result);
++    return 0;
++}
++
++static uint32_t vp_memory_type(uint32_t bits, VkMemoryPropertyFlags wanted)
++{
++    VkPhysicalDeviceMemoryProperties props;
++    uint32_t i;
++    vkGetPhysicalDeviceMemoryProperties(s_vp.physical_device, &props);
++    for (i = 0; i < props.memoryTypeCount; ++i) {
++        if ((bits & (1u << i))
++                && (props.memoryTypes[i].propertyFlags & wanted) == wanted)
++            return i;
++    }
++    return UINT32_MAX;
++}
++
++static int vp_queue_families(VkPhysicalDevice physical,
++                             uint32_t *graphics, uint32_t *present)
++{
++    VkQueueFamilyProperties *props = NULL;
++    uint32_t count = 0, i;
++    int have_graphics = 0, have_present = 0;
++
++    vkGetPhysicalDeviceQueueFamilyProperties(physical, &count, NULL);
++    if (!count)
++        return 0;
++    props = (VkQueueFamilyProperties *)calloc(count, sizeof(*props));
++    if (!props)
++        return 0;
++    vkGetPhysicalDeviceQueueFamilyProperties(physical, &count, props);
++    for (i = 0; i < count; ++i) {
++        VkBool32 supported = VK_FALSE;
++        VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(
++            physical, i, s_vp.surface, &supported);
++        if (result != VK_SUCCESS)
++            continue;
++        if (!have_graphics && (props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)) {
++            *graphics = i;
++            have_graphics = 1;
++        }
++        if (!have_present && supported) {
++            *present = i;
++            have_present = 1;
++        }
++        if ((props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && supported) {
++            *graphics = *present = i;
++            have_graphics = have_present = 1;
++            break;
++        }
++    }
++    free(props);
++    return have_graphics && have_present;
++}
++
++static int vp_has_swapchain_extension(VkPhysicalDevice physical)
++{
++    VkExtensionProperties *props = NULL;
++    uint32_t count = 0, i;
++    int found = 0;
++    if (vkEnumerateDeviceExtensionProperties(physical, NULL, &count, NULL)
++            != VK_SUCCESS || !count)
++        return 0;
++    props = (VkExtensionProperties *)calloc(count, sizeof(*props));
++    if (!props)
++        return 0;
++    if (vkEnumerateDeviceExtensionProperties(physical, NULL, &count, props)
++            == VK_SUCCESS) {
++        for (i = 0; i < count; ++i) {
++            if (strcmp(props[i].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME)
++                    == 0) {
++                found = 1;
++                break;
++            }
++        }
++    }
++    free(props);
++    return found;
++}
++
++static int vp_format_supported(VkPhysicalDevice physical, VkFormat format,
++                               VkFormatFeatureFlags features)
++{
++    VkFormatProperties props;
++    vkGetPhysicalDeviceFormatProperties(physical, format, &props);
++    return (props.optimalTilingFeatures & features) == features;
++}
++
++static int vp_select_surface_format(VkPhysicalDevice physical,
++                                    VkSurfaceFormatKHR *selected)
++{
++    VkSurfaceFormatKHR *formats = NULL;
++    uint32_t count = 0, i;
++    const VkFormatFeatureFlags needed = VK_FORMAT_FEATURE_BLIT_DST_BIT;
++    const VkFormat preferences[] = {
++        VK_FORMAT_B8G8R8A8_UNORM,
++        VK_FORMAT_R8G8B8A8_UNORM,
++        VK_FORMAT_B8G8R8A8_SRGB,
++        VK_FORMAT_R8G8B8A8_SRGB
++    };
++    VkResult result = vkGetPhysicalDeviceSurfaceFormatsKHR(
++        physical, s_vp.surface, &count, NULL);
++    if (result != VK_SUCCESS || !count)
++        return 0;
++    formats = (VkSurfaceFormatKHR *)calloc(count, sizeof(*formats));
++    if (!formats)
++        return 0;
++    result = vkGetPhysicalDeviceSurfaceFormatsKHR(
++        physical, s_vp.surface, &count, formats);
++    if (result != VK_SUCCESS) {
++        free(formats);
++        return 0;
++    }
++    if (count == 1 && formats[0].format == VK_FORMAT_UNDEFINED
++            && vp_format_supported(physical, VK_FORMAT_B8G8R8A8_UNORM, needed)) {
++        selected->format = VK_FORMAT_B8G8R8A8_UNORM;
++        selected->colorSpace = formats[0].colorSpace;
++        free(formats);
++        return 1;
++    }
++    for (i = 0; i < sizeof(preferences) / sizeof(preferences[0]); ++i) {
++        uint32_t j;
++        for (j = 0; j < count; ++j) {
++            if (formats[j].format == preferences[i]
++                    && vp_format_supported(physical, preferences[i], needed)) {
++                *selected = formats[j];
++                free(formats);
++                return 1;
++            }
++        }
++    }
++    free(formats);
++    return 0;
++}
++
++static int vp_select_physical_device(void)
++{
++    VkPhysicalDevice *devices = NULL;
++    VkFormatFeatureFlags guest_features = VK_FORMAT_FEATURE_BLIT_SRC_BIT
++                                        | VK_FORMAT_FEATURE_BLIT_DST_BIT;
++    uint32_t count = 0, i;
++    VkResult result = vkEnumeratePhysicalDevices(s_vp.instance, &count, NULL);
++    if (result != VK_SUCCESS || !count)
++        return vp_error("enumerating physical devices", result);
++    devices = (VkPhysicalDevice *)calloc(count, sizeof(*devices));
++    if (!devices)
++        return 0;
++    result = vkEnumeratePhysicalDevices(s_vp.instance, &count, devices);
++    if (result != VK_SUCCESS) {
++        free(devices);
++        return vp_error("reading physical devices", result);
++    }
++    for (i = 0; i < count; ++i) {
++        VkSurfaceCapabilitiesKHR caps;
++        VkSurfaceFormatKHR format;
++        uint32_t graphics, present;
++        if (!vp_has_swapchain_extension(devices[i])
++                || !vp_queue_families(devices[i], &graphics, &present)
++                || !vp_select_surface_format(devices[i], &format)
++                || !vp_format_supported(devices[i],
++                    VK_FORMAT_B8G8R8A8_UNORM, guest_features))
++            continue;
++        if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
++                devices[i], s_vp.surface, &caps) != VK_SUCCESS
++                || !(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT))
++            continue;
++        s_vp.physical_device = devices[i];
++        s_vp.graphics_family = graphics;
++        s_vp.present_family = present;
++        {
++            VkPhysicalDeviceProperties properties;
++            vkGetPhysicalDeviceProperties(devices[i], &properties);
++            fprintf(stderr, "[Vulkan] selected device: %s (vendor 0x%04X, device 0x%04X)\n",
++                    properties.deviceName, properties.vendorID,
++                    properties.deviceID);
++        }
++        free(devices);
++        return 1;
++    }
++    free(devices);
++    fprintf(stderr, "[Vulkan] no device supports a blit-capable Win32 swapchain\n");
++    return 0;
++}
++
++static int vp_create_device(void)
++{
++    VkDeviceQueueCreateInfo queues[2];
++    VkDeviceCreateInfo info;
++    float priority = 1.0f;
++    uint32_t count = s_vp.graphics_family == s_vp.present_family ? 1u : 2u;
++    memset(queues, 0, sizeof(queues));
++    memset(&info, 0, sizeof(info));
++    queues[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
++    queues[0].queueFamilyIndex = s_vp.graphics_family;
++    queues[0].queueCount = 1;
++    queues[0].pQueuePriorities = &priority;
++    if (count == 2) {
++        queues[1] = queues[0];
++        queues[1].queueFamilyIndex = s_vp.present_family;
++    }
++    info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
++    info.queueCreateInfoCount = count;
++    info.pQueueCreateInfos = queues;
++    info.enabledExtensionCount = 1;
++    {
++        const char *extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
++        info.ppEnabledExtensionNames = extensions;
++        VkResult result = vkCreateDevice(s_vp.physical_device, &info, NULL,
++                                         &s_vp.device);
++        if (result != VK_SUCCESS)
++            return vp_error("creating device", result);
++    }
++    volkLoadDevice(s_vp.device);
++    vkGetDeviceQueue(s_vp.device, s_vp.graphics_family, 0,
++                     &s_vp.graphics_queue);
++    vkGetDeviceQueue(s_vp.device, s_vp.present_family, 0,
++                     &s_vp.present_queue);
++    return 1;
++}
++
++static void vp_destroy_swapchain(void)
++{
++    uint32_t i;
++    if (s_vp.device) {
++        for (i = 0; i < s_vp.swapchain_image_count; ++i) {
++            if (s_vp.render_finished && s_vp.render_finished[i])
++                vkDestroySemaphore(s_vp.device, s_vp.render_finished[i], NULL);
++        }
++        if (s_vp.swapchain)
++            vkDestroySwapchainKHR(s_vp.device, s_vp.swapchain, NULL);
++    }
++    free(s_vp.render_finished);
++    free(s_vp.swapchain_images);
++    s_vp.render_finished = NULL;
++    s_vp.swapchain_images = NULL;
++    s_vp.swapchain_image_count = 0;
++    s_vp.swapchain = VK_NULL_HANDLE;
++}
++
++static int vp_create_swapchain(void)
++{
++    VkSurfaceCapabilitiesKHR caps;
++    VkSurfaceFormatKHR format;
++    VkSwapchainCreateInfoKHR info;
++    RECT client;
++    uint32_t image_count, i;
++    VkCompositeAlphaFlagBitsKHR alpha_modes[] = {
++        VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
++        VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
++        VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
++        VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR
++    };
++    uint32_t alpha_index;
++    VkResult result;
++
++    result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
++        s_vp.physical_device, s_vp.surface, &caps);
++    if (result != VK_SUCCESS)
++        return vp_error("querying surface capabilities", result);
++    if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
++        fprintf(stderr, "[Vulkan] surface images cannot receive guest frames\n");
++        return 0;
++    }
++    if (!vp_select_surface_format(s_vp.physical_device, &format)) {
++        fprintf(stderr, "[Vulkan] no compatible blit destination format\n");
++        return 0;
++    }
++    if (caps.currentExtent.width != UINT32_MAX) {
++        s_vp.swapchain_extent = caps.currentExtent;
++    } else {
++        GetClientRect(s_vp.window, &client);
++        s_vp.swapchain_extent.width = (uint32_t)(client.right - client.left);
++        s_vp.swapchain_extent.height = (uint32_t)(client.bottom - client.top);
++        if (s_vp.swapchain_extent.width < caps.minImageExtent.width)
++            s_vp.swapchain_extent.width = caps.minImageExtent.width;
++        if (s_vp.swapchain_extent.width > caps.maxImageExtent.width)
++            s_vp.swapchain_extent.width = caps.maxImageExtent.width;
++        if (s_vp.swapchain_extent.height < caps.minImageExtent.height)
++            s_vp.swapchain_extent.height = caps.minImageExtent.height;
++        if (s_vp.swapchain_extent.height > caps.maxImageExtent.height)
++            s_vp.swapchain_extent.height = caps.maxImageExtent.height;
++    }
++    if (!s_vp.swapchain_extent.width || !s_vp.swapchain_extent.height)
++        return 0;
++    image_count = caps.minImageCount + 1;
++    if (caps.maxImageCount && image_count > caps.maxImageCount)
++        image_count = caps.maxImageCount;
++    memset(&info, 0, sizeof(info));
++    info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
++    info.surface = s_vp.surface;
++    info.minImageCount = image_count;
++    info.imageFormat = format.format;
++    info.imageColorSpace = format.colorSpace;
++    info.imageExtent = s_vp.swapchain_extent;
++    info.imageArrayLayers = 1;
++    info.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
++    if (s_vp.graphics_family != s_vp.present_family) {
++        info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
++        info.queueFamilyIndexCount = 2;
++        info.pQueueFamilyIndices = (uint32_t[]){
++            s_vp.graphics_family, s_vp.present_family
++        };
++    } else {
++        info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
++    }
++    info.preTransform = caps.currentTransform;
++    for (alpha_index = 0;
++         alpha_index < sizeof(alpha_modes) / sizeof(alpha_modes[0]);
++         ++alpha_index) {
++        if (caps.supportedCompositeAlpha & alpha_modes[alpha_index]) {
++            info.compositeAlpha = alpha_modes[alpha_index];
++            break;
++        }
++    }
++    if (alpha_index == sizeof(alpha_modes) / sizeof(alpha_modes[0]))
++        return 0;
++    info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
++    info.clipped = VK_TRUE;
++    result = vkCreateSwapchainKHR(s_vp.device, &info, NULL, &s_vp.swapchain);
++    if (result != VK_SUCCESS)
++        return vp_error("creating swapchain", result);
++    s_vp.swapchain_format = format.format;
++    result = vkGetSwapchainImagesKHR(s_vp.device, s_vp.swapchain,
++                                     &s_vp.swapchain_image_count, NULL);
++    if (result != VK_SUCCESS || !s_vp.swapchain_image_count)
++        return vp_error("querying swapchain images", result);
++    s_vp.swapchain_images = (VkImage *)calloc(
++        s_vp.swapchain_image_count, sizeof(*s_vp.swapchain_images));
++    s_vp.render_finished = (VkSemaphore *)calloc(
++        s_vp.swapchain_image_count, sizeof(*s_vp.render_finished));
++    if (!s_vp.swapchain_images || !s_vp.render_finished)
++        return 0;
++    result = vkGetSwapchainImagesKHR(s_vp.device, s_vp.swapchain,
++        &s_vp.swapchain_image_count, s_vp.swapchain_images);
++    if (result != VK_SUCCESS)
++        return vp_error("reading swapchain images", result);
++    for (i = 0; i < s_vp.swapchain_image_count; ++i) {
++        VkSemaphoreCreateInfo semaphore;
++        memset(&semaphore, 0, sizeof(semaphore));
++        semaphore.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
++        result = vkCreateSemaphore(s_vp.device, &semaphore, NULL,
++                                   &s_vp.render_finished[i]);
++        if (result != VK_SUCCESS)
++            return vp_error("creating presentation semaphore", result);
++    }
++    fprintf(stderr, "[Vulkan] swapchain %ux%u, %u images, format %d\n",
++            s_vp.swapchain_extent.width, s_vp.swapchain_extent.height,
++            s_vp.swapchain_image_count, (int)s_vp.swapchain_format);
++    return 1;
++}
++
++static int vp_create_guest_image(void)
++{
++    VkImageCreateInfo image_info;
++    VkMemoryRequirements requirements;
++    VkMemoryAllocateInfo allocation;
++    uint32_t memory_type;
++    VkResult result;
++    memset(&image_info, 0, sizeof(image_info));
++    image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
++    image_info.imageType = VK_IMAGE_TYPE_2D;
++    image_info.format = VK_FORMAT_B8G8R8A8_UNORM;
++    image_info.extent.width = s_vp.guest_width;
++    image_info.extent.height = s_vp.guest_height;
++    image_info.extent.depth = 1;
++    image_info.mipLevels = 1;
++    image_info.arrayLayers = 1;
++    image_info.samples = VK_SAMPLE_COUNT_1_BIT;
++    image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
++    image_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT
++                     | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
++    image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
++    image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
++    result = vkCreateImage(s_vp.device, &image_info, NULL, &s_vp.guest_image);
++    if (result != VK_SUCCESS)
++        return vp_error("creating guest image", result);
++    vkGetImageMemoryRequirements(s_vp.device, s_vp.guest_image, &requirements);
++    memory_type = vp_memory_type(requirements.memoryTypeBits,
++                                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++    if (memory_type == UINT32_MAX) {
++        fprintf(stderr, "[Vulkan] no device-local image memory type\n");
++        return 0;
++    }
++    memset(&allocation, 0, sizeof(allocation));
++    allocation.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
++    allocation.allocationSize = requirements.size;
++    allocation.memoryTypeIndex = memory_type;
++    result = vkAllocateMemory(s_vp.device, &allocation, NULL,
++                              &s_vp.guest_image_memory);
++    if (result != VK_SUCCESS)
++        return vp_error("allocating guest image", result);
++    result = vkBindImageMemory(s_vp.device, s_vp.guest_image,
++                               s_vp.guest_image_memory, 0);
++    if (result != VK_SUCCESS)
++        return vp_error("binding guest image", result);
++    s_vp.guest_image_layout = VK_IMAGE_LAYOUT_UNDEFINED;
++    return 1;
++}
++
++static int vp_create_frames(void)
++{
++    VkCommandPoolCreateInfo pool;
++    VkCommandBufferAllocateInfo command_info;
++    VkCommandBuffer commands[VP_FRAMES_IN_FLIGHT];
++    uint32_t i;
++    VkResult result;
++    memset(&pool, 0, sizeof(pool));
++    pool.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
++    pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
++    pool.queueFamilyIndex = s_vp.graphics_family;
++    result = vkCreateCommandPool(s_vp.device, &pool, NULL, &s_vp.command_pool);
++    if (result != VK_SUCCESS)
++        return vp_error("creating command pool", result);
++    memset(&command_info, 0, sizeof(command_info));
++    command_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
++    command_info.commandPool = s_vp.command_pool;
++    command_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
++    command_info.commandBufferCount = VP_FRAMES_IN_FLIGHT;
++    result = vkAllocateCommandBuffers(s_vp.device, &command_info, commands);
++    if (result != VK_SUCCESS)
++        return vp_error("allocating command buffers", result);
++    s_vp.staging_size = (uint64_t)s_vp.guest_width * s_vp.guest_height * 4;
++    for (i = 0; i < VP_FRAMES_IN_FLIGHT; ++i) {
++        VkBufferCreateInfo buffer_info;
++        VkMemoryRequirements requirements;
++        VkMemoryAllocateInfo memory_info;
++        VkSemaphoreCreateInfo semaphore_info;
++        VkFenceCreateInfo fence_info;
++        uint32_t type;
++        VpFrame *frame = &s_vp.frames[i];
++        frame->command = commands[i];
++        memset(&buffer_info, 0, sizeof(buffer_info));
++        buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
++        buffer_info.size = s_vp.staging_size;
++        buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
++        buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
++        result = vkCreateBuffer(s_vp.device, &buffer_info, NULL,
++                                &frame->staging);
++        if (result != VK_SUCCESS)
++            return vp_error("creating upload buffer", result);
++        vkGetBufferMemoryRequirements(s_vp.device, frame->staging,
++                                      &requirements);
++        type = vp_memory_type(requirements.memoryTypeBits,
++            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
++            | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
++        if (type == UINT32_MAX) {
++            fprintf(stderr, "[Vulkan] no coherent host-visible upload memory\n");
++            return 0;
++        }
++        memset(&memory_info, 0, sizeof(memory_info));
++        memory_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
++        memory_info.allocationSize = requirements.size;
++        memory_info.memoryTypeIndex = type;
++        result = vkAllocateMemory(s_vp.device, &memory_info, NULL,
++                                  &frame->staging_memory);
++        if (result != VK_SUCCESS)
++            return vp_error("allocating upload buffer", result);
++        result = vkBindBufferMemory(s_vp.device, frame->staging,
++                                    frame->staging_memory, 0);
++        if (result != VK_SUCCESS)
++            return vp_error("binding upload buffer", result);
++        result = vkMapMemory(s_vp.device, frame->staging_memory, 0,
++                             s_vp.staging_size, 0, (void **)&frame->mapped);
++        if (result != VK_SUCCESS)
++            return vp_error("mapping upload buffer", result);
++        memset(&semaphore_info, 0, sizeof(semaphore_info));
++        semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
++        result = vkCreateSemaphore(s_vp.device, &semaphore_info, NULL,
++                                   &frame->image_available);
++        if (result != VK_SUCCESS)
++            return vp_error("creating acquire semaphore", result);
++        memset(&fence_info, 0, sizeof(fence_info));
++        fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
++        fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
++        result = vkCreateFence(s_vp.device, &fence_info, NULL, &frame->fence);
++        if (result != VK_SUCCESS)
++            return vp_error("creating frame fence", result);
++    }
++    return 1;
++}
++
++static int vp_recreate_swapchain(void)
++{
++    VkResult result = vkDeviceWaitIdle(s_vp.device);
++    if (result != VK_SUCCESS)
++        return vp_error("waiting before swapchain recreation", result);
++    vp_destroy_swapchain();
++    return vp_create_swapchain();
++}
++
++int xbox_vulkan_presenter_start(HWND window, uint32_t width, uint32_t height)
++{
++    VkApplicationInfo application;
++    VkInstanceCreateInfo instance_info;
++    VkWin32SurfaceCreateInfoKHR surface_info;
++    VkResult result;
++    const char *extensions[] = {
++        VK_KHR_SURFACE_EXTENSION_NAME,
++        VK_KHR_WIN32_SURFACE_EXTENSION_NAME
++    };
++
++    memset(&s_vp, 0, sizeof(s_vp));
++    if (!window || !width || !height
++            || (uint64_t)width * (uint64_t)height > UINT32_MAX / 4u) {
++        fprintf(stderr, "[Vulkan] invalid window or guest extent\n");
++        return 0;
++    }
++    s_vp.window = window;
++    s_vp.guest_width = width;
++    s_vp.guest_height = height;
++    result = volkInitialize();
++    if (result != VK_SUCCESS)
++        return vp_error("loading Vulkan loader", result);
++    s_vp.volk_ready = 1;
++    memset(&application, 0, sizeof(application));
++    application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
++    application.pApplicationName = "Steel Battalion Static Recompilation";
++    application.applicationVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
++    application.pEngineName = "XboxRecomp";
++    application.engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
++    application.apiVersion = VK_API_VERSION_1_0;
++    memset(&instance_info, 0, sizeof(instance_info));
++    instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
++    instance_info.pApplicationInfo = &application;
++    instance_info.enabledExtensionCount = 2;
++    instance_info.ppEnabledExtensionNames = extensions;
++    result = vkCreateInstance(&instance_info, NULL, &s_vp.instance);
++    if (result != VK_SUCCESS) {
++        vp_error("creating instance", result);
++        goto fail;
++    }
++    volkLoadInstance(s_vp.instance);
++    memset(&surface_info, 0, sizeof(surface_info));
++    surface_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
++    surface_info.hinstance = GetModuleHandleW(NULL);
++    surface_info.hwnd = window;
++    result = vkCreateWin32SurfaceKHR(s_vp.instance, &surface_info, NULL,
++                                     &s_vp.surface);
++    if (result != VK_SUCCESS) {
++        vp_error("creating Win32 surface", result);
++        goto fail;
++    }
++    if (!vp_select_physical_device() || !vp_create_device())
++        goto fail;
++    if (!vp_create_swapchain() || !vp_create_guest_image() || !vp_create_frames())
++        goto fail;
++    s_vp.ready = 1;
++    fprintf(stderr, "[Vulkan] framebuffer presenter ready (%ux%u guest)\n",
++            width, height);
++    return 1;
++
++fail:
++    xbox_vulkan_presenter_stop();
++    return 0;
++}
++
++static void vp_image_barrier(VkCommandBuffer command, VkImage image,
++                             VkImageLayout old_layout, VkImageLayout new_layout,
++                             VkAccessFlags src_access, VkAccessFlags dst_access,
++                             VkPipelineStageFlags src_stage,
++                             VkPipelineStageFlags dst_stage)
++{
++    VkImageMemoryBarrier barrier;
++    memset(&barrier, 0, sizeof(barrier));
++    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
++    barrier.srcAccessMask = src_access;
++    barrier.dstAccessMask = dst_access;
++    barrier.oldLayout = old_layout;
++    barrier.newLayout = new_layout;
++    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++    barrier.image = image;
++    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++    barrier.subresourceRange.baseMipLevel = 0;
++    barrier.subresourceRange.levelCount = 1;
++    barrier.subresourceRange.baseArrayLayer = 0;
++    barrier.subresourceRange.layerCount = 1;
++    vkCmdPipelineBarrier(command, src_stage, dst_stage, 0, 0, NULL, 0, NULL,
++                         1, &barrier);
++}
++
++int xbox_vulkan_presenter_present(const uint32_t *bgra_pixels)
++{
++    VpFrame *frame;
++    VkResult result;
++    uint32_t image_index, i;
++    VkCommandBufferBeginInfo begin;
++    VkBufferImageCopy copy;
++    VkImageBlit blit;
++    VkSubmitInfo submit;
++    VkPresentInfoKHR present;
++    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
++    uint32_t *dst;
++
++    if (!s_vp.ready || !bgra_pixels)
++        return 0;
++    frame = &s_vp.frames[s_vp.frame_index % VP_FRAMES_IN_FLIGHT];
++    result = vkWaitForFences(s_vp.device, 1, &frame->fence, VK_TRUE, UINT64_MAX);
++    if (result != VK_SUCCESS)
++        return vp_error("waiting for frame fence", result);
++    result = vkAcquireNextImageKHR(s_vp.device, s_vp.swapchain, UINT64_MAX,
++        frame->image_available, VK_NULL_HANDLE, &image_index);
++    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
++        return vp_recreate_swapchain() ? 0 : -1;
++    if (result != VK_SUCCESS)
++        return vp_error("acquiring swapchain image", result) ? 1 : -1;
++
++    dst = (uint32_t *)frame->mapped;
++    for (i = 0; i < s_vp.guest_width * s_vp.guest_height; ++i) {
++        uint32_t pixel = bgra_pixels[i];
++        uint8_t b = (uint8_t)(pixel & 0xff);
++        uint8_t g = (uint8_t)((pixel >> 8) & 0xff);
++        uint8_t r = (uint8_t)((pixel >> 16) & 0xff);
++        dst[i] = (uint32_t)b | ((uint32_t)g << 8)
++               | ((uint32_t)r << 16) | 0xff000000u;
++    }
++    result = vkResetCommandBuffer(frame->command, 0);
++    if (result != VK_SUCCESS)
++        return vp_error("resetting command buffer", result) ? 1 : -1;
++    memset(&begin, 0, sizeof(begin));
++    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
++    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
++    result = vkBeginCommandBuffer(frame->command, &begin);
++    if (result != VK_SUCCESS)
++        return vp_error("beginning command buffer", result) ? 1 : -1;
++
++    vp_image_barrier(frame->command, s_vp.guest_image,
++        s_vp.guest_image_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++        s_vp.guest_image_layout == VK_IMAGE_LAYOUT_UNDEFINED ? 0
++            : VK_ACCESS_TRANSFER_READ_BIT,
++        VK_ACCESS_TRANSFER_WRITE_BIT,
++        s_vp.guest_image_layout == VK_IMAGE_LAYOUT_UNDEFINED
++            ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_TRANSFER_BIT,
++        VK_PIPELINE_STAGE_TRANSFER_BIT);
++    memset(&copy, 0, sizeof(copy));
++    copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++    copy.imageSubresource.layerCount = 1;
++    copy.imageExtent.width = s_vp.guest_width;
++    copy.imageExtent.height = s_vp.guest_height;
++    copy.imageExtent.depth = 1;
++    vkCmdCopyBufferToImage(frame->command, frame->staging, s_vp.guest_image,
++        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
++    vp_image_barrier(frame->command, s_vp.guest_image,
++        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
++        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
++        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
++    vp_image_barrier(frame->command, s_vp.swapchain_images[image_index],
++        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++        0, VK_ACCESS_TRANSFER_WRITE_BIT,
++        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
++    memset(&blit, 0, sizeof(blit));
++    blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++    blit.srcSubresource.layerCount = 1;
++    blit.srcOffsets[1].x = (int32_t)s_vp.guest_width;
++    blit.srcOffsets[1].y = (int32_t)s_vp.guest_height;
++    blit.srcOffsets[1].z = 1;
++    blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++    blit.dstSubresource.layerCount = 1;
++    blit.dstOffsets[1].x = (int32_t)s_vp.swapchain_extent.width;
++    blit.dstOffsets[1].y = (int32_t)s_vp.swapchain_extent.height;
++    blit.dstOffsets[1].z = 1;
++    vkCmdBlitImage(frame->command,
++        s_vp.guest_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
++        s_vp.swapchain_images[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++        1, &blit, VK_FILTER_NEAREST);
++    vp_image_barrier(frame->command, s_vp.swapchain_images[image_index],
++        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
++        VK_ACCESS_TRANSFER_WRITE_BIT, 0,
++        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
++    result = vkEndCommandBuffer(frame->command);
++    if (result != VK_SUCCESS)
++        return vp_error("ending command buffer", result) ? 1 : -1;
++    result = vkResetFences(s_vp.device, 1, &frame->fence);
++    if (result != VK_SUCCESS)
++        return vp_error("resetting frame fence", result) ? 1 : -1;
++    memset(&submit, 0, sizeof(submit));
++    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
++    submit.waitSemaphoreCount = 1;
++    submit.pWaitSemaphores = &frame->image_available;
++    submit.pWaitDstStageMask = &wait_stage;
++    submit.commandBufferCount = 1;
++    submit.pCommandBuffers = &frame->command;
++    submit.signalSemaphoreCount = 1;
++    submit.pSignalSemaphores = &s_vp.render_finished[image_index];
++    result = vkQueueSubmit(s_vp.graphics_queue, 1, &submit, frame->fence);
++    if (result != VK_SUCCESS)
++        return vp_error("submitting guest frame", result) ? 1 : -1;
++    memset(&present, 0, sizeof(present));
++    present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
++    present.waitSemaphoreCount = 1;
++    present.pWaitSemaphores = &s_vp.render_finished[image_index];
++    present.swapchainCount = 1;
++    present.pSwapchains = &s_vp.swapchain;
++    present.pImageIndices = &image_index;
++    result = vkQueuePresentKHR(s_vp.present_queue, &present);
++    s_vp.guest_image_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
++    ++s_vp.frame_index;
++    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
++        return vp_recreate_swapchain() ? 0 : -1;
++    if (result != VK_SUCCESS)
++        return vp_error("presenting guest frame", result) ? 1 : -1;
++    if (s_vp.frame_index == 1) {
++        fprintf(stderr, "[Vulkan] first guest frame submitted and presented successfully\n");
++        fflush(stderr);
++    }
++    return 1;
++}
++
++void xbox_vulkan_presenter_stop(void)
++{
++    uint32_t i;
++    if (s_vp.device) {
++        vkDeviceWaitIdle(s_vp.device);
++        for (i = 0; i < VP_FRAMES_IN_FLIGHT; ++i) {
++            VpFrame *frame = &s_vp.frames[i];
++            if (frame->mapped)
++                vkUnmapMemory(s_vp.device, frame->staging_memory);
++            if (frame->staging)
++                vkDestroyBuffer(s_vp.device, frame->staging, NULL);
++            if (frame->staging_memory)
++                vkFreeMemory(s_vp.device, frame->staging_memory, NULL);
++            if (frame->image_available)
++                vkDestroySemaphore(s_vp.device, frame->image_available, NULL);
++            if (frame->fence)
++                vkDestroyFence(s_vp.device, frame->fence, NULL);
++        }
++        vp_destroy_swapchain();
++        if (s_vp.guest_image)
++            vkDestroyImage(s_vp.device, s_vp.guest_image, NULL);
++        if (s_vp.guest_image_memory)
++            vkFreeMemory(s_vp.device, s_vp.guest_image_memory, NULL);
++        if (s_vp.command_pool)
++            vkDestroyCommandPool(s_vp.device, s_vp.command_pool, NULL);
++        vkDestroyDevice(s_vp.device, NULL);
++    }
++    if (s_vp.instance) {
++        if (s_vp.surface)
++            vkDestroySurfaceKHR(s_vp.instance, s_vp.surface, NULL);
++        vkDestroyInstance(s_vp.instance, NULL);
++    }
++    if (s_vp.volk_ready)
++        volkFinalize();
++    memset(&s_vp, 0, sizeof(s_vp));
++}
++#endif
+diff --git a/src/video/fb_vulkan_present.h b/src/video/fb_vulkan_present.h
+new file mode 100644
+index 0000000..8e9819d
+--- /dev/null
++++ b/src/video/fb_vulkan_present.h
+@@ -0,0 +1,13 @@
++#ifndef XBOX_FB_VULKAN_PRESENT_H
++#define XBOX_FB_VULKAN_PRESENT_H
++
++#if defined(_WIN32)
++#include <windows.h>
++#include <stdint.h>
++
++int xbox_vulkan_presenter_start(HWND window, uint32_t width, uint32_t height);
++int xbox_vulkan_presenter_present(const uint32_t *bgra_pixels);
++void xbox_vulkan_presenter_stop(void);
++#endif
++
++#endif

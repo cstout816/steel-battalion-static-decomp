@@ -4,7 +4,7 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
-**Final graphics backend: Vulkan only.** This is the settled production choice for NV2A and graphics compatibility; no D3D11/D3D12 alternatives or runtime backend switch will be developed. The older dated entries below are a chronological record of superseded experiments, not current directions. Milestone 3 is still in progress.
+**Final graphics backend: Vulkan only.** This is the settled production choice for NV2A and graphics compatibility; no D3D11/D3D12 alternatives or runtime backend switch will be developed. The older dated entries below are a chronological record of superseded experiments, not current directions. Milestone 3 is still in progress. The Xbox D3D8 API compatibility surface remains necessary for translated game calls; it is not a selectable host renderer.
 
 ### Detailed field progress
 
@@ -938,6 +938,12 @@ The follow-up 120-second run used that rebuilt executable with `RECOMP_TITLE_TIM
 ### Final graphics backend lock (2026-10-18)
 
 The user's direction is explicit: stop switching among graphics APIs and choose one. **Vulkan is the sole production backend**, for NV2A pushbuffer rendering and graphics compatibility. No D3D11 or D3D12 alternative renderer or runtime backend selection will be added. Older D3D11/D3D12 entries in this chronological log describe superseded experiments, not current plans. The next renderer work proceeds on the Vulkan adapter path while preserving static recompilation; the software rasterizer remains a local comparison aid only. Milestone 3 remains incomplete, with the clean boot reaching only the CAPCOM splash. No milestone or field progress bars advance.
+
+### Vulkan-only framebuffer adapter patch (2026-10-18)
+
+Added the downstream patch `patches/xboxrecomp-v0.13.1-vulkan-fb-present.patch`. It adds a project-local Vulkan loader/declaration dependency and an opt-in Win32 window that uploads the completed guest framebuffer to a Vulkan swapchain. It is a host presentation adapter only: it does not implement NV2A scene rendering, shader translation, accurate display output, or title-screen boot. The patch applies cleanly in a reverse/check/reapply validation against the local XboxRecomp checkout, and the Release x64 game target builds successfully with it.
+
+The earlier bounded smoke log confirms Vulkan loader/device setup and creation of a 640x480, three-image swapchain. The latest 45-second diagnostic attempt did not reach the Vulkan window before it was stopped; it emitted an untranslated guest `wbinvd` diagnostic. Thus the new selected-device and first-successful-present messages are compile-verified but not runtime-verified. No game process remains. The captured guest framebuffer remains black, title-screen boot and correct rendering are unverified, and no progress bars advance. Keep Vulkan as the one production graphics API; Xbox D3D8 calls are compatibility inputs to that renderer, not an alternate host backend.
 
 ### Bounded splash recheck after backend lock (2026-10-18)
 
