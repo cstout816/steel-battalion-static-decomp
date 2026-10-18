@@ -1,0 +1,664 @@
+From the local XboxRecomp v0.13.1 baseline; experimental flat D3D12 raster slice.
+
+diff --git a/src/kernel/CMakeLists.txt b/src/kernel/CMakeLists.txt
+index a045752..a0bc5d3 100644
+--- a/src/kernel/CMakeLists.txt
++++ b/src/kernel/CMakeLists.txt
+@@ -25,6 +25,7 @@ set(KERNEL_SOURCES
+     recomp_trace.c
+     nv2a_pb_scan.c
+     nv2a_pb_exec.c
++    nv2a_d3d12_raster.c
+     nv2a_vsh_interp.c
+     nv2a_combiner.c
+ )
+@@ -43,7 +44,7 @@ target_include_directories(xbox_kernel PUBLIC
+ if(WIN32)
+     # platform is an INTERFACE target on Windows: it contributes the src/
+     # include path that "platform/xbox_winnt.h" resolves against.
+-    target_link_libraries(xbox_kernel PUBLIC platform kernel32 bcrypt)
++    target_link_libraries(xbox_kernel PUBLIC platform kernel32 bcrypt d3d12 dxgi d3dcompiler)
+ else()
+     # Linux: platform layer (POSIX host primitives) + OpenSSL for crypto.
+     find_package(OpenSSL REQUIRED)
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+index e953132..5cb8ead 100644
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -37,6 +37,7 @@
+ #include "../d3d/d3d8_swizzle.h"
+ #include "nv2a_vsh_interp.h"
+ #include "nv2a_combiner.h"
++#include "nv2a_d3d12_raster.h"
+ #if defined(_WIN32)
+ #include <windows.h>
+ #define NV_TLS __declspec(thread)
+@@ -1409,6 +1410,27 @@ static void raster_triangle(const float a[2], const float b[2],
+         return;
+     }
+ 
++    /* Opt-in D3D12 prototype for the subset whose state can be reproduced by
++     * this flat-colour pipeline. Keep complex guest state on the software
++     * reference path until its shader, texture, blend and depth semantics
++     * have corresponding D3D12 coverage. */
++    if (!textured && !s_gpu.blend_enable && !s_gpu.depth_test
++        && !s_gpu.depth_mask && !s_gpu.alpha_test
++        && s_gpu.color_mask == 0x01010101u && bpp == 4) {
++        uint32_t width = s_gpu.pitch / 4;
++        uint32_t height = s_gpu.clip_y + s_gpu.clip_h;
++        const float xy[3][2] = {
++            {a[0], a[1]}, {b[0], b[1]}, {c[0], c[1]}
++        };
++        if (nv2a_d3d12_raster_triangle(s_surface, s_gpu.pitch, width, height,
++                                       s_gpu.clip_x, s_gpu.clip_y,
++                                       s_gpu.clip_w, s_gpu.clip_h, xy, argb)) {
++            s_gpu.tris_drawn++;
++            note_drawn();
++            return;
++        }
++    }
++
+     for (y = miny; y < maxy; y++) {
+         for (x = minx; x < maxx; x++) {
+             float px = (float)x + 0.5f, py = (float)y + 0.5f;
+diff --git a/src/kernel/nv2a_d3d12_raster.h b/src/kernel/nv2a_d3d12_raster.h
+new file mode 100644
+index 0000000..d95716f3744e510925fe2779dcb2f7285d0ac6e3
+--- /dev/null
++++ b/src/kernel/nv2a_d3d12_raster.h
+@@ -0,0 +1,18 @@
++#ifndef XBOXRECOMP_NV2A_D3D12_RASTER_H
++#define XBOXRECOMP_NV2A_D3D12_RASTER_H
++
++#include <stdint.h>
++
++/* Draw a flat-colour triangle into an Xbox 32-bit guest surface through a
++ * native D3D12 render target. Returns nonzero only when the draw completed
++ * and the result was copied back into guest memory. Unsupported states must
++ * remain on the software reference path. */
++int nv2a_d3d12_raster_triangle(uint8_t *surface, uint32_t pitch,
++                               uint32_t width, uint32_t height,
++                               uint32_t clip_x, uint32_t clip_y,
++                               uint32_t clip_w, uint32_t clip_h,
++                               const float xy[3][2], uint32_t argb);
++
++void nv2a_d3d12_raster_shutdown(void);
++
++#endif
+diff --git a/src/kernel/nv2a_d3d12_raster.c b/src/kernel/nv2a_d3d12_raster.c
+new file mode 100644
+index 0000000..4d461cee927ded3b0ea9f05e0580f60b421c05d5
+--- /dev/null
++++ b/src/kernel/nv2a_d3d12_raster.c
+@@ -0,0 +1,571 @@
++/*
++ * Small native Direct3D 12 raster path for the NV2A pushbuffer executor.
++ *
++ * This first slice deliberately handles only flat-colour, 32-bit, unblended
++ * triangles with no depth or texture state. The caller keeps every other
++ * guest state on the software reference path. It is opt-in while image parity
++ * and workload coverage are being established.
++ */
++#if defined(_WIN32)
++
++#define COBJMACROS
++#include <windows.h>
++#include <d3d12.h>
++#include <dxgi1_4.h>
++#include <d3dcompiler.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "nv2a_d3d12_raster.h"
++
++typedef struct D3D12Vertex {
++    float x, y;
++    float r, g, b, a;
++} D3D12Vertex;
++
++typedef struct D3D12Raster {
++    int attempted;
++    int enabled;
++    int reported;
++    uint32_t width, height;
++    uint32_t row_pitch;
++    uint64_t fence_value;
++    D3D12_RESOURCE_STATES target_state;
++    ID3D12Device *device;
++    ID3D12CommandQueue *queue;
++    ID3D12CommandAllocator *allocator;
++    ID3D12GraphicsCommandList *commands;
++    ID3D12RootSignature *root_signature;
++    ID3D12PipelineState *pipeline;
++    ID3D12Resource *target;
++    ID3D12Resource *upload;
++    ID3D12Resource *readback;
++    ID3D12Resource *vertices;
++    ID3D12DescriptorHeap *rtv_heap;
++    ID3D12Fence *fence;
++    HANDLE fence_event;
++    uint8_t *upload_map;
++    uint8_t *vertex_map;
++    D3D12Vertex *mapped_vertices;
++    D3D12_CPU_DESCRIPTOR_HANDLE rtv;
++} D3D12Raster;
++
++static D3D12Raster g_d3d12;
++
++static void release_unknown(IUnknown **object)
++{
++    if (*object) {
++        (*object)->lpVtbl->Release(*object);
++        *object = NULL;
++    }
++}
++
++#define RELEASE(o) release_unknown((IUnknown **)&(o))
++
++static HRESULT make_buffer(ID3D12Device *device, D3D12_HEAP_TYPE heap_type,
++                           uint64_t bytes, D3D12_RESOURCE_STATES state,
++                           ID3D12Resource **out)
++{
++    D3D12_HEAP_PROPERTIES heap;
++    D3D12_RESOURCE_DESC desc;
++    memset(&heap, 0, sizeof(heap));
++    heap.Type = heap_type;
++    heap.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
++    heap.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
++    heap.CreationNodeMask = 1;
++    heap.VisibleNodeMask = 1;
++    memset(&desc, 0, sizeof(desc));
++    desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
++    desc.Width = bytes;
++    desc.Height = 1;
++    desc.DepthOrArraySize = 1;
++    desc.MipLevels = 1;
++    desc.SampleDesc.Count = 1;
++    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
++    return ID3D12Device_CreateCommittedResource(
++        device, &heap, D3D12_HEAP_FLAG_NONE, &desc, state, NULL,
++        &IID_ID3D12Resource, (void **)out);
++}
++
++static int compile_shader(const char *source, const char *entry,
++                          const char *profile, ID3DBlob **out)
++{
++    ID3DBlob *errors = NULL;
++    HRESULT hr = D3DCompile(source, strlen(source), "nv2a_d3d12_raster",
++                            NULL, NULL, entry, profile,
++                            D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, out, &errors);
++    if (FAILED(hr)) {
++        if (errors)
++            fprintf(stderr, "[D3D12-R] shader %s failed: %.*s\n", entry,
++                    (int)ID3D10Blob_GetBufferSize(errors),
++                    (const char *)ID3D10Blob_GetBufferPointer(errors));
++        if (errors)
++            ID3D10Blob_Release(errors);
++        return 0;
++    }
++    if (errors)
++        ID3D10Blob_Release(errors);
++    return 1;
++}
++
++static int create_pipeline(D3D12Raster *r)
++{
++    static const char vs_source[] =
++        "struct V { float2 p:POSITION; float4 c:COLOR; };\n"
++        "struct O { float4 p:SV_POSITION; float4 c:COLOR; };\n"
++        "O VSMain(V i) { O o; o.p=float4(i.p,0,1); o.c=i.c; return o; }\n";
++    static const char ps_source[] =
++        "float4 PSMain(float4 c:COLOR):SV_TARGET { return saturate(c); }\n";
++    ID3DBlob *vs = NULL, *ps = NULL, *signature = NULL, *errors = NULL;
++    D3D12_ROOT_SIGNATURE_DESC rs_desc;
++    D3D12_GRAPHICS_PIPELINE_STATE_DESC pso;
++    D3D12_INPUT_ELEMENT_DESC input[2];
++    HRESULT hr;
++    int ok = 0;
++
++    if (!compile_shader(vs_source, "VSMain", "vs_5_0", &vs)
++        || !compile_shader(ps_source, "PSMain", "ps_5_0", &ps))
++        goto done;
++
++    memset(&rs_desc, 0, sizeof(rs_desc));
++    rs_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
++    hr = D3D12SerializeRootSignature(&rs_desc, D3D_ROOT_SIGNATURE_VERSION_1,
++                                    &signature, &errors);
++    if (FAILED(hr)) {
++        if (errors)
++            fprintf(stderr, "[D3D12-R] root signature failed: %.*s\n",
++                    (int)ID3D10Blob_GetBufferSize(errors),
++                    (const char *)ID3D10Blob_GetBufferPointer(errors));
++        goto done;
++    }
++    hr = ID3D12Device_CreateRootSignature(
++        r->device, 0, ID3D10Blob_GetBufferPointer(signature),
++        ID3D10Blob_GetBufferSize(signature), &IID_ID3D12RootSignature,
++        (void **)&r->root_signature);
++    if (FAILED(hr))
++        goto done;
++
++    memset(input, 0, sizeof(input));
++    input[0].SemanticName = "POSITION";
++    input[0].Format = DXGI_FORMAT_R32G32_FLOAT;
++    input[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
++    input[1].SemanticName = "COLOR";
++    input[1].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
++    input[1].AlignedByteOffset = 8;
++    input[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
++
++    memset(&pso, 0, sizeof(pso));
++    pso.pRootSignature = r->root_signature;
++    pso.VS.pShaderBytecode = ID3D10Blob_GetBufferPointer(vs);
++    pso.VS.BytecodeLength = ID3D10Blob_GetBufferSize(vs);
++    pso.PS.pShaderBytecode = ID3D10Blob_GetBufferPointer(ps);
++    pso.PS.BytecodeLength = ID3D10Blob_GetBufferSize(ps);
++    pso.BlendState.AlphaToCoverageEnable = FALSE;
++    pso.BlendState.IndependentBlendEnable = FALSE;
++    pso.BlendState.RenderTarget[0].RenderTargetWriteMask =
++        D3D12_COLOR_WRITE_ENABLE_ALL;
++    pso.SampleMask = UINT_MAX;
++    pso.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
++    pso.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
++    pso.RasterizerState.DepthClipEnable = TRUE;
++    pso.DepthStencilState.DepthEnable = FALSE;
++    pso.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
++    pso.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
++    pso.InputLayout.pInputElementDescs = input;
++    pso.InputLayout.NumElements = 2;
++    pso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
++    pso.NumRenderTargets = 1;
++    pso.RTVFormats[0] = DXGI_FORMAT_B8G8R8A8_UNORM;
++    pso.SampleDesc.Count = 1;
++    hr = ID3D12Device_CreateGraphicsPipelineState(
++        r->device, &pso, &IID_ID3D12PipelineState, (void **)&r->pipeline);
++    ok = SUCCEEDED(hr);
++
++done:
++    if (errors)
++        ID3D10Blob_Release(errors);
++    if (signature)
++        ID3D10Blob_Release(signature);
++    if (vs)
++        ID3D10Blob_Release(vs);
++    if (ps)
++        ID3D10Blob_Release(ps);
++    return ok;
++}
++
++static int initialize(D3D12Raster *r)
++{
++    D3D12_COMMAND_QUEUE_DESC queue_desc;
++    HRESULT hr;
++    const char *setting = getenv("RECOMP_D3D12_RASTER");
++
++    if (r->attempted)
++        return r->enabled;
++    r->attempted = 1;
++    if (!setting || !*setting || strcmp(setting, "0") == 0)
++        return 0;
++
++    hr = D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_11_0,
++                           &IID_ID3D12Device, (void **)&r->device);
++    if (FAILED(hr))
++        goto failed;
++    memset(&queue_desc, 0, sizeof(queue_desc));
++    queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
++    queue_desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
++    queue_desc.NodeMask = 0;
++    hr = ID3D12Device_CreateCommandQueue(
++        r->device, &queue_desc, &IID_ID3D12CommandQueue, (void **)&r->queue);
++    if (FAILED(hr))
++        goto failed;
++    hr = ID3D12Device_CreateCommandAllocator(
++        r->device, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator,
++        (void **)&r->allocator);
++    if (FAILED(hr))
++        goto failed;
++    hr = ID3D12Device_CreateCommandList(
++        r->device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, r->allocator, NULL,
++        &IID_ID3D12GraphicsCommandList, (void **)&r->commands);
++    if (FAILED(hr))
++        goto failed;
++    hr = ID3D12GraphicsCommandList_Close(r->commands);
++    if (FAILED(hr))
++        goto failed;
++    hr = ID3D12Device_CreateFence(r->device, 0, D3D12_FENCE_FLAG_NONE,
++                                  &IID_ID3D12Fence, (void **)&r->fence);
++    if (FAILED(hr))
++        goto failed;
++    r->fence_event = CreateEventA(NULL, FALSE, FALSE, NULL);
++    if (!r->fence_event || !create_pipeline(r))
++        goto failed;
++    r->enabled = 1;
++    fprintf(stderr, "[D3D12-R] native D3D12 flat triangle path enabled\n");
++    return 1;
++
++failed:
++    fprintf(stderr, "[D3D12-R] initialization failed (0x%08lX); using software rasterizer\n",
++            (unsigned long)hr);
++    nv2a_d3d12_raster_shutdown();
++    r->attempted = 1;
++    return 0;
++}
++
++static void release_targets(D3D12Raster *r)
++{
++    if (r->upload_map && r->upload)
++        ID3D12Resource_Unmap(r->upload, 0, NULL);
++    if (r->mapped_vertices && r->vertices)
++        ID3D12Resource_Unmap(r->vertices, 0, NULL);
++    r->upload_map = NULL;
++    r->mapped_vertices = NULL;
++    RELEASE(r->target);
++    RELEASE(r->upload);
++    RELEASE(r->readback);
++    RELEASE(r->vertices);
++    RELEASE(r->rtv_heap);
++    r->width = r->height = r->row_pitch = 0;
++}
++
++static int ensure_targets(D3D12Raster *r, uint32_t width, uint32_t height)
++{
++    D3D12_RESOURCE_DESC texture;
++    D3D12_HEAP_PROPERTIES heap;
++    D3D12_DESCRIPTOR_HEAP_DESC descriptors;
++    D3D12_CPU_DESCRIPTOR_HANDLE handle;
++    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
++    UINT64 total_bytes = 0;
++    UINT rows = 0;
++    UINT64 row_bytes = 0;
++    UINT descriptor_size;
++    uint64_t vertex_bytes = sizeof(D3D12Vertex) * 3;
++    HRESULT hr;
++
++    if (r->target && r->width == width && r->height == height)
++        return 1;
++    release_targets(r);
++    if (!width || !height || width > 16384 || height > 16384)
++        return 0;
++
++    memset(&texture, 0, sizeof(texture));
++    texture.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
++    texture.Width = width;
++    texture.Height = height;
++    texture.DepthOrArraySize = 1;
++    texture.MipLevels = 1;
++    texture.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
++    texture.SampleDesc.Count = 1;
++    texture.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
++    texture.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
++
++    memset(&heap, 0, sizeof(heap));
++    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
++    heap.CreationNodeMask = 1;
++    heap.VisibleNodeMask = 1;
++    hr = ID3D12Device_CreateCommittedResource(
++        r->device, &heap, D3D12_HEAP_FLAG_NONE, &texture,
++        D3D12_RESOURCE_STATE_COMMON, NULL, &IID_ID3D12Resource,
++        (void **)&r->target);
++    if (FAILED(hr))
++        goto failed;
++
++    memset(&descriptors, 0, sizeof(descriptors));
++    descriptors.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
++    descriptors.NumDescriptors = 1;
++    hr = ID3D12Device_CreateDescriptorHeap(
++        r->device, &descriptors, &IID_ID3D12DescriptorHeap,
++        (void **)&r->rtv_heap);
++    if (FAILED(hr))
++        goto failed;
++    (void)ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(
++        r->rtv_heap, &handle);
++    r->rtv = handle;
++    ID3D12Device_CreateRenderTargetView(r->device, r->target, NULL, handle);
++    descriptor_size = ID3D12Device_GetDescriptorHandleIncrementSize(
++        r->device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
++    (void)descriptor_size;
++
++    ID3D12Device_GetCopyableFootprints(r->device, &texture, 0, 1, 0,
++                                       &footprint, &rows, &row_bytes,
++                                       &total_bytes);
++    r->row_pitch = footprint.Footprint.RowPitch;
++    hr = make_buffer(r->device, D3D12_HEAP_TYPE_UPLOAD, total_bytes,
++                     D3D12_RESOURCE_STATE_GENERIC_READ, &r->upload);
++    if (FAILED(hr))
++        goto failed;
++    hr = make_buffer(r->device, D3D12_HEAP_TYPE_READBACK, total_bytes,
++                     D3D12_RESOURCE_STATE_COPY_DEST, &r->readback);
++    if (FAILED(hr))
++        goto failed;
++    hr = make_buffer(r->device, D3D12_HEAP_TYPE_UPLOAD, vertex_bytes,
++                     D3D12_RESOURCE_STATE_GENERIC_READ, &r->vertices);
++    if (FAILED(hr))
++        goto failed;
++    {
++        D3D12_RANGE read_range = {0, 0};
++        void *mapped = NULL;
++        hr = ID3D12Resource_Map(r->upload, 0, &read_range, &mapped);
++        if (FAILED(hr))
++            goto failed;
++        r->upload_map = (uint8_t *)mapped;
++        mapped = NULL;
++        hr = ID3D12Resource_Map(r->vertices, 0, &read_range, &mapped);
++        if (FAILED(hr))
++            goto failed;
++        r->mapped_vertices = (D3D12Vertex *)mapped;
++    }
++    r->width = width;
++    r->height = height;
++    r->target_state = D3D12_RESOURCE_STATE_COMMON;
++    return 1;
++
++failed:
++    fprintf(stderr, "[D3D12-R] target allocation failed (0x%08lX)\n",
++            (unsigned long)hr);
++    release_targets(r);
++    return 0;
++}
++
++static int wait_gpu(D3D12Raster *r)
++{
++    HRESULT hr;
++    r->fence_value++;
++    hr = ID3D12CommandQueue_Signal(r->queue, r->fence, r->fence_value);
++    if (FAILED(hr))
++        return 0;
++    if (ID3D12Fence_GetCompletedValue(r->fence) < r->fence_value) {
++        hr = ID3D12Fence_SetEventOnCompletion(r->fence, r->fence_value,
++                                               r->fence_event);
++        if (FAILED(hr) || WaitForSingleObject(r->fence_event, INFINITE) != WAIT_OBJECT_0)
++            return 0;
++    }
++    return 1;
++}
++
++int nv2a_d3d12_raster_triangle(uint8_t *surface, uint32_t pitch,
++                               uint32_t width, uint32_t height,
++                               uint32_t clip_x, uint32_t clip_y,
++                               uint32_t clip_w, uint32_t clip_h,
++                               const float xy[3][2], uint32_t argb)
++{
++    D3D12Raster *r = &g_d3d12;
++    D3D12_TEXTURE_COPY_LOCATION src, dst;
++    D3D12_RESOURCE_BARRIER barrier;
++    D3D12_VIEWPORT viewport;
++    D3D12_RECT scissor;
++    D3D12_VERTEX_BUFFER_VIEW vbv;
++    D3D12_RANGE read_range;
++    uint32_t y;
++    uint8_t *mapped = NULL;
++    HRESULT hr;
++    if (!surface || !pitch || !width || !height || !xy || pitch < width * 4
++        || !initialize(r) || !ensure_targets(r, width, height))
++        return 0;
++
++    for (y = 0; y < height; y++)
++        memcpy(r->upload_map + (size_t)y * r->row_pitch,
++               surface + (size_t)y * pitch, (size_t)width * 4);
++
++    for (y = 0; y < 3; y++) {
++        r->mapped_vertices[y].x = xy[y][0] * (2.0f / (float)width) - 1.0f;
++        r->mapped_vertices[y].y = 1.0f - xy[y][1] * (2.0f / (float)height);
++        r->mapped_vertices[y].r = (float)((argb >> 16) & 0xFF) / 255.0f;
++        r->mapped_vertices[y].g = (float)((argb >> 8) & 0xFF) / 255.0f;
++        r->mapped_vertices[y].b = (float)(argb & 0xFF) / 255.0f;
++        r->mapped_vertices[y].a = (float)(argb >> 24) / 255.0f;
++    }
++
++    hr = ID3D12CommandAllocator_Reset(r->allocator);
++    if (FAILED(hr))
++        return 0;
++    hr = ID3D12GraphicsCommandList_Reset(r->commands, r->allocator, r->pipeline);
++    if (FAILED(hr))
++        return 0;
++
++    if (r->target_state != D3D12_RESOURCE_STATE_COPY_DEST) {
++        memset(&barrier, 0, sizeof(barrier));
++        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
++        barrier.Transition.pResource = r->target;
++        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
++        barrier.Transition.StateBefore = r->target_state;
++        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
++        ID3D12GraphicsCommandList_ResourceBarrier(r->commands, 1, &barrier);
++    }
++    memset(&src, 0, sizeof(src));
++    src.pResource = r->upload;
++    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
++    src.PlacedFootprint.Offset = 0;
++    src.PlacedFootprint.Footprint.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
++    src.PlacedFootprint.Footprint.Width = width;
++    src.PlacedFootprint.Footprint.Height = height;
++    src.PlacedFootprint.Footprint.Depth = 1;
++    src.PlacedFootprint.Footprint.RowPitch = r->row_pitch;
++    memset(&dst, 0, sizeof(dst));
++    dst.pResource = r->target;
++    dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
++    dst.SubresourceIndex = 0;
++    ID3D12GraphicsCommandList_CopyTextureRegion(r->commands, &dst, 0, 0, 0,
++                                               &src, NULL);
++
++    memset(&barrier, 0, sizeof(barrier));
++    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
++    barrier.Transition.pResource = r->target;
++    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
++    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
++    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
++    ID3D12GraphicsCommandList_ResourceBarrier(r->commands, 1, &barrier);
++    ID3D12GraphicsCommandList_OMSetRenderTargets(r->commands, 1, &r->rtv,
++                                                 FALSE, NULL);
++    viewport.TopLeftX = 0.0f;
++    viewport.TopLeftY = 0.0f;
++    viewport.Width = (float)width;
++    viewport.Height = (float)height;
++    viewport.MinDepth = 0.0f;
++    viewport.MaxDepth = 1.0f;
++    ID3D12GraphicsCommandList_RSSetViewports(r->commands, 1, &viewport);
++    scissor.left = (LONG)clip_x;
++    scissor.top = (LONG)clip_y;
++    scissor.right = (LONG)(clip_x + clip_w);
++    scissor.bottom = (LONG)(clip_y + clip_h);
++    ID3D12GraphicsCommandList_RSSetScissorRects(r->commands, 1, &scissor);
++    ID3D12GraphicsCommandList_SetGraphicsRootSignature(r->commands,
++                                                       r->root_signature);
++    ID3D12GraphicsCommandList_SetPipelineState(r->commands, r->pipeline);
++    ID3D12GraphicsCommandList_IASetPrimitiveTopology(
++        r->commands, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
++    vbv.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(r->vertices);
++    vbv.SizeInBytes = sizeof(D3D12Vertex) * 3;
++    vbv.StrideInBytes = sizeof(D3D12Vertex);
++    ID3D12GraphicsCommandList_IASetVertexBuffers(r->commands, 0, 1, &vbv);
++    ID3D12GraphicsCommandList_DrawInstanced(r->commands, 3, 1, 0, 0);
++
++    memset(&barrier, 0, sizeof(barrier));
++    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
++    barrier.Transition.pResource = r->target;
++    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
++    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
++    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
++    ID3D12GraphicsCommandList_ResourceBarrier(r->commands, 1, &barrier);
++    memset(&src, 0, sizeof(src));
++    src.pResource = r->target;
++    src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
++    src.SubresourceIndex = 0;
++    memset(&dst, 0, sizeof(dst));
++    dst.pResource = r->readback;
++    dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
++    dst.PlacedFootprint.Offset = 0;
++    dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
++    dst.PlacedFootprint.Footprint.Width = width;
++    dst.PlacedFootprint.Footprint.Height = height;
++    dst.PlacedFootprint.Footprint.Depth = 1;
++    dst.PlacedFootprint.Footprint.RowPitch = r->row_pitch;
++    ID3D12GraphicsCommandList_CopyTextureRegion(r->commands, &dst, 0, 0, 0,
++                                               &src, NULL);
++    hr = ID3D12GraphicsCommandList_Close(r->commands);
++    if (FAILED(hr))
++        return 0;
++    {
++        ID3D12CommandList *lists[1] = {(ID3D12CommandList *)r->commands};
++        ID3D12CommandQueue_ExecuteCommandLists(r->queue, 1, lists);
++    }
++    r->target_state = D3D12_RESOURCE_STATE_COPY_SOURCE;
++    if (!wait_gpu(r))
++        return 0;
++
++    read_range.Begin = 0;
++    read_range.End = (SIZE_T)r->row_pitch * height;
++    hr = ID3D12Resource_Map(r->readback, 0, &read_range, (void **)&mapped);
++    if (FAILED(hr))
++        return 0;
++    for (y = 0; y < height; y++)
++        memcpy(surface + (size_t)y * pitch,
++               mapped + (size_t)y * r->row_pitch, (size_t)width * 4);
++    {
++        D3D12_RANGE written = {0, 0};
++        ID3D12Resource_Unmap(r->readback, 0, &written);
++    }
++    if (!r->reported) {
++        r->reported = 1;
++        fprintf(stderr, "[D3D12-R] first flat triangle completed at %ux%u\n",
++                width, height);
++    }
++    return 1;
++}
++
++void nv2a_d3d12_raster_shutdown(void)
++{
++    D3D12Raster *r = &g_d3d12;
++    release_targets(r);
++    RELEASE(r->pipeline);
++    RELEASE(r->root_signature);
++    RELEASE(r->commands);
++    RELEASE(r->allocator);
++    RELEASE(r->queue);
++    RELEASE(r->fence);
++    RELEASE(r->device);
++    if (r->fence_event) {
++        CloseHandle(r->fence_event);
++        r->fence_event = NULL;
++    }
++    r->enabled = 0;
++}
++
++#else
++
++#include "nv2a_d3d12_raster.h"
++
++int nv2a_d3d12_raster_triangle(uint8_t *surface, uint32_t pitch,
++                               uint32_t width, uint32_t height,
++                               uint32_t clip_x, uint32_t clip_y,
++                               uint32_t clip_w, uint32_t clip_h,
++                               const float xy[3][2], uint32_t argb)
++{
++    (void)surface; (void)pitch; (void)width; (void)height;
++    (void)clip_x; (void)clip_y; (void)clip_w; (void)clip_h;
++    (void)xy; (void)argb;
++    return 0;
++}
++
++void nv2a_d3d12_raster_shutdown(void) {}
++
++#endif

@@ -69,10 +69,14 @@ index 01a3631..ea31ec8 100644
 +        uint32_t fault_xbox_va =
 +            (uint32_t)(fault_addr - (uintptr_t)g_xbox_mem_offset);
 +
-+        /* Route direct Xbox NV2A MMIO accesses through xboxrecomp's
-+         * register model. The aperture is set PAGE_NOACCESS after the model
-+         * is initialized, so guest and bridge accesses arrive here. */
-+        if (fault_xbox_va >= 0xFD000000u && fault_xbox_va < 0xFE000000u) {
++        /* Route modeled Xbox NV2A MMIO accesses through xboxrecomp. USER DMA
++         * registers at 0xFD800000 remain mapped as shared memory because the
++         * pinned model stubs USER and the acknowledgement worker consumes
++         * DMA_PUT and advances DMA_GET in that backing. */
++        if (fault_xbox_va >= 0xFD000000u
++                && (fault_xbox_va < 0xFD002000u
++                    || (fault_xbox_va >= 0xFD003000u
++                        && fault_xbox_va < 0xFD700000u))) {
 +            if (nv2a_hook_handle_mmio(
 +                    ep->ContextRecord, fault_addr, fault_xbox_va,
 +                    ep->ExceptionRecord->ExceptionInformation[0] ? 1 : 0)) {
@@ -113,8 +117,10 @@ index 01a3631..ea31ec8 100644
 +        DWORD old_protect;
 +        void *nv2a_aperture =
 +            (void *)(uintptr_t)(0xFD000000u + g_xbox_mem_offset);
-+        if (!VirtualProtect(nv2a_aperture, 0x01000000u,
-+                            PAGE_NOACCESS, &old_protect)) {
++        if (!VirtualProtect(nv2a_aperture, 0x00002000u,
++                            PAGE_NOACCESS, &old_protect)
++                || !VirtualProtect((uint8_t *)nv2a_aperture + 0x3000u,
++                                   0x006FD000u, PAGE_NOACCESS, &old_protect)) {
 +            fprintf(stderr, "[BOOT] Failed to protect NV2A MMIO aperture "
 +                    "(error %lu)\n", GetLastError());
 +            free(xbe_data);

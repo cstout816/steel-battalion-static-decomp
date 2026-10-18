@@ -1,0 +1,12 @@
+diff --git a/src/nv2a/nv2a_mmio_hook.c b/src/nv2a/nv2a_mmio_hook.c
+--- a/src/nv2a/nv2a_mmio_hook.c
++++ b/src/nv2a/nv2a_mmio_hook.c
+@@ -385,1 +385,7 @@ void nv2a_hook_init(ptrdiff_t xbox_mem_offset)
+-    uint8_t *ramin_ptr = g_nv2a_vram + NV2A_VRAM_SIZE;
++    /* PRAMIN is exposed through the Xbox NV2A aperture at 0xFD700000.
++     * Share that backing with the kernel's pushbuffer/semaphore path so DMA
++     * descriptors and RAMHT entries have one authoritative copy. The app
++     * leaves PRAMIN pages directly mapped while trapping modeled registers. */
++    uint8_t *ramin_ptr = (uint8_t *)(g_mem_offset
++                                      + (ptrdiff_t)NV2A_MMIO_BASE
++                                      + 0x700000u);

@@ -1,0 +1,39 @@
+diff --git a/src/main.c b/src/main.c
+--- a/src/main.c
++++ b/src/main.c
+@@ -256,6 +256,12 @@ extern bool apu_hook_handle_mmio(PCONTEXT ctx, uintptr_t fault_addr,
+ #define APU_TRAP_BASE 0xFE800000u
+ #define APU_TRAP_END  0xFE880000u
+ 
++/* Optional bounded trace of faults redirected to the NV2A model. These
++ * faults are expected when guest code accesses the protected MMIO aperture;
++ * logging their native RIP lets the local PDB identify the lifted C site
++ * that issued each device access. */
++static volatile LONG g_nv2a_fault_trace_count;
++
+ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
+ {
+@@ -270,6 +276,25 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
+          * register model. The aperture is set PAGE_NOACCESS after the model
+          * is initialized, so guest and bridge accesses arrive here. */
+         if (fault_xbox_va >= 0xFD000000u && fault_xbox_va < 0xFE000000u) {
++            LONG trace_count = InterlockedIncrement(&g_nv2a_fault_trace_count);
++            const unsigned char *fault_ip =
++                (const unsigned char *)ep->ContextRecord->Rip;
++            if (trace_count <= 32 || (trace_count & 0xFFF) == 0) {
++                fprintf(stderr,
++                        "[MMIO-AV] #%ld host_rip=%p xbox_va=%08X %s "
++                        "bytes=%02X %02X %02X %02X guest_esp=%08X "
++                        "eax=%08X ecx=%08X edx=%08X esi=%08X edi=%08X\n",
++                        (long)trace_count,
++                        (void *)(uintptr_t)ep->ContextRecord->Rip,
++                        fault_xbox_va,
++                        ep->ExceptionRecord->ExceptionInformation[0]
++                            ? "write" : "read",
++                        fault_ip[0], fault_ip[1], fault_ip[2], fault_ip[3],
++                        g_esp, g_eax, g_ecx, g_edx, g_esi, g_edi);
++                fflush(stderr);
++            }
+             if (nv2a_hook_handle_mmio(
+                     ep->ContextRecord, fault_addr, fault_xbox_va,
+                     ep->ExceptionRecord->ExceptionInformation[0] ? 1 : 0)) {

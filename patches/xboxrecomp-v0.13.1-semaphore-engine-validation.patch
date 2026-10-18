@@ -1,0 +1,16 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -174,10 +174,9 @@ static int semaphore_target(uint32_t handle, uint32_t offset,
+     if (!found) {
+         *why = "RAMHT handle not found";
+         return 0;
+     }
+-    if ((context & 0x00030000u) != 0x00010000u) {
+-        *why = "RAMHT entry is not a graphics context";
+-        return 0;
+-    }
++    /* NV4+ uses the RAMHT engine field only when binding method 0. For DMA
++     * methods such as semaphore release, object suitability comes from the
++     * descriptor class below; valid title entries may use the SW engine bits. */
+     instance = (context & 0x0000FFFFu) << 4;
