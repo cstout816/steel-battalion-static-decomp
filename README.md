@@ -10,7 +10,7 @@
 
 </div>
 
-> **For players:** there is no game to download yet. The project has not reached the title screen, and there is no installer or launcher. Please do not download unofficial builds or send game files.
+> **For players:** there is no game to download yet. A local diagnostic run has visually reached the title screen, but it is very dark and controller response, audio, and gameplay are not verified. There is no installer or launcher. Please do not download unofficial builds or send game files.
 
 ## The game and its controller
 
@@ -33,7 +33,7 @@ These externally hosted images show the original hardware and game. They are not
 
 The goal is to translate the original Xbox version of *Steel Battalion* (2002) ahead of time into a Windows application and recreate the Xbox services it needs. This is called **static recompilation**. The project is not an emulator packaged under another name.
 
-The project is still experimental. The translated Windows program builds, but it has not reached the title screen. Graphics, sound, controls, saving, and campaign play are not verified. The tracker records observed engineering work separately from features players can use.
+The project is still experimental. The translated Windows program builds, and a local diagnostic run has displayed the title screen. The captured screen is very dark and shows a “PRESS MAIN WEAPON BUTTON” prompt; response to that input is still being checked. Audio, gameplay, saving, and campaign play are not verified. The tracker records observed engineering work separately from features players can use.
 
 ## Controller compatibility
 
@@ -55,7 +55,7 @@ When a tested release exists, players will need to provide their own legally obt
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [######--------------] 3/5 | The latest 60-second wait-trace run logged 134 flips, 266 draw batches, and 200 clears. The event waits returned successfully and the queue advanced, but the Steel Battalion title screen is not verified. |
+| Boot and compatibility | [######--------------] 3/5 | A local 180-second run visually reached the title screen; it was very dark and displayed “PRESS MAIN WEAPON BUTTON.” Input response, audio, and gameplay are not yet verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
 These bars describe engineering work, not playable features or campaign completion. See the [detailed tracker](docs/DEVELOPMENT_STATUS.md) for field-by-field evidence.
@@ -66,7 +66,7 @@ Most of the research, code, and documentation in this repository have been produ
 
 ## Technical approach
 
-The project uses [sp00nznet/xboxrecomp](https://github.com/sp00nznet/xboxrecomp) for ahead-of-time Xbox x86 translation. **Vulkan is the fixed target graphics backend; the migration is not complete.** A project-owned Vulkan pipeline is connected to one tightly checked, textured splash-logo draw. Six nonblack fade frames match CPU-reference captures byte-for-byte; the rest of the NV2A pushbuffer path still uses the CPU reference rasterizer. The longest verified trace-free startup run reached 51 flips and faded the CAPCOM logo to black. A newer 60-second diagnostic wait-trace run logged 134 flips, 266 draw batches, and 200 clears; all 128 instrumented waits on the guest event returned `STATUS_SUCCESS`, and NV2A DMA reached `PUT=GET=0x4E81C`. These are startup diagnostics, not title-screen or gameplay verification. The Steel Battalion title screen remains unverified. XboxRecomp's inherited D3D8-to-D3D11 compatibility code is legacy plumbing, not an alternate renderer choice. Vulkan is the sole graphics direction, with no runtime backend selector. The CPU remains statically recompiled—this does not use full-system emulation. Kernel, general graphics, audio, filesystem, controller, and campaign compatibility still need work.
+The project uses [sp00nznet/xboxrecomp](https://github.com/sp00nznet/xboxrecomp) for ahead-of-time Xbox x86 translation. **Vulkan is the fixed and only host renderer; the migration is not complete.** The project-owned Vulkan path handles a tightly checked textured splash-logo draw, with six nonblack fade frames matching CPU-reference captures byte-for-byte. Other NV2A pushbuffer draws still use the CPU reference rasterizer. A local 180-second diagnostic run visually reached the Steel Battalion title screen, but the picture was very dark and input response was not verified. XboxRecomp's inherited D3D8-to-D3D11 compatibility code is legacy Xbox API plumbing only; it is not a host renderer choice. D3D12 experiments are disabled and historical. There is no renderer selector or plan to switch APIs. The CPU remains statically recompiled—this does not use full-system emulation. Kernel, general graphics, audio, filesystem, controller, and campaign compatibility still need work.
 
 The work prioritizes campaign reliability and the original Steel Battalion controller before visual enhancements. See the [community compatibility and preservation plan](docs/community-compatibility-preservation.md) for planned controller support, campaign checks, accessibility, and future Line of Contact research.
 
