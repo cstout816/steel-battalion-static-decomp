@@ -137,6 +137,7 @@ Audio: upstream xemu GP/EP behavior mapped                   [#-----------------
 Audio: DSP56300 C FFI capabilities and gaps reviewed          [#-------------------] 1 / 1 research (100%)
 Audio: existing xemu Rust-JIT adapter audited                 [#-------------------] 1 / 1 research (100%)
 Audio: MIT FFI / project-owned bridge selected                 [#-------------------] 1 / 1 architecture (100%)
+Audio: direct DSP crate licenses recorded                      [#-------------------] 1 / 1 research (100%)
 Audio: GP/EP DSP MMIO windows routed                        [--------------------] 0 / 1 (0%)
 Audio: GP/EP X/Y/P memory mapped                             [--------------------] 0 / 1 (0%)
 Audio: game DSP firmware loaded and started                  [--------------------] 0 / 1 (0%)

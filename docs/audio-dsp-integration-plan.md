@@ -14,6 +14,15 @@ The Xbox x86 game remains statically translated by XboxRecomp and runs against i
 - The DSP56300 emulator depends on Cranelift. Bytecode Alliance documents x86-64 code generation, the Windows x64 calling convention, and Windows as a supported host OS for JIT use. This makes the requested Windows x64 target plausible, but it does not replace a local Windows x64 build and smoke check of this specific crate combination.
 - [xemu-project/dsp56300](https://github.com/xemu-project/dsp56300) is MIT-licensed and publishes a C FFI crate as a Rust static library. Its current workspace declares Rust 1.99 and edition 2024. The official [FFI header](https://github.com/xemu-project/dsp56300/blob/main/crates/emu-ffi/include/dsp56300.h), [quickstart](https://github.com/xemu-project/dsp56300/blob/main/crates/emu-ffi/examples/quickstart.c), and [crate manifest](https://github.com/xemu-project/dsp56300/blob/main/crates/emu-ffi/Cargo.toml) describe the interface. The local environment currently has no `cargo` or `rustc` command, so the FFI library has not been built or tested here.
 - Candidate source revision recorded for follow-up review: [`82fb25a6917a36ac66212ae31f02aab62211f979`](https://github.com/xemu-project/dsp56300/commit/82fb25a6917a36ac66212ae31f02aab62211f979), the upstream `main` commit observed on 2026-10-17. This is a review pin, not an integrated or build-verified dependency.
+- Preliminary direct-crate license metadata at that revision:
+
+  | Role | Crate and locked version | Declared license |
+  | --- | --- | --- |
+  | Runtime | [cranelift-codegen 0.134.3](https://crates.io/crates/cranelift-codegen/0.134.3), [cranelift-frontend 0.134.3](https://crates.io/crates/cranelift-frontend/0.134.3), [cranelift-jit 0.134.3](https://crates.io/crates/cranelift-jit/0.134.3), [cranelift-module 0.134.3](https://crates.io/crates/cranelift-module/0.134.3), [cranelift-native 0.134.3](https://crates.io/crates/cranelift-native/0.134.3), [target-lexicon 0.13.5](https://crates.io/crates/target-lexicon/0.13.5) | Apache-2.0 WITH LLVM-exception |
+  | Build | [cc 1.8.0](https://crates.io/crates/cc/1.8.0) | MIT OR Apache-2.0 |
+  | Build | [cbindgen 0.29.4](https://crates.io/crates/cbindgen/0.29.4) | MPL-2.0 |
+
+  This is direct crate metadata, not a full dependency audit. The workspace lockfile has 144 packages, including workspace/test/optional dependencies; the actual Windows static-library dependency closure still needs to be resolved with Cargo and each transitive package's notice requirements reviewed.
 - An MIT DSP core does not remove the XboxRecomp APU's LGPL obligations. Dependency and notice review is still required before selecting the final project-wide license or distributing binaries.
 
 ## Required runtime integration
@@ -49,7 +58,7 @@ Preserve the existing APU worker's locking, frame pacing, and shutdown lifecycle
 
 ## Work sequence before claiming audio support
 
-1. Pin a specific MIT `dsp56300` revision and record its complete transitive licenses and required Rust toolchain. Decide separately whether to adapt xemu's GPL bridge or write a narrow XboxRecomp-specific bridge against the MIT API; do not mix their licensing assumptions.
+1. Pin a specific MIT `dsp56300` revision and record its complete transitive licenses and required Rust toolchain. The adapter decision is to write a narrow XboxRecomp-specific bridge against the MIT API, not copy xemu's GPL bridge.
 2. Build only the FFI static library when a safe build window is available; do not install Rust system-wide. Confirm the C header and Windows x64 linker output with a small independent smoke program.
 3. Implement GP/EP storage and MMIO routing behind the project's diagnostics while preserving the existing APU register path.
 4. Add reset/bootstrap, peripheral callback, scratch/FIFO, start-frame, and bounded cycle-scheduling behavior, each with isolated synthetic tests.
