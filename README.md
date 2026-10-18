@@ -175,10 +175,10 @@ NV2A bridge: startup wait release verified                    [-----------------
 NV2A runtime: default, hardware-valid delivery verified       [--------------------] 0 / 1 (0%)
 NV2A executor: semaphore target resolved in guest trace        [#-------------------] 1 / 1 diagnostic (100%)
 Audio cleanup: same access violation with vblank on and off    [####################] 2 / 2 diagnostic runs (100%)
-Audio cleanup: root cause identified and fix verified          [--------------------] 0 / 1 (0%)
 Audio cleanup: iterator and callback path mapped               [#-------------------] 1 / 1 static analysis (100%)
-Audio cleanup: destructor-to-list-unlink path mapped            [#-------------------] 1 / 1 static analysis (100%)
-Audio cleanup: exact writer of null list link identified         [--------------------] 0 / 1 (0%)
+Audio code: destructor's generic unlink helper mapped           [#-------------------] 1 / 1 static analysis (100%)
+Audio cleanup: null owner traced to failed DSOUND init           [#-------------------] 1 / 1 diagnostic (100%)
+Audio cleanup: safe initialization and cleanup verified         [--------------------] 0 / 1 (0%)
 Audio: device initialization                               [#-------------------] 1 / 3 (33%)
 Audio: DSP processing and game sound                       [--------------------] 0 / 2 (0%)
 Input: original Steel Battalion hardware                   [--------------------] 0 / 3 (0%)
@@ -194,7 +194,7 @@ Campaign matrix: frame pacing                               [-------------------
 Campaign matrix: mission completion and progression         [--------------------] 0 / 1 (0%)
 ```
 
-The XBE entry point and section map are documented; that is static analysis, not verified runtime behavior. The title-asset bar records a diagnostic read of the three title XPR files only, not complete filesystem compatibility. Pushbuffer handling records command processing and draw calls, not a correct rendered scene. The NV2A analysis bar records a traced guest write and its static call path. New opt-in diagnostics show modeled vblank, aggregate IRQ delivery through the connected ISR/DPC, a guest DPC call to the startup event setter, and semaphore-release commands resolving to the game's guest counter. They do not show that the waiting thread was released or that IRQ timing and behavior are hardware-valid. Static inspection maps the audio-cleanup iterator, callback, and the destructor's generic list-unlink helper, but has not identified the write that made the observed link null. The combined executor run reproducibly crashes in game-side audio cleanup whether vblank is enabled or disabled; the cause remains unresolved. These diagnostic hooks remain opt-in; default delivery, working audio, and a verified title screen remain unverified. The campaign bars remain at zero because no mission has been verified from loading through completion and progression.
+The XBE entry point and section map are documented; that is static analysis, not verified runtime behavior. The title-asset bar records a diagnostic read of the three title XPR files only, not complete filesystem compatibility. Pushbuffer handling records command processing and draw calls, not a correct rendered scene. The NV2A analysis bar records a traced guest write and its static call path. New opt-in diagnostics show modeled vblank, aggregate IRQ delivery through the connected ISR/DPC, a guest DPC call to the startup event setter, and semaphore-release commands resolving to the game's guest counter. They do not show that the waiting thread was released or that IRQ timing and behavior are hardware-valid. Static and diagnostic evidence now traces the audio cleanup fault to the default DSOUND constructor returning `DSERR_NODRIVER`, leaving the game's global audio object with a null vtable, followed by cleanup that still invokes its callback. This identifies the immediate cause, not a fix: AC'97 readiness and actual Xbox audio behavior remain unsupported, and no substitute success result has been added. The combined executor run reproduced the fault with vblank enabled and disabled. These diagnostic hooks remain opt-in; default delivery, working audio, and a verified title screen remain unverified. The campaign bars remain at zero because no mission has been verified from loading through completion and progression.
 
 ### Full project field tracker
 
