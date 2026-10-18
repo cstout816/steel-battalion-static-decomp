@@ -10,7 +10,7 @@ Please do not download an unofficial build or expect an ISO to be included here.
 
 The goal is a Windows application that translates the original Xbox game ahead of time and supplies the Xbox services it needs. This approach is called **static recompilation**. It is not a separate Xbox emulator bundled under a different name.
 
-Most of the project's research, code, and documentation have been produced with ChatGPT Codex. Connor Stout (`cstout816`) maintains the project. Progress reports distinguish work that has been written or built from game behavior that has actually been tested.
+Most of the project's research, code, and documentation have been produced with ChatGPT Codex. GitHub maintainer and project contact: [@cstout816](https://github.com/cstout816). Progress reports distinguish work that has been written or built from game behavior that has actually been tested.
 
 ## What will I need when a tested release is available?
 

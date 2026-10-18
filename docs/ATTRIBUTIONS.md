@@ -20,13 +20,16 @@ The creator does not endorse this project. All other product names and trademark
 
 The creator does not endorse this project.
 
-## Gameplay screenshot shown in the README
+## Gameplay screenshots shown in the README
 
 - **Source:** [MobyGames — Steel Battalion Screenshot (X02 North America press disc)](https://www.mobygames.com/game/7805/steel-battalion/promo/group-116838/image-907173/)
 - **Use:** The README embeds an image loaded from MobyGames' page. The screenshot is not copied into this repository; rights and hosting remain with their respective holders.
 
+- **Source:** [Pure Xbox — Steel Battalion screenshot gallery](https://www.purexbox.com/games/xbox/steel_battalion)
+- **Use:** The README embeds screenshots hosted by Pure Xbox and links each image back to the gallery. No screenshot files are copied into this repository; rights and hosting remain with their respective holders.
+
 ## Project banner
 
-- **Creator:** Project artwork produced with ChatGPT Codex assistance.
-- **Source:** Original text-and-shape SVG; no generated photography or game imagery is used.
+- **Creator:** Steel Battalion Static Decomp project.
+- **Source:** Original text-and-shape SVG; it contains no game imagery, generated photography, or mockup images.
 - **Purpose:** Describes the static-recompilation project and its current experimental status. It is not a screenshot or representation of running game footage.
