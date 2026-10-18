@@ -14,7 +14,7 @@ The RTX 4070 SUPER exposes the Vulkan features the inspected xemu renderer requi
 - Reuse only the GPU subsystem and individually license-reviewed files. Do not bring in xemu's CPU, kernel, machine boot, or full-system emulator loop.
 - Keep the statically recompiled x86 game and existing Xbox runtime architecture.
 - The present NV2A path still renders on the CPU while Vulkan is being brought up. Keep it as the comparison baseline during the port; it is not the selected final renderer.
-- Do not develop D3D11 or D3D12 as alternate NV2A renderers. The inherited XboxRecomp D3D8 compatibility library currently builds its Windows implementation on D3D11, and the local NV2A source still contains an opt-in D3D12 experiment. Neither is the selected NV2A backend. Retire the D3D12 experiment from the active build as Vulkan scene coverage replaces it; keep experiment patches clearly marked historical.
+- Do not develop D3D11 or D3D12 as alternate NV2A renderers. The inherited XboxRecomp D3D8 compatibility library still uses D3D11 for XDK API calls; it is not an NV2A backend selection. The local D3D12 prototype is now disabled unless `XBOXRECOMP_EXPERIMENTAL_D3D12` is explicitly defined; the project build does not define it, and the kernel no longer links D3D12 libraries. The old experiment patches remain historical.
 - Keep one Vulkan renderer path from initial boot through campaign play. Do not add API selection or backend switching.
 
 ## Current state and constraints

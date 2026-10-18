@@ -1,0 +1,33 @@
+diff --git a/src/kernel/CMakeLists.txt b/src/kernel/CMakeLists.txt
+--- a/src/kernel/CMakeLists.txt
++++ b/src/kernel/CMakeLists.txt
+@@ -44,7 +44,7 @@ target_include_directories(xbox_kernel PUBLIC
+ if(WIN32)
+     # platform is an INTERFACE target on Windows: it contributes the src/
+     # include path that "platform/xbox_winnt.h" resolves against.
+-    target_link_libraries(xbox_kernel PUBLIC platform kernel32 bcrypt d3d12 dxgi d3dcompiler)
++    target_link_libraries(xbox_kernel PUBLIC platform kernel32 bcrypt)
+ else()
+     # Linux: platform layer (POSIX host primitives) + OpenSSL for crypto.
+     find_package(OpenSSL REQUIRED)
+diff --git a/src/kernel/nv2a_d3d12_raster.c b/src/kernel/nv2a_d3d12_raster.c
+--- a/src/kernel/nv2a_d3d12_raster.c
++++ b/src/kernel/nv2a_d3d12_raster.c
+@@ -1,9 +1,11 @@
+ /*
+- * Small native Direct3D 12 raster path for the NV2A pushbuffer executor.
++ * Historical native Direct3D 12 raster experiment for the NV2A pushbuffer executor.
+  *
+- * This first slice deliberately handles only flat-colour, 32-bit triangles
+- * whose caller has already proved the guest state is compatible. A batch of
+- * up to two triangles shares one surface upload/readback. It remains opt-in
+- * while image parity and workload coverage are being established.
++ * This first slice deliberately handles only flat-colour, 32-bit triangles
++ * whose caller has already proved the guest state is compatible. A batch of
++ * up to two triangles shares one surface upload/readback. The experiment is
++ * retired; this source now builds only its no-op stubs in the project target.
+  */
+-#if defined(_WIN32)
++/* Vulkan is the project's fixed NV2A backend. Keep this prototype's source
++ * only for historical comparison; do not compile a second host renderer. */
++#if defined(_WIN32) && defined(XBOXRECOMP_EXPERIMENTAL_D3D12)

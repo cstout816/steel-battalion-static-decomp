@@ -37,6 +37,7 @@ Xbox kernel and synchronization                  [--------------------] 0 / 3 (0
 Filesystem and ISO validation                    [--------------------] 0 / 3 (0%)
 Vulkan/NV2A: full scene rendering                 [--------------------] 0 / 3 (0%)
 Vulkan host presentation: device/swapchain/present  [####################] 3 / 3 (100%)
+D3D12 NV2A experiment disabled in active build     [####################] 1 / 1 (100%)
 Audio: guest DSP execution and audible output     [##########----------] 1 / 2 (50%)
 
 Original SB controller: input, mapping, lights   [--------------------] 0 / 3 (0%)
@@ -945,6 +946,10 @@ The user's direction is explicit: stop switching among graphics APIs and choose 
 Added the downstream patch `patches/xboxrecomp-v0.13.1-vulkan-fb-present.patch`. It adds a project-local Vulkan loader/declaration dependency and an opt-in Win32 window that uploads the completed guest framebuffer to a Vulkan swapchain. It is a host presentation adapter only: it does not implement NV2A scene rendering, shader translation, accurate display output, or title-screen boot. The patch applies cleanly in a reverse/check/reapply validation against the local XboxRecomp checkout, and the Release x64 game target builds successfully with it.
 
 The earlier bounded smoke log confirmed Vulkan loader/device setup and creation of a 640x480, three-image swapchain. A subsequent bounded run with the documented startup switches selected the NVIDIA GeForce RTX 4070 SUPER and logged a successful first swapchain present. The process was stopped after that check; no game process remains. This verifies Vulkan host presentation plumbing, not that the presented startup image contains correct game graphics or that any NV2A scene has rendered. Title-screen boot and visual correctness remain unverified. The separate host-presentation bar advances to 3/3; full Vulkan/NV2A scene rendering remains 0/3. Logs remain local/ignored under `iso/local-analysis/logs/m3-vulkan-presenter-confirm-20261018/`. Keep Vulkan as the one production graphics API; Xbox D3D8 calls are compatibility inputs to that renderer, not an alternate host backend.
+
+### D3D12 NV2A prototype disabled (2026-10-18)
+
+The user directed that graphics API selection stop changing. The Vulkan choice remains fixed. The local D3D12 NV2A prototype is now behind `XBOXRECOMP_EXPERIMENTAL_D3D12`, which the project does not define; the Windows build therefore compiles the no-op stubs. The kernel target no longer links `d3d12`, `dxgi`, or `d3dcompiler`. The Release x64 game target rebuilt successfully after this change. The D3D8 compatibility shim backed by D3D11 remains in the upstream runtime for Xbox D3D8 API calls; it is not an NV2A backend selection. Vulkan still only presents the guest framebuffer, and full NV2A GPU rendering/title boot remain unverified. The implementation patch is `patches/xboxrecomp-v0.13.1-disable-d3d12-experiment.patch`; older D3D12 experiment patches are historical and must not be applied without this disabling patch.
 
 ### Bounded splash recheck after backend lock (2026-10-18)
 
