@@ -4,7 +4,7 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
-**Fixed target graphics backend: Vulkan. Migration is incomplete.** The Windows build includes XboxRecomp's D3D8-to-D3D11 compatibility library and a separate PGRAPH-to-D3D11 translator. Steel Battalion's observed pushbuffer scan path dispatches to `nv2a_pb_exec`, which currently rasterizes on the CPU. Recent startup logs show Vulkan presentation only and do not show D3D8/D3D11 initialization. The Vulkan component uploads and presents a copy of the guest framebuffer; it does not render guest commands. D3D12 code is disabled in the active build. No runtime backend selector is planned. Historical dated entries below record earlier experiments. Milestone 3 remains active.
+**Fixed target graphics backend: Vulkan. Migration is incomplete.** `nv2a_pb_exec` now sends one tightly checked textured splash-logo draw to a project-owned Vulkan pipeline; other pushbuffer draws still use the CPU reference rasterizer. The Vulkan presenter copies the resulting guest framebuffer to the swapchain. A bounded startup run created the Vulkan guest pipeline and logged that the textured draw completed, but the guest stopped advancing after three flips; the image and title-screen boot are not verified. XboxRecomp's inherited D3D8-to-D3D11 compatibility library and PGRAPH-to-D3D11 translator remain in the build and are not alternate backend choices. D3D12 code is disabled in the active build. No runtime backend selector is planned. Historical dated entries below record earlier experiments. Milestone 3 remains active.
 
 See [the Vulkan migration map](VULKAN_MIGRATION_MAP.md) for source call paths, verified runtime boundaries, and the remaining implementation steps.
 
@@ -843,13 +843,13 @@ The first pass is untextured and unblended. All three sampled vertices have scre
 
 The temporary vertex-output trace was removed from the ignored runtime source; a fresh Release x64 rebuild succeeded with existing warnings. Next implement and compare a batched D3D12 pass that can preserve depth and the observed combiner/texture/blend semantics. Do not use the current synchronous per-triangle full-surface upload/readback prototype as the performance architecture. Keep all progress bars unchanged.
 
-### Native NV2A backend decision updated after performance research (2026-10-18)
+### Historical native NV2A backend review (superseded by the fixed Vulkan decision)
 
 This earlier Vulkan recommendation is superseded by the Windows D3D12 decision below. At that point, renderer maturity was considered, but no direct API benchmark was available.
 
 The xemu Vulkan PGRAPH source review found a GPL-2-or-later header dependency and unresolved transitive license inputs. No Vulkan code was copied. The D3D12 prototype remains a correctness probe; its synchronous surface upload/readback is unsuitable for performance, and startup parity is limited to two splash passes. The software rasterizer remains the pixel reference.
 
-No matching D3D12/Vulkan benchmark exists for this game's captures, and no renderer performance result is verified. This historical integration proposal is superseded by the later D3D12 decision below.
+No matching D3D12/Vulkan benchmark exists for this game's captures, and no renderer performance result was verified. This historical integration proposal was superseded by the D3D12 recommendation and is now superseded by the fixed Vulkan decision.
 
 ### Vulkan integration feasibility audit (2026-10-18)
 
@@ -859,7 +859,7 @@ The ignored XboxRecomp checkout has only a minimal PGRAPH state stub and a narro
 
 ### Historical: graphics integration route proposed after state-flow comparison (superseded 2026-10-18)
 
-This historical proposal adapted xemu's PGRAPH method/state model and Vulkan renderer as the NV2A graphics subsystem. The later Windows D3D12 decision supersedes it. Only the graphics subsystem is in scope; the XboxRecomp recompiled CPU, kernel, audio, input, and game boot remain, and xemu's emulator CPU/machine/PFIFO thread do not.
+This historical proposal adapted xemu's PGRAPH method/state model and Vulkan renderer as the NV2A graphics subsystem. A later D3D12 recommendation superseded it; that recommendation is itself superseded by the current fixed Vulkan decision. Only the graphics subsystem is in scope; the XboxRecomp recompiled CPU, kernel, audio, input, and game boot remain, and xemu's emulator CPU/machine/PFIFO thread do not.
 
 The machine query confirmed the RTX 4070 SUPER reports xemu's basic Vulkan feature requirements. This is hardware capability evidence only. No Vulkan renderer code was copied. The Vulkan integration route was not selected because its license closure remains unresolved and no comparative speed advantage was found. Milestone 3 and all bars remain unchanged.
 
@@ -869,15 +869,15 @@ Added `patches/xboxrecomp-v0.13.1-pushbuffer-packet-boundary.patch` for the pinn
 
 The local ignored XboxRecomp checkout was built with the packet-boundary change using the existing Release x64 target; the build succeeded with pre-existing MSVC warnings. A 25-second watchdog-bounded launch using the virtual Steel Battalion USB profile reached OHCI operational state, detected the pad, and cleared one GPU surface. It logged 235 unhandled methods, 147 distinct methods, and zero draws/pixels in the sampled report. The run ended at the external watchdog; it did not reach the title screen. No renderer parity, audio, gameplay, or performance result was established. This only checks that the altered packet intake builds and survives an early startup smoke run.
 
-The renderer integration route recorded at this point was xemu PGRAPH plus Vulkan; the later Windows D3D12 decision supersedes that proposal after a focused platform/performance review.
+The renderer integration route recorded at this point was xemu PGRAPH plus Vulkan. This historical proposal was superseded by a D3D12 recommendation and later restored as the fixed Vulkan direction.
 
-Milestone 3 and all progress bars remain unchanged. The later D3D12 decision supersedes the proposed xemu Vulkan integration; keep the software renderer as a parity reference and do not start resolution or visual enhancements before title-screen boot and accurate rendering are established.
+Milestone 3 and all progress bars remain unchanged. The current fixed Vulkan decision governs implementation; keep the software renderer as a parity reference and do not start resolution or visual enhancements before title-screen boot and accurate rendering are established.
 
-### Windows graphics backend decision updated (2026-10-18)
+### Historical D3D12 recommendation, superseded by the fixed Vulkan decision (2026-10-18)
 
-The user asked to research and select whichever native backend offers the best performance for the Windows target. **Select native Direct3D 12 for the NV2A renderer.** No matched D3D12/Vulkan Steel Battalion benchmark exists, so this is an architecture choice based on the target platform and available implementations, not a measured speed claim. The [XboxXBERecomp project](https://github.com/TGP482/XboxXBERecomp) documents an original-Xbox recompilation renderer using native D3D12, translating Xbox vertex programs, pixel combiners and fixed-function state to HLSL and rendering on a dedicated thread. By contrast, xemu Vulkan-versus-OpenGL community captures show mixed results, including Vulkan regressions on some NVIDIA hardware, and do not establish that Vulkan beats native D3D12. The existing D3D12 prototype is only a correctness probe; production work still needs batched command submission and no per-frame readback.
+At that point the backend recommendation was D3D12, based on platform fit rather than a matched game benchmark. **That recommendation is historical and inactive.** The user later fixed Vulkan as the project backend and instructed us not to switch again. Retain the old evidence below only as decision history; it does not authorize new D3D12 implementation or an alternative runtime path.
 
-The xemu Vulkan route is not selected: our audit found its PGRAPH path depends on a GPL-2-or-later header and has unresolved transitive license/build inputs, while the XboxXBERecomp repository is MIT-licensed. Any D3D12 source reuse still requires file-level license and third-party review. No dependency code was copied and no renderer code changed in this decision turn. The xemu path may be reconsidered if equivalent Steel Battalion measurements show a Vulkan win and its license route is resolved. Static recompilation remains the CPU execution architecture; no full-system emulator substitution. See [the graphics backend decision record](GRAPHICS_BACKEND_OPTIONS.md).
+At this earlier checkpoint, the xemu Vulkan route was deferred due unresolved renderer license/build inputs. That did not clear D3D12 for implementation, and the later user-directed Vulkan lock is the active decision. Static recompilation remains the CPU execution architecture; no full-system emulator substitution. See [the graphics backend decision record](GRAPHICS_BACKEND_OPTIONS.md).
 
 Research sources: [XboxXBERecomp renderer and license](https://github.com/TGP482/XboxXBERecomp), [xemu Vulkan/OpenGL comparison issue #1838](https://github.com/xemu-project/xemu/issues/1838), and [xemu NV2A graphics debugging docs](https://github.com/xemu-project/xemu-website/blob/master/docs/docs/dev/debug/graphics.md). The latter documents debugging methods rather than a performance comparison.
 
@@ -909,7 +909,7 @@ Continued the same five-minute hidden-window test using the existing Release x64
 
 Read the current XboxXBERecomp D3D12 source and its API/license manifests without cloning it into the repository. Its renderer is a large native D3D12 backend driven through normalized XDK D3D8 state; it is not a raw NV2A PGRAPH packet consumer. It is MIT-licensed at the repository level and lists toml++, Dear ImGui, and SDL 3 in `THIRD_PARTY.txt`, but the renderer depends on that project’s app, window, diagnostics, and kernel APIs. Local XboxRecomp still has a distinct D3D8-to-D3D11 path; its `dev_BeginPush` and `dev_EndPush` return `E_NOTIMPL`. Steel Battalion startup is currently observed entering the independent low-level `nv2a_pb_exec` path. This makes the renderer a valuable state/resource-management reference, not a drop-in replacement for the observed pushbuffer path. No upstream code was copied and no local runtime source was changed.
 
-The next task is to correlate the title's D3D8 calls with the raw PGRAPH packets that produce its splash draws, then define the smallest generic D3D12 backend interface that preserves both routes. Keep XboxRecomp's static-recompilation base and do not advance graphics enhancement work before title boot and rendering parity are achieved. Milestone 3 and progress bars remain unchanged.
+The then-proposed D3D12 interface work is historical and superseded by Vulkan. Keep XboxRecomp's static-recompilation base and do not advance graphics enhancement work before title boot and rendering parity are achieved. Milestone 3 and progress bars remain unchanged.
 
 ### D3D12 splash-path bounded measurement (2026-10-18)
 
@@ -968,3 +968,11 @@ The Windows x64 Release target rebuilt successfully. A bounded launch selected t
 A pinned-source review found that xemu's Vulkan PGRAPH target is not solely an LGPL renderer path. The Vulkan shader cache generates vertex and pixel GLSL on cache misses; the called vertex-program generator and pixel/register-combiner generator carry GPL-2-or-3 notices and identify Cxbx/Dxbx/Xeon as prior sources. The Vulkan compiler wrapper also directly invokes glslang preprocessing, parsing, linking, and SPIR-V generation. These are required runtime paths in xemu's design, not unused files. See docs/VULKAN_REUSE_AUDIT.md for pinned source links and file-level findings.
 
 Consequently, do not copy the complete xemu Vulkan renderer and describe it as LGPL-only. Before reuse, either clear a compatible project-wide/dependency license path, or replace the GPL shader-generation components with independently authored code and complete the remaining glslang/QEMU include audit. The existing project-owned CPU VSH and combiner implementations cite xemu behavior as reference; their provenance also needs review before distribution. No xemu code was copied or new runtime code added in this research update. The Vulkan backend remains locked, and no progress bars or Milestone 3 status change.
+
+### First narrow NV2A draw submitted through Vulkan (2026-10-18)
+
+Added `patches/xboxrecomp-v0.13.1-vulkan-textured-logo-slice.patch`. At the existing `raster_batch_program()` boundary, the exact observed 640x480 DXT1 fullscreen splash-logo state is expanded to a triangle list, decoded to a project-owned RGBA texture, and submitted to a project-owned Vulkan graphics pipeline. The preceding exact opaque-black/depth quad is reproduced with a CPU rectangle/depth fill. The Vulkan path reads its result back into the guest surface so later legacy CPU draws observe the same memory; unsupported states still use the CPU reference. Removed the D3D12 raster branches from the active pushbuffer executor. Vulkan remains the only host GPU direction.
+
+DXC 1.9.2609 compiled the project-owned HLSL to SPIR-V embedded as C arrays; the DXC tool and intermediate binaries are local only. The Release x64 target built successfully through the installed Visual Studio Build Tools. A bounded seeded startup run selected the RTX 4070 SUPER, created the Vulkan presenter and guest pipeline without the pipeline-unavailable fallback, presented a frame, and logged `[Vulkan] textured logo fade completed at 640x480`. The guest advanced to three flips and then stayed at DMA PUT/GET `0x54A8` with a stalled title clock while consuming CPU; that exact test process was stopped. Its log is ignored at `iso/local-analysis/logs/m3-vulkan-textured-logo-seeded-120s-20261018/`.
+
+The run proves that the narrow Vulkan submission path executes, not that its pixels match the CPU renderer. No framebuffer capture was taken; logo orientation/color parity, later draw ordering, performance improvement, title-screen boot, audio, controller response, or campaign play remain unverified. Keep all progress bars and Milestone 3 status unchanged. Next compare a captured Vulkan frame against the existing CPU reference and capture a guest stack at the `0x54A8` stall before expanding this path to other draws.

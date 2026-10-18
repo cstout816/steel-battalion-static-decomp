@@ -1,0 +1,1353 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+index be04ecc..4a220cf 100644
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -37,7 +37,9 @@
+ #include "../d3d/d3d8_swizzle.h"
+ #include "nv2a_vsh_interp.h"
+ #include "nv2a_combiner.h"
+-#include "nv2a_d3d12_raster.h"
++#if defined(_WIN32)
++#include "../video/fb_vulkan_present.h"
++#endif
+ #if defined(_WIN32)
+ #include <windows.h>
+ #define NV_TLS __declspec(thread)
+@@ -430,11 +432,11 @@ static struct {
+     uint32_t zeta_offset, zstencil_clear;
+ } s_gpu;
+ 
+-static int s_d3d12_depth_zero_valid;
+-static uint32_t s_d3d12_depth_zero_offset;
+-static uint32_t s_d3d12_depth_zero_color_offset;
+-static int s_d3d12_depth_cleared;
+-static uint32_t s_d3d12_depth_clear_offset;
++static int s_logo_depth_zero_valid;
++static uint32_t s_logo_depth_zero_offset;
++static uint32_t s_logo_depth_zero_color_offset;
++static int s_logo_depth_cleared;
++static uint32_t s_logo_depth_clear_offset;
+ 
+ /* Unhandled methods, ranked. The interesting output is not that something was
+  * skipped but which things dominate, because that is the order to implement
+@@ -870,26 +872,6 @@ static void clear_surface(uint32_t param)
+             b[0] = s_gpu.clip_w * 0.85f; b[1] = s_gpu.clip_h * 0.85f;
+             c[0] = s_gpu.clip_w * 0.15f; c[1] = s_gpu.clip_h * 0.85f;
+             raster_triangle(a, b, c, 0xFFFF00FFu, NULL);  /* magenta: never a clear colour */
+-            /* If both bring-up switches are set, submit the same known
+-             * triangle through the native D3D12 path after the software
+-             * reference. This checks device creation, upload, rasterization,
+-             * readback, and guest-surface writes without changing normal
+-             * title rendering. */
+-            if (getenv("RECOMP_D3D12_RASTER") && surface_bpp() == 4
+-                && s_gpu.color_offset) {
+-                const float xy[3][2] = {
+-                    {a[0], a[1]}, {b[0], b[1]}, {c[0], c[1]}
+-                };
+-                if (nv2a_d3d12_raster_triangle(
+-                        mem + dma_resolve(s_gpu.color_offset),
+-                        s_gpu.pitch, s_gpu.pitch / 4,
+-                        s_gpu.clip_y + s_gpu.clip_h,
+-                        s_gpu.clip_x, s_gpu.clip_y, s_gpu.clip_w,
+-                        s_gpu.clip_h, xy, 0xFFFF00FFu))
+-                    fprintf(stderr, "  [GPU] D3D12 raster self-test passed\n");
+-                else
+-                    fprintf(stderr, "  [GPU] D3D12 raster self-test fell back\n");
+-            }
+             if (announced++ == 0)
+             fprintf(stderr, "  [GPU] raster self-test: triangle (%.0f,%.0f)"
+                             " (%.0f,%.0f) (%.0f,%.0f) into 0x%08X %ubpp\n",
+@@ -1429,27 +1411,6 @@ static void raster_triangle(const float a[2], const float b[2],
+         return;
+     }
+ 
+-    /* Opt-in D3D12 prototype for the subset whose state can be reproduced by
+-     * this flat-colour pipeline. Keep complex guest state on the software
+-     * reference path until its shader, texture, blend and depth semantics
+-     * have corresponding D3D12 coverage. */
+-    if (!textured && !s_gpu.blend_enable && !s_gpu.depth_test
+-        && !s_gpu.depth_mask && !s_gpu.alpha_test
+-        && s_gpu.color_mask == 0x01010101u && bpp == 4) {
+-        uint32_t width = s_gpu.pitch / 4;
+-        uint32_t height = s_gpu.clip_y + s_gpu.clip_h;
+-        const float xy[3][2] = {
+-            {a[0], a[1]}, {b[0], b[1]}, {c[0], c[1]}
+-        };
+-        if (nv2a_d3d12_raster_triangle(s_surface, s_gpu.pitch, width, height,
+-                                       s_gpu.clip_x, s_gpu.clip_y,
+-                                       s_gpu.clip_w, s_gpu.clip_h, xy, argb)) {
+-            s_gpu.tris_drawn++;
+-            note_drawn();
+-            return;
+-        }
+-    }
+-
+     for (y = miny; y < maxy; y++) {
+         for (x = minx; x < maxx; x++) {
+             float px = (float)x + 0.5f, py = (float)y + 0.5f;
+@@ -1963,7 +1924,6 @@ typedef struct {
+ } XfTri;
+ 
+ typedef struct { uint64_t depth_fail, pixels; uint32_t zpass; } XfCount;
+-static int s_d3d12_depth_only_draw;
+ 
+ /* Rows y0, y0+step, ... < maxy of triangle T. */
+ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+@@ -2177,7 +2137,7 @@ static void raster_xf_triangle(const Nv2aVshOutput *va, const Nv2aVshOutput *vb,
+     T.mem = (uint8_t *)xbox_GetMemoryOffset();
+     T.bpp = surface_bpp();
+     T.textured = s_gpu.texs[0].valid;
+-    T.depth_only = s_d3d12_depth_only_draw;
++    T.depth_only = 0;
+     T.use_rc = s_gpu.rc_seen && !no_rc;
+     T.va = va; T.vb = vb; T.vc = vc;
+ 
+@@ -2354,20 +2314,20 @@ static int transform_vertex(uint32_t index, Nv2aVshOutput *out)
+     return nv2a_vsh_run((const float (*)[4])in, out);
+ }
+ 
+-static int d3d12_black_depth_quad(void)
++/* This exact splash depth pass is inexpensive to reproduce on the CPU. The
++ * matching textured logo quad below is submitted to the fixed Vulkan path. */
++static int nv2a_black_depth_quad(void)
+ {
+     float tex[4][4] = {{0}};
+     float fog[4] = {0, 0, 0, 0};
+     float out[4];
+-    float xy[6][2];
+     float *zb;
+     float left, top, right, bottom;
+-    uint32_t v, width, height;
++    uint32_t v;
+     uint8_t *mem = (uint8_t *)xbox_GetMemoryOffset();
+     static int reported;
+ 
+-    if (!getenv("RECOMP_D3D12_RASTER")
+-        || s_gpu.prim != NV_PRIM_TRIANGLE_STRIP || s_gpu.idx_count != 4
++    if (s_gpu.prim != NV_PRIM_TRIANGLE_STRIP || s_gpu.idx_count != 4
+         || s_gpu.color_mask != 0x01010101u
+         || s_gpu.texs[0].valid || s_gpu.blend_enable || s_gpu.alpha_test
+         || !s_gpu.depth_test || !s_gpu.depth_mask || s_gpu.depth_func != 0x203
+@@ -2375,8 +2335,8 @@ static int d3d12_black_depth_quad(void)
+         || s_gpu.rc.stage_program != 0
+         || s_gpu.rc.final0 != 0x200C0000
+         || s_gpu.rc.final1 != 0x00001C80
+-        || !s_d3d12_depth_cleared
+-        || s_d3d12_depth_clear_offset != s_gpu.zeta_offset
++        || !s_logo_depth_cleared
++        || s_logo_depth_clear_offset != s_gpu.zeta_offset
+         || s_gpu.zpass_enable
+         || surface_bpp() != 4)
+         return 0;
+@@ -2403,24 +2363,23 @@ static int d3d12_black_depth_quad(void)
+     if (pack_color(out) != 0xFF000000u)
+         return 0;
+ 
+-    xy[0][0] = s_xf[0].pos[0]; xy[0][1] = s_xf[0].pos[1];
+-    xy[1][0] = s_xf[1].pos[0]; xy[1][1] = s_xf[1].pos[1];
+-    xy[2][0] = s_xf[2].pos[0]; xy[2][1] = s_xf[2].pos[1];
+-    xy[3][0] = s_xf[1].pos[0]; xy[3][1] = s_xf[1].pos[1];
+-    xy[4][0] = s_xf[2].pos[0]; xy[4][1] = s_xf[2].pos[1];
+-    xy[5][0] = s_xf[3].pos[0]; xy[5][1] = s_xf[3].pos[1];
+-    width = s_gpu.pitch / 4;
+-    height = s_gpu.clip_y + s_gpu.clip_h;
+     zb = zbuf_current(0);
+     if (!zb)
+         return 0;
+-    if (!surface_begin_batch(mem)
+-        || !nv2a_d3d12_raster_triangles(
+-            s_surface, s_gpu.pitch, width, height, s_gpu.clip_x, s_gpu.clip_y,
+-            s_gpu.clip_w, s_gpu.clip_h, (const float (*)[2])xy, 6,
+-            0xFF000000u))
++    if (!surface_begin_batch(mem))
+         return 0;
+ 
++    {
++        uint32_t x, y;
++        for (y = 0; y < s_gpu.clip_h; y++) {
++            uint32_t *row = (uint32_t *)(s_surface
++                + (size_t)(s_gpu.clip_y + y) * s_gpu.pitch
++                + (size_t)s_gpu.clip_x * sizeof(uint32_t));
++            for (x = 0; x < s_gpu.clip_w; x++)
++                row[x] = 0xFF000000u;
++        }
++    }
++
+     /* This exact full-surface pass follows the guest's Z clear. Its constant
+      * z=0 with LEQUAL passes every cleared sample and writes zero. Mirror that
+      * in the software depth buffer with row fills instead of per-pixel tests. */
+@@ -2435,14 +2394,14 @@ static int d3d12_black_depth_quad(void)
+     s_gpu.xf_pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
+     s_gpu.pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
+     note_drawn();
+-    s_d3d12_depth_cleared = 0;
+-    s_d3d12_depth_zero_valid = 1;
+-    s_d3d12_depth_zero_offset = s_gpu.zeta_offset;
+-    s_d3d12_depth_zero_color_offset = s_gpu.color_offset;
++    s_logo_depth_cleared = 0;
++    s_logo_depth_zero_valid = 1;
++    s_logo_depth_zero_offset = s_gpu.zeta_offset;
++    s_logo_depth_zero_color_offset = s_gpu.color_offset;
+     if (!reported) {
+         reported = 1;
+         fprintf(stderr,
+-                "[D3D12-R] actual opaque-black depth quad completed at %ux%u\n",
++                "[NV2A] opaque-black depth quad completed at %ux%u\n",
+                 s_gpu.clip_w, s_gpu.clip_h);
+     }
+     return 1;
+@@ -2452,7 +2411,7 @@ static int d3d12_black_depth_quad(void)
+  * combiner computes diffuse * texture, then uses SRC_ALPHA / ONE_MINUS_SRC_ALPHA
+  * over the black surface. Keep this exact-state gate narrow; unsupported
+  * methods continue through the software reference rasterizer. */
+-static int d3d12_logo_fade_quad(void)
++static int vulkan_logo_fade_quad(void)
+ {
+     static const uint32_t quad[6] = {0, 1, 2, 1, 2, 3};
+     const Texture *t = &s_gpu.texs[0];
+@@ -2463,9 +2422,9 @@ static int d3d12_logo_fade_quad(void)
+     uint8_t *mem = (uint8_t *)xbox_GetMemoryOffset();
+     static int reported;
+ 
+-    if (!getenv("RECOMP_D3D12_RASTER") || !s_d3d12_depth_zero_valid
+-        || s_d3d12_depth_zero_offset != s_gpu.zeta_offset
+-        || s_d3d12_depth_zero_color_offset != s_gpu.color_offset
++    if (!s_logo_depth_zero_valid
++        || s_logo_depth_zero_offset != s_gpu.zeta_offset
++        || s_logo_depth_zero_color_offset != s_gpu.color_offset
+         || s_gpu.prim != NV_PRIM_TRIANGLE_STRIP || s_gpu.idx_count != 4
+         || s_gpu.color_mask != 0x01010101u || !t->valid
+         || t->color != 0x0C || t->filter != 0x02022000
+@@ -2533,13 +2492,18 @@ static int d3d12_logo_fade_quad(void)
+         vtx[i][6] = s_xf[n].d0[2];
+         vtx[i][7] = s_xf[n].d0[3];
+     }
+-    if (!nv2a_d3d12_raster_textured_triangles(
++#if defined(_WIN32)
++    if (!xbox_vulkan_raster_textured_triangles(
+             s_surface, s_gpu.pitch, width, height, s_gpu.clip_x, s_gpu.clip_y,
+             s_gpu.clip_w, s_gpu.clip_h, (const float (*)[8])vtx, 6,
+             rgba, t->width, t->height)) {
+         free(rgba);
+         return 0;
+     }
++#else
++    free(rgba);
++    return 0;
++#endif
+     free(rgba);
+ 
+     /* Depth is still zero from the immediately preceding exact quad. This
+@@ -2549,13 +2513,13 @@ static int d3d12_logo_fade_quad(void)
+     s_gpu.xf_pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
+     s_gpu.pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
+     note_drawn();
+-    s_d3d12_depth_zero_valid = 1;
+-    s_d3d12_depth_zero_offset = s_gpu.zeta_offset;
+-    s_d3d12_depth_zero_color_offset = s_gpu.color_offset;
++    s_logo_depth_zero_valid = 1;
++    s_logo_depth_zero_offset = s_gpu.zeta_offset;
++    s_logo_depth_zero_color_offset = s_gpu.color_offset;
+     if (!reported) {
+         reported = 1;
+         fprintf(stderr,
+-                "[D3D12-R] actual textured logo fade completed at %ux%u\n",
++                "[Vulkan] textured logo fade completed at %ux%u\n",
+                 s_gpu.clip_w, s_gpu.clip_h);
+     }
+     return 1;
+@@ -2630,17 +2594,17 @@ static void raster_batch_program(void)
+     if (s_gpu.texs[0].valid)
+         note_texture_use();
+ 
+-    if (d3d12_black_depth_quad()) {
++    if (nv2a_black_depth_quad()) {
+         dump_program_draw_if_requested();
+         return;
+     }
+-    if (d3d12_logo_fade_quad()) {
+-        s_d3d12_depth_zero_valid = 0;
++    if (vulkan_logo_fade_quad()) {
++        s_logo_depth_zero_valid = 0;
+         dump_program_draw_if_requested();
+         return;
+     }
+-    s_d3d12_depth_zero_valid = 0;
+-    s_d3d12_depth_cleared = 0;
++    s_logo_depth_zero_valid = 0;
++    s_logo_depth_cleared = 0;
+ 
+     switch (s_gpu.prim) {
+     case NV_PRIM_TRIANGLES:
+@@ -2689,8 +2653,8 @@ static void raster_batch(void)
+         raster_batch_program();
+         return;
+     }
+-    s_d3d12_depth_zero_valid = 0;
+-    s_d3d12_depth_cleared = 0;
++    s_logo_depth_zero_valid = 0;
++    s_logo_depth_cleared = 0;
+     if (!batch_is_screen_space()) {
+         s_gpu.batches_untransformed++;
+         return;
+@@ -3289,9 +3253,9 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+         case NV097_SET_SURFACE_COLOR_OFFSET:    slot = 4; break;
+         case NV097_SET_COLOR_CLEAR_VALUE:       slot = 5; break;
+         case NV097_CLEAR_SURFACE:
+-        s_d3d12_depth_zero_valid = 0;
+-        s_d3d12_depth_cleared = (param & 0x01) != 0;
+-        s_d3d12_depth_clear_offset = s_gpu.zeta_offset;               slot = 6; break;
++        s_logo_depth_zero_valid = 0;
++        s_logo_depth_cleared = (param & 0x01) != 0;
++        s_logo_depth_clear_offset = s_gpu.zeta_offset;               slot = 6; break;
+         default: break;
+         }
+         if (slot >= 0 && shown[slot]++ < 4)
+@@ -3441,9 +3405,9 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+         s_gpu.blend_dfactor = param;
+         break;
+     case NV097_CLEAR_SURFACE:
+-        s_d3d12_depth_zero_valid = 0;
+-        s_d3d12_depth_cleared = (param & 0x01) != 0;
+-        s_d3d12_depth_clear_offset = s_gpu.zeta_offset;
++        s_logo_depth_zero_valid = 0;
++        s_logo_depth_cleared = (param & 0x01) != 0;
++        s_logo_depth_clear_offset = s_gpu.zeta_offset;
+         if (s_ftrace == 2)
+             fprintf(stderr, "[FTRACE] clear %X surf %08X %ux%u colour %08X%c",
+                     param, s_gpu.color_offset, s_gpu.clip_w, s_gpu.clip_h,
+@@ -3625,8 +3589,8 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+     case 0x0354: s_gpu.depth_func = param; break; /* DEPTH_FUNC */
+     case 0x035C: s_gpu.depth_mask = param; break; /* DEPTH_MASK */
+     case 0x0214:
+-        s_d3d12_depth_zero_valid = 0;
+-        s_d3d12_depth_cleared = 0;
++        s_logo_depth_zero_valid = 0;
++        s_logo_depth_cleared = 0;
+         s_gpu.zeta_offset = param;
+         break;                                  /* SURFACE_ZETA_OFFSET */
+     case 0x1D8C: s_gpu.zstencil_clear = param; break; /* ZSTENCIL_CLEAR_VALUE */
+diff --git a/src/video/fb_vulkan_present.c b/src/video/fb_vulkan_present.c
+index 3fd7359..abd5c2a 100644
+--- a/src/video/fb_vulkan_present.c
++++ b/src/video/fb_vulkan_present.c
+@@ -14,6 +14,7 @@
+ 
+ #include "volk.h"
+ #include "fb_vulkan_present.h"
++#include "nv2a_vk_shaders_spv.h"
+ 
+ #define VP_FRAMES_IN_FLIGHT 2
+ 
+@@ -49,6 +50,20 @@ typedef struct VpState {
+     VkImage guest_image;
+     VkDeviceMemory guest_image_memory;
+     VkImageLayout guest_image_layout;
++    VkImageView guest_image_view;
++    VkRenderPass raster_render_pass;
++    VkFramebuffer raster_framebuffer;
++    VkDescriptorSetLayout raster_set_layout;
++    VkPipelineLayout raster_pipeline_layout;
++    VkPipeline raster_textured_pipeline;
++    VkSampler raster_sampler;
++    VkDescriptorPool raster_descriptor_pool;
++    VkBuffer raster_staging;
++    VkDeviceMemory raster_staging_memory;
++    uint8_t *raster_staging_mapped;
++    CRITICAL_SECTION queue_lock;
++    int queue_lock_ready;
++    int raster_pipeline_ready;
+     VpFrame frames[VP_FRAMES_IN_FLIGHT];
+     uint64_t staging_size;
+     uint32_t frame_index;
+@@ -56,6 +71,7 @@ typedef struct VpState {
+ } VpState;
+ 
+ static VpState s_vp;
++static SRWLOCK s_vp_start_lock = SRWLOCK_INIT;
+ 
+ static int vp_error(const char *where, VkResult result)
+ {
+@@ -429,7 +445,8 @@ static int vp_create_guest_image(void)
+     image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+     image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+     image_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT
+-                     | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
++                     | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
++                     | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+     image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+     image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+     result = vkCreateImage(s_vp.device, &image_info, NULL, &s_vp.guest_image);
+@@ -493,7 +510,8 @@ static int vp_create_frames(void)
+         memset(&buffer_info, 0, sizeof(buffer_info));
+         buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+         buffer_info.size = s_vp.staging_size;
+-        buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
++        buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
++                          | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+         buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+         result = vkCreateBuffer(s_vp.device, &buffer_info, NULL,
+                                 &frame->staging);
+@@ -540,6 +558,322 @@ static int vp_create_frames(void)
+     return 1;
+ }
+ 
++static int vp_create_host_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
++                                VkBuffer *buffer, VkDeviceMemory *memory,
++                                void **mapped)
++{
++    VkBufferCreateInfo buffer_info;
++    VkMemoryRequirements requirements;
++    VkMemoryAllocateInfo allocation;
++    uint32_t type;
++    VkResult result;
++
++    memset(&buffer_info, 0, sizeof(buffer_info));
++    buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
++    buffer_info.size = size;
++    buffer_info.usage = usage;
++    buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
++    result = vkCreateBuffer(s_vp.device, &buffer_info, NULL, buffer);
++    if (result != VK_SUCCESS)
++        return vp_error("creating NV2A buffer", result);
++    vkGetBufferMemoryRequirements(s_vp.device, *buffer, &requirements);
++    type = vp_memory_type(requirements.memoryTypeBits,
++        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
++        | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
++    if (type == UINT32_MAX) {
++        fprintf(stderr, "[Vulkan] no coherent host-visible NV2A memory\n");
++        return 0;
++    }
++    memset(&allocation, 0, sizeof(allocation));
++    allocation.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
++    allocation.allocationSize = requirements.size;
++    allocation.memoryTypeIndex = type;
++    result = vkAllocateMemory(s_vp.device, &allocation, NULL, memory);
++    if (result != VK_SUCCESS)
++        return vp_error("allocating NV2A buffer memory", result);
++    result = vkBindBufferMemory(s_vp.device, *buffer, *memory, 0);
++    if (result != VK_SUCCESS)
++        return vp_error("binding NV2A buffer memory", result);
++    result = vkMapMemory(s_vp.device, *memory, 0, size, 0, mapped);
++    if (result != VK_SUCCESS)
++        return vp_error("mapping NV2A buffer memory", result);
++    return 1;
++}
++
++static int vp_create_raster_resources(void)
++{
++    VkImageViewCreateInfo view_info;
++    VkAttachmentDescription attachment;
++    VkAttachmentReference color_ref;
++    VkSubpassDescription subpass;
++    VkSubpassDependency dependency;
++    VkRenderPassCreateInfo render_info;
++    VkFramebufferCreateInfo framebuffer_info;
++    VkDescriptorSetLayoutBinding bindings[3];
++    VkDescriptorSetLayoutCreateInfo set_info;
++    VkPipelineLayoutCreateInfo layout_info;
++    VkShaderModuleCreateInfo module_info;
++    VkShaderModule vertex_shader = VK_NULL_HANDLE;
++    VkShaderModule pixel_shader = VK_NULL_HANDLE;
++    VkPipelineShaderStageCreateInfo stages[2];
++    VkVertexInputBindingDescription vertex_binding;
++    VkVertexInputAttributeDescription vertex_attributes[3];
++    VkPipelineVertexInputStateCreateInfo vertex_input;
++    VkPipelineInputAssemblyStateCreateInfo assembly;
++    VkPipelineViewportStateCreateInfo viewport;
++    VkPipelineRasterizationStateCreateInfo raster;
++    VkPipelineMultisampleStateCreateInfo multisample;
++    VkPipelineColorBlendAttachmentState blend_attachment;
++    VkPipelineColorBlendStateCreateInfo blend;
++    VkDynamicState dynamic_states[2];
++    VkPipelineDynamicStateCreateInfo dynamic;
++    VkGraphicsPipelineCreateInfo pipeline_info;
++    VkDescriptorPoolSize pool_sizes[3];
++    VkDescriptorPoolCreateInfo pool_info;
++    VkSamplerCreateInfo sampler_info;
++    VkResult result;
++
++    memset(&view_info, 0, sizeof(view_info));
++    view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
++    view_info.image = s_vp.guest_image;
++    view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
++    view_info.format = VK_FORMAT_B8G8R8A8_UNORM;
++    view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++    view_info.subresourceRange.levelCount = 1;
++    view_info.subresourceRange.layerCount = 1;
++    result = vkCreateImageView(s_vp.device, &view_info, NULL,
++                               &s_vp.guest_image_view);
++    if (result != VK_SUCCESS)
++        return vp_error("creating NV2A target view", result);
++
++    memset(&attachment, 0, sizeof(attachment));
++    attachment.format = VK_FORMAT_B8G8R8A8_UNORM;
++    attachment.samples = VK_SAMPLE_COUNT_1_BIT;
++    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
++    attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
++    attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
++    attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
++    attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
++    attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
++    memset(&color_ref, 0, sizeof(color_ref));
++    color_ref.attachment = 0;
++    color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
++    memset(&subpass, 0, sizeof(subpass));
++    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
++    subpass.colorAttachmentCount = 1;
++    subpass.pColorAttachments = &color_ref;
++    memset(&dependency, 0, sizeof(dependency));
++    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
++    dependency.dstSubpass = 0;
++    dependency.srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
++    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
++    dependency.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
++    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
++                             | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
++    memset(&render_info, 0, sizeof(render_info));
++    render_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
++    render_info.attachmentCount = 1;
++    render_info.pAttachments = &attachment;
++    render_info.subpassCount = 1;
++    render_info.pSubpasses = &subpass;
++    render_info.dependencyCount = 1;
++    render_info.pDependencies = &dependency;
++    result = vkCreateRenderPass(s_vp.device, &render_info, NULL,
++                                &s_vp.raster_render_pass);
++    if (result != VK_SUCCESS)
++        return vp_error("creating NV2A render pass", result);
++
++    memset(&framebuffer_info, 0, sizeof(framebuffer_info));
++    framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
++    framebuffer_info.renderPass = s_vp.raster_render_pass;
++    framebuffer_info.attachmentCount = 1;
++    framebuffer_info.pAttachments = &s_vp.guest_image_view;
++    framebuffer_info.width = s_vp.guest_width;
++    framebuffer_info.height = s_vp.guest_height;
++    framebuffer_info.layers = 1;
++    result = vkCreateFramebuffer(s_vp.device, &framebuffer_info, NULL,
++                                 &s_vp.raster_framebuffer);
++    if (result != VK_SUCCESS)
++        return vp_error("creating NV2A framebuffer", result);
++
++    memset(bindings, 0, sizeof(bindings));
++    bindings[0].binding = 0;
++    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
++    bindings[0].descriptorCount = 1;
++    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
++    bindings[1].binding = 1;
++    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
++    bindings[1].descriptorCount = 1;
++    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
++    bindings[2].binding = 2;
++    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
++    bindings[2].descriptorCount = 1;
++    bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
++    memset(&set_info, 0, sizeof(set_info));
++    set_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
++    set_info.bindingCount = 3;
++    set_info.pBindings = bindings;
++    result = vkCreateDescriptorSetLayout(s_vp.device, &set_info, NULL,
++                                         &s_vp.raster_set_layout);
++    if (result != VK_SUCCESS)
++        return vp_error("creating NV2A descriptor layout", result);
++    memset(&layout_info, 0, sizeof(layout_info));
++    layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
++    layout_info.setLayoutCount = 1;
++    layout_info.pSetLayouts = &s_vp.raster_set_layout;
++    result = vkCreatePipelineLayout(s_vp.device, &layout_info, NULL,
++                                    &s_vp.raster_pipeline_layout);
++    if (result != VK_SUCCESS)
++        return vp_error("creating NV2A pipeline layout", result);
++
++    memset(&module_info, 0, sizeof(module_info));
++    module_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
++    module_info.codeSize = nv2a_textured_vs_spv_bytes;
++    module_info.pCode = nv2a_textured_vs_spv;
++    result = vkCreateShaderModule(s_vp.device, &module_info, NULL,
++                                  &vertex_shader);
++    if (result != VK_SUCCESS)
++        return vp_error("creating NV2A vertex shader", result);
++    module_info.codeSize = nv2a_textured_ps_spv_bytes;
++    module_info.pCode = nv2a_textured_ps_spv;
++    result = vkCreateShaderModule(s_vp.device, &module_info, NULL,
++                                  &pixel_shader);
++    if (result != VK_SUCCESS) {
++        vkDestroyShaderModule(s_vp.device, vertex_shader, NULL);
++        return vp_error("creating NV2A fragment shader", result);
++    }
++    memset(stages, 0, sizeof(stages));
++    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
++    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
++    stages[0].module = vertex_shader;
++    stages[0].pName = "main_vs";
++    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
++    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
++    stages[1].module = pixel_shader;
++    stages[1].pName = "main_ps";
++    memset(&vertex_binding, 0, sizeof(vertex_binding));
++    vertex_binding.binding = 0;
++    vertex_binding.stride = 8 * sizeof(float);
++    vertex_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
++    memset(vertex_attributes, 0, sizeof(vertex_attributes));
++    vertex_attributes[0].location = 0;
++    vertex_attributes[0].binding = 0;
++    vertex_attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
++    vertex_attributes[0].offset = 0;
++    vertex_attributes[1].location = 1;
++    vertex_attributes[1].binding = 0;
++    vertex_attributes[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
++    vertex_attributes[1].offset = 4 * sizeof(float);
++    vertex_attributes[2].location = 2;
++    vertex_attributes[2].binding = 0;
++    vertex_attributes[2].format = VK_FORMAT_R32G32_SFLOAT;
++    vertex_attributes[2].offset = 2 * sizeof(float);
++    memset(&vertex_input, 0, sizeof(vertex_input));
++    vertex_input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
++    vertex_input.vertexBindingDescriptionCount = 1;
++    vertex_input.pVertexBindingDescriptions = &vertex_binding;
++    vertex_input.vertexAttributeDescriptionCount = 3;
++    vertex_input.pVertexAttributeDescriptions = vertex_attributes;
++    memset(&assembly, 0, sizeof(assembly));
++    assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
++    assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
++    memset(&viewport, 0, sizeof(viewport));
++    viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
++    viewport.viewportCount = 1;
++    viewport.scissorCount = 1;
++    memset(&raster, 0, sizeof(raster));
++    raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
++    raster.polygonMode = VK_POLYGON_MODE_FILL;
++    raster.cullMode = VK_CULL_MODE_NONE;
++    raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
++    raster.lineWidth = 1.0f;
++    memset(&multisample, 0, sizeof(multisample));
++    multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
++    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
++    memset(&blend_attachment, 0, sizeof(blend_attachment));
++    blend_attachment.blendEnable = VK_TRUE;
++    blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
++    blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
++    blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
++    blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
++    blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
++    blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
++    blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
++                                    | VK_COLOR_COMPONENT_G_BIT
++                                    | VK_COLOR_COMPONENT_B_BIT
++                                    | VK_COLOR_COMPONENT_A_BIT;
++    memset(&blend, 0, sizeof(blend));
++    blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
++    blend.attachmentCount = 1;
++    blend.pAttachments = &blend_attachment;
++    dynamic_states[0] = VK_DYNAMIC_STATE_VIEWPORT;
++    dynamic_states[1] = VK_DYNAMIC_STATE_SCISSOR;
++    memset(&dynamic, 0, sizeof(dynamic));
++    dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
++    dynamic.dynamicStateCount = 2;
++    dynamic.pDynamicStates = dynamic_states;
++    memset(&pipeline_info, 0, sizeof(pipeline_info));
++    pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
++    pipeline_info.stageCount = 2;
++    pipeline_info.pStages = stages;
++    pipeline_info.pVertexInputState = &vertex_input;
++    pipeline_info.pInputAssemblyState = &assembly;
++    pipeline_info.pViewportState = &viewport;
++    pipeline_info.pRasterizationState = &raster;
++    pipeline_info.pMultisampleState = &multisample;
++    pipeline_info.pColorBlendState = &blend;
++    pipeline_info.pDynamicState = &dynamic;
++    pipeline_info.layout = s_vp.raster_pipeline_layout;
++    pipeline_info.renderPass = s_vp.raster_render_pass;
++    pipeline_info.subpass = 0;
++    result = vkCreateGraphicsPipelines(s_vp.device, VK_NULL_HANDLE, 1,
++        &pipeline_info, NULL, &s_vp.raster_textured_pipeline);
++    vkDestroyShaderModule(s_vp.device, pixel_shader, NULL);
++    vkDestroyShaderModule(s_vp.device, vertex_shader, NULL);
++    if (result != VK_SUCCESS)
++        return vp_error("creating NV2A textured pipeline", result);
++
++    memset(pool_sizes, 0, sizeof(pool_sizes));
++    pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
++    pool_sizes[0].descriptorCount = 1;
++    pool_sizes[1].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
++    pool_sizes[1].descriptorCount = 1;
++    pool_sizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;
++    pool_sizes[2].descriptorCount = 1;
++    memset(&pool_info, 0, sizeof(pool_info));
++    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
++    pool_info.maxSets = 1;
++    pool_info.poolSizeCount = 3;
++    pool_info.pPoolSizes = pool_sizes;
++    result = vkCreateDescriptorPool(s_vp.device, &pool_info, NULL,
++                                    &s_vp.raster_descriptor_pool);
++    if (result != VK_SUCCESS)
++        return vp_error("creating NV2A descriptor pool", result);
++    memset(&sampler_info, 0, sizeof(sampler_info));
++    sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
++    sampler_info.magFilter = VK_FILTER_LINEAR;
++    sampler_info.minFilter = VK_FILTER_LINEAR;
++    sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
++    sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
++    sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
++    sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
++    sampler_info.maxAnisotropy = 1.0f;
++    sampler_info.minLod = 0.0f;
++    sampler_info.maxLod = 0.0f;
++    result = vkCreateSampler(s_vp.device, &sampler_info, NULL,
++                             &s_vp.raster_sampler);
++    if (result != VK_SUCCESS)
++        return vp_error("creating NV2A sampler", result);
++
++    if (!vp_create_host_buffer(s_vp.staging_size,
++            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
++            &s_vp.raster_staging, &s_vp.raster_staging_memory,
++            (void **)&s_vp.raster_staging_mapped))
++        return 0;
++    s_vp.raster_pipeline_ready = 1;
++    return 1;
++}
++
+ static int vp_recreate_swapchain(void)
+ {
+     VkResult result = vkDeviceWaitIdle(s_vp.device);
+@@ -560,18 +894,28 @@ int xbox_vulkan_presenter_start(HWND window, uint32_t width, uint32_t height)
+         VK_KHR_WIN32_SURFACE_EXTENSION_NAME
+     };
+ 
++    AcquireSRWLockExclusive(&s_vp_start_lock);
++    if (s_vp.ready) {
++        ReleaseSRWLockExclusive(&s_vp_start_lock);
++        return 1;
++    }
+     memset(&s_vp, 0, sizeof(s_vp));
+     if (!window || !width || !height
+             || (uint64_t)width * (uint64_t)height > UINT32_MAX / 4u) {
+         fprintf(stderr, "[Vulkan] invalid window or guest extent\n");
++        ReleaseSRWLockExclusive(&s_vp_start_lock);
+         return 0;
+     }
++    InitializeCriticalSection(&s_vp.queue_lock);
++    s_vp.queue_lock_ready = 1;
+     s_vp.window = window;
+     s_vp.guest_width = width;
+     s_vp.guest_height = height;
+     result = volkInitialize();
+-    if (result != VK_SUCCESS)
+-        return vp_error("loading Vulkan loader", result);
++    if (result != VK_SUCCESS) {
++        vp_error("loading Vulkan loader", result);
++        goto fail;
++    }
+     s_vp.volk_ready = 1;
+     memset(&application, 0, sizeof(application));
+     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+@@ -605,13 +949,17 @@ int xbox_vulkan_presenter_start(HWND window, uint32_t width, uint32_t height)
+         goto fail;
+     if (!vp_create_swapchain() || !vp_create_guest_image() || !vp_create_frames())
+         goto fail;
++    if (!vp_create_raster_resources())
++        fprintf(stderr, "[Vulkan] guest textured raster pipeline unavailable; using CPU reference for unsupported draws\n");
+     s_vp.ready = 1;
+     fprintf(stderr, "[Vulkan] framebuffer presenter ready (%ux%u guest)\n",
+             width, height);
++    ReleaseSRWLockExclusive(&s_vp_start_lock);
+     return 1;
+ 
+ fail:
+     xbox_vulkan_presenter_stop();
++    ReleaseSRWLockExclusive(&s_vp_start_lock);
+     return 0;
+ }
+ 
+@@ -640,7 +988,364 @@ static void vp_image_barrier(VkCommandBuffer command, VkImage image,
+                          1, &barrier);
+ }
+ 
+-int xbox_vulkan_presenter_present(const uint32_t *bgra_pixels)
++static int vp_raster_textured_locked(
++    uint8_t *surface, uint32_t pitch, uint32_t width, uint32_t height,
++    uint32_t clip_x, uint32_t clip_y, uint32_t clip_w, uint32_t clip_h,
++    const float vertices[][8], uint32_t vertex_count,
++    const uint8_t *rgba, uint32_t texture_width, uint32_t texture_height)
++{
++    VkImage texture_image = VK_NULL_HANDLE;
++    VkDeviceMemory texture_memory = VK_NULL_HANDLE;
++    VkImageView texture_view = VK_NULL_HANDLE;
++    VkBuffer texture_upload = VK_NULL_HANDLE;
++    VkDeviceMemory texture_upload_memory = VK_NULL_HANDLE;
++    void *texture_upload_map = NULL;
++    VkBuffer vertex_buffer = VK_NULL_HANDLE;
++    VkDeviceMemory vertex_memory = VK_NULL_HANDLE;
++    void *vertex_map = NULL;
++    VkBuffer uniform_buffer = VK_NULL_HANDLE;
++    VkDeviceMemory uniform_memory = VK_NULL_HANDLE;
++    void *uniform_map = NULL;
++    VkDescriptorSet set = VK_NULL_HANDLE;
++    VkDescriptorSetAllocateInfo set_alloc;
++    VkDescriptorBufferInfo uniform_info;
++    VkDescriptorImageInfo image_info, sampler_info;
++    VkWriteDescriptorSet writes[3];
++    VkImageCreateInfo texture_create;
++    VkMemoryRequirements texture_requirements;
++    VkMemoryAllocateInfo texture_allocate;
++    VkImageViewCreateInfo texture_view_info;
++    VkBufferMemoryBarrier host_barrier;
++    VkCommandBuffer command = VK_NULL_HANDLE;
++    VkCommandBufferAllocateInfo command_alloc;
++    VkCommandBufferBeginInfo command_begin;
++    VkBufferImageCopy texture_copy, surface_copy;
++    VkRenderPassBeginInfo render_begin;
++    VkViewport viewport;
++    VkRect2D scissor;
++    VkDeviceSize offsets = 0;
++    VkSubmitInfo submit;
++    VkResult result;
++    VkDeviceSize vertex_bytes, texture_bytes;
++    uint32_t memory_type;
++    float extent[4];
++    int submitted = 0, ok = 0;
++
++    if (!s_vp.ready || !s_vp.raster_pipeline_ready || !surface || !vertices
++        || !rgba || !vertex_count || vertex_count % 3
++        || width != s_vp.guest_width || height != s_vp.guest_height
++        || pitch != width * 4u || !texture_width || !texture_height
++        || !clip_w || !clip_h || clip_x > width || clip_y > height
++        || clip_w > width - clip_x || clip_h > height - clip_y
++        || (uint64_t)vertex_count * 8u * sizeof(float) > SIZE_MAX
++        || (uint64_t)texture_width * texture_height * 4u > SIZE_MAX)
++        return 0;
++    vertex_bytes = (VkDeviceSize)vertex_count * 8u * sizeof(float);
++    texture_bytes = (VkDeviceSize)texture_width * texture_height * 4u;
++
++    result = vkDeviceWaitIdle(s_vp.device);
++    if (result != VK_SUCCESS) {
++        vp_error("waiting before NV2A draw", result);
++        goto done;
++    }
++    if (vkResetDescriptorPool(s_vp.device, s_vp.raster_descriptor_pool, 0)
++            != VK_SUCCESS) {
++        fprintf(stderr, "[Vulkan] resetting NV2A descriptor pool failed\n");
++        goto done;
++    }
++    if (!vp_create_host_buffer(vertex_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
++            &vertex_buffer, &vertex_memory, &vertex_map)
++        || !vp_create_host_buffer(sizeof(extent), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
++            &uniform_buffer, &uniform_memory, &uniform_map)
++        || !vp_create_host_buffer(texture_bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
++            &texture_upload, &texture_upload_memory, &texture_upload_map))
++        goto done;
++    memcpy(vertex_map, vertices, (size_t)vertex_bytes);
++    extent[0] = (float)width;
++    extent[1] = (float)height;
++    extent[2] = 0.0f;
++    extent[3] = 0.0f;
++    memcpy(uniform_map, extent, sizeof(extent));
++    memcpy(texture_upload_map, rgba, (size_t)texture_bytes);
++    memcpy(s_vp.raster_staging_mapped, surface, (size_t)pitch * height);
++
++    memset(&texture_create, 0, sizeof(texture_create));
++    texture_create.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
++    texture_create.imageType = VK_IMAGE_TYPE_2D;
++    texture_create.format = VK_FORMAT_R8G8B8A8_UNORM;
++    texture_create.extent.width = texture_width;
++    texture_create.extent.height = texture_height;
++    texture_create.extent.depth = 1;
++    texture_create.mipLevels = 1;
++    texture_create.arrayLayers = 1;
++    texture_create.samples = VK_SAMPLE_COUNT_1_BIT;
++    texture_create.tiling = VK_IMAGE_TILING_OPTIMAL;
++    texture_create.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT
++                         | VK_IMAGE_USAGE_SAMPLED_BIT;
++    texture_create.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
++    texture_create.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
++    result = vkCreateImage(s_vp.device, &texture_create, NULL, &texture_image);
++    if (result != VK_SUCCESS) {
++        vp_error("creating guest texture", result);
++        goto done;
++    }
++    vkGetImageMemoryRequirements(s_vp.device, texture_image,
++                                 &texture_requirements);
++    memory_type = vp_memory_type(texture_requirements.memoryTypeBits,
++                                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++    if (memory_type == UINT32_MAX) {
++        fprintf(stderr, "[Vulkan] no device-local guest texture memory\n");
++        goto done;
++    }
++    memset(&texture_allocate, 0, sizeof(texture_allocate));
++    texture_allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
++    texture_allocate.allocationSize = texture_requirements.size;
++    texture_allocate.memoryTypeIndex = memory_type;
++    result = vkAllocateMemory(s_vp.device, &texture_allocate, NULL,
++                              &texture_memory);
++    if (result != VK_SUCCESS) {
++        vp_error("allocating guest texture", result);
++        goto done;
++    }
++    result = vkBindImageMemory(s_vp.device, texture_image, texture_memory, 0);
++    if (result != VK_SUCCESS) {
++        vp_error("binding guest texture", result);
++        goto done;
++    }
++    memset(&texture_view_info, 0, sizeof(texture_view_info));
++    texture_view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
++    texture_view_info.image = texture_image;
++    texture_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
++    texture_view_info.format = VK_FORMAT_R8G8B8A8_UNORM;
++    texture_view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++    texture_view_info.subresourceRange.levelCount = 1;
++    texture_view_info.subresourceRange.layerCount = 1;
++    result = vkCreateImageView(s_vp.device, &texture_view_info, NULL,
++                               &texture_view);
++    if (result != VK_SUCCESS) {
++        vp_error("creating guest texture view", result);
++        goto done;
++    }
++
++    memset(&set_alloc, 0, sizeof(set_alloc));
++    set_alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
++    set_alloc.descriptorPool = s_vp.raster_descriptor_pool;
++    set_alloc.descriptorSetCount = 1;
++    set_alloc.pSetLayouts = &s_vp.raster_set_layout;
++    result = vkAllocateDescriptorSets(s_vp.device, &set_alloc, &set);
++    if (result != VK_SUCCESS) {
++        vp_error("allocating NV2A descriptor sets", result);
++        goto done;
++    }
++    memset(&uniform_info, 0, sizeof(uniform_info));
++    uniform_info.buffer = uniform_buffer;
++    uniform_info.range = sizeof(extent);
++    memset(&image_info, 0, sizeof(image_info));
++    image_info.imageView = texture_view;
++    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
++    memset(&sampler_info, 0, sizeof(sampler_info));
++    sampler_info.sampler = s_vp.raster_sampler;
++    memset(writes, 0, sizeof(writes));
++    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
++    writes[0].dstSet = set;
++    writes[0].dstBinding = 0;
++    writes[0].descriptorCount = 1;
++    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
++    writes[0].pBufferInfo = &uniform_info;
++    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
++    writes[1].dstSet = set;
++    writes[1].dstBinding = 1;
++    writes[1].descriptorCount = 1;
++    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
++    writes[1].pImageInfo = &image_info;
++    writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
++    writes[2].dstSet = set;
++    writes[2].dstBinding = 2;
++    writes[2].descriptorCount = 1;
++    writes[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
++    writes[2].pImageInfo = &sampler_info;
++    vkUpdateDescriptorSets(s_vp.device, 3, writes, 0, NULL);
++
++    memset(&command_alloc, 0, sizeof(command_alloc));
++    command_alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
++    command_alloc.commandPool = s_vp.command_pool;
++    command_alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
++    command_alloc.commandBufferCount = 1;
++    result = vkAllocateCommandBuffers(s_vp.device, &command_alloc, &command);
++    if (result != VK_SUCCESS) {
++        vp_error("allocating NV2A command buffer", result);
++        goto done;
++    }
++    memset(&command_begin, 0, sizeof(command_begin));
++    command_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
++    command_begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
++    result = vkBeginCommandBuffer(command, &command_begin);
++    if (result != VK_SUCCESS) {
++        vp_error("beginning NV2A command buffer", result);
++        goto done;
++    }
++    vp_image_barrier(command, texture_image, VK_IMAGE_LAYOUT_UNDEFINED,
++        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT,
++        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
++    memset(&texture_copy, 0, sizeof(texture_copy));
++    texture_copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++    texture_copy.imageSubresource.layerCount = 1;
++    texture_copy.imageExtent.width = texture_width;
++    texture_copy.imageExtent.height = texture_height;
++    texture_copy.imageExtent.depth = 1;
++    vkCmdCopyBufferToImage(command, texture_upload, texture_image,
++        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &texture_copy);
++    vp_image_barrier(command, texture_image,
++        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
++        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
++        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
++    vp_image_barrier(command, s_vp.guest_image, s_vp.guest_image_layout,
++        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++        s_vp.guest_image_layout == VK_IMAGE_LAYOUT_UNDEFINED ? 0
++            : VK_ACCESS_TRANSFER_READ_BIT,
++        VK_ACCESS_TRANSFER_WRITE_BIT,
++        s_vp.guest_image_layout == VK_IMAGE_LAYOUT_UNDEFINED
++            ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_TRANSFER_BIT,
++        VK_PIPELINE_STAGE_TRANSFER_BIT);
++    memset(&surface_copy, 0, sizeof(surface_copy));
++    surface_copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++    surface_copy.imageSubresource.layerCount = 1;
++    surface_copy.imageExtent.width = width;
++    surface_copy.imageExtent.height = height;
++    surface_copy.imageExtent.depth = 1;
++    vkCmdCopyBufferToImage(command, s_vp.raster_staging,
++        s_vp.guest_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++        1, &surface_copy);
++    vp_image_barrier(command, s_vp.guest_image,
++        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
++        VK_ACCESS_TRANSFER_WRITE_BIT,
++        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
++        VK_PIPELINE_STAGE_TRANSFER_BIT,
++        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
++    memset(&render_begin, 0, sizeof(render_begin));
++    render_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
++    render_begin.renderPass = s_vp.raster_render_pass;
++    render_begin.framebuffer = s_vp.raster_framebuffer;
++    render_begin.renderArea.offset.x = 0;
++    render_begin.renderArea.offset.y = 0;
++    render_begin.renderArea.extent.width = width;
++    render_begin.renderArea.extent.height = height;
++    vkCmdBeginRenderPass(command, &render_begin, VK_SUBPASS_CONTENTS_INLINE);
++    viewport.x = 0.0f;
++    viewport.y = 0.0f;
++    viewport.width = (float)width;
++    viewport.height = (float)height;
++    viewport.minDepth = 0.0f;
++    viewport.maxDepth = 1.0f;
++    scissor.offset.x = (int32_t)clip_x;
++    scissor.offset.y = (int32_t)clip_y;
++    scissor.extent.width = clip_w;
++    scissor.extent.height = clip_h;
++    vkCmdSetViewport(command, 0, 1, &viewport);
++    vkCmdSetScissor(command, 0, 1, &scissor);
++    vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS,
++                      s_vp.raster_textured_pipeline);
++    vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS,
++        s_vp.raster_pipeline_layout, 0, 1, &set, 0, NULL);
++    vkCmdBindVertexBuffers(command, 0, 1, &vertex_buffer, &offsets);
++    vkCmdDraw(command, vertex_count, 1, 0, 0);
++    vkCmdEndRenderPass(command);
++    vp_image_barrier(command, s_vp.guest_image,
++        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
++        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
++        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
++        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
++        VK_PIPELINE_STAGE_TRANSFER_BIT);
++    vkCmdCopyImageToBuffer(command, s_vp.guest_image,
++        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, s_vp.raster_staging,
++        1, &surface_copy);
++    memset(&host_barrier, 0, sizeof(host_barrier));
++    host_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
++    host_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
++    host_barrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
++    host_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++    host_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++    host_barrier.buffer = s_vp.raster_staging;
++    host_barrier.offset = 0;
++    host_barrier.size = s_vp.staging_size;
++    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
++        VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 1, &host_barrier, 0, NULL);
++    result = vkEndCommandBuffer(command);
++    if (result != VK_SUCCESS) {
++        vp_error("ending NV2A command buffer", result);
++        goto done;
++    }
++    memset(&submit, 0, sizeof(submit));
++    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
++    submit.commandBufferCount = 1;
++    submit.pCommandBuffers = &command;
++    result = vkQueueSubmit(s_vp.graphics_queue, 1, &submit, VK_NULL_HANDLE);
++    if (result != VK_SUCCESS) {
++        vp_error("submitting NV2A draw", result);
++        goto done;
++    }
++    submitted = 1;
++    result = vkQueueWaitIdle(s_vp.graphics_queue);
++    if (result != VK_SUCCESS) {
++        vp_error("waiting for NV2A draw", result);
++        goto done;
++    }
++    memcpy(surface, s_vp.raster_staging_mapped, (size_t)pitch * height);
++    s_vp.guest_image_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
++    ok = 1;
++
++done:
++    if (submitted)
++        vkQueueWaitIdle(s_vp.graphics_queue);
++    if (command)
++        vkFreeCommandBuffers(s_vp.device, s_vp.command_pool, 1, &command);
++    if (texture_view)
++        vkDestroyImageView(s_vp.device, texture_view, NULL);
++    if (texture_image)
++        vkDestroyImage(s_vp.device, texture_image, NULL);
++    if (texture_memory)
++        vkFreeMemory(s_vp.device, texture_memory, NULL);
++    if (texture_upload_map)
++        vkUnmapMemory(s_vp.device, texture_upload_memory);
++    if (texture_upload)
++        vkDestroyBuffer(s_vp.device, texture_upload, NULL);
++    if (texture_upload_memory)
++        vkFreeMemory(s_vp.device, texture_upload_memory, NULL);
++    if (vertex_map)
++        vkUnmapMemory(s_vp.device, vertex_memory);
++    if (vertex_buffer)
++        vkDestroyBuffer(s_vp.device, vertex_buffer, NULL);
++    if (vertex_memory)
++        vkFreeMemory(s_vp.device, vertex_memory, NULL);
++    if (uniform_map)
++        vkUnmapMemory(s_vp.device, uniform_memory);
++    if (uniform_buffer)
++        vkDestroyBuffer(s_vp.device, uniform_buffer, NULL);
++    if (uniform_memory)
++        vkFreeMemory(s_vp.device, uniform_memory, NULL);
++    return ok;
++}
++
++int xbox_vulkan_raster_textured_triangles(
++    uint8_t *surface, uint32_t pitch, uint32_t width, uint32_t height,
++    uint32_t clip_x, uint32_t clip_y, uint32_t clip_w, uint32_t clip_h,
++    const float vertices[][8], uint32_t vertex_count,
++    const uint8_t *rgba, uint32_t texture_width, uint32_t texture_height)
++{
++    int result;
++    if (!s_vp.ready || !s_vp.queue_lock_ready)
++        return 0;
++    EnterCriticalSection(&s_vp.queue_lock);
++    result = vp_raster_textured_locked(surface, pitch, width, height,
++        clip_x, clip_y, clip_w, clip_h, vertices, vertex_count,
++        rgba, texture_width, texture_height);
++    LeaveCriticalSection(&s_vp.queue_lock);
++    return result;
++}
++
++static int vp_present_locked(const uint32_t *bgra_pixels)
+ {
+     VpFrame *frame;
+     VkResult result;
+@@ -805,6 +1510,17 @@ int xbox_vulkan_presenter_present(const uint32_t *bgra_pixels)
+     return 1;
+ }
+ 
++int xbox_vulkan_presenter_present(const uint32_t *bgra_pixels)
++{
++    int result;
++    if (!s_vp.ready || !s_vp.queue_lock_ready || !bgra_pixels)
++        return 0;
++    EnterCriticalSection(&s_vp.queue_lock);
++    result = vp_present_locked(bgra_pixels);
++    LeaveCriticalSection(&s_vp.queue_lock);
++    return result;
++}
++
+ void xbox_vulkan_presenter_stop(void)
+ {
+     uint32_t i;
+@@ -823,6 +1539,32 @@ void xbox_vulkan_presenter_stop(void)
+             if (frame->fence)
+                 vkDestroyFence(s_vp.device, frame->fence, NULL);
+         }
++        if (s_vp.raster_staging_mapped)
++            vkUnmapMemory(s_vp.device, s_vp.raster_staging_memory);
++        if (s_vp.raster_staging)
++            vkDestroyBuffer(s_vp.device, s_vp.raster_staging, NULL);
++        if (s_vp.raster_staging_memory)
++            vkFreeMemory(s_vp.device, s_vp.raster_staging_memory, NULL);
++        if (s_vp.raster_sampler)
++            vkDestroySampler(s_vp.device, s_vp.raster_sampler, NULL);
++        if (s_vp.raster_descriptor_pool)
++            vkDestroyDescriptorPool(s_vp.device,
++                                    s_vp.raster_descriptor_pool, NULL);
++        if (s_vp.raster_textured_pipeline)
++            vkDestroyPipeline(s_vp.device,
++                              s_vp.raster_textured_pipeline, NULL);
++        if (s_vp.raster_pipeline_layout)
++            vkDestroyPipelineLayout(s_vp.device,
++                                    s_vp.raster_pipeline_layout, NULL);
++        if (s_vp.raster_set_layout)
++            vkDestroyDescriptorSetLayout(s_vp.device,
++                                         s_vp.raster_set_layout, NULL);
++        if (s_vp.raster_framebuffer)
++            vkDestroyFramebuffer(s_vp.device, s_vp.raster_framebuffer, NULL);
++        if (s_vp.raster_render_pass)
++            vkDestroyRenderPass(s_vp.device, s_vp.raster_render_pass, NULL);
++        if (s_vp.guest_image_view)
++            vkDestroyImageView(s_vp.device, s_vp.guest_image_view, NULL);
+         vp_destroy_swapchain();
+         if (s_vp.guest_image)
+             vkDestroyImage(s_vp.device, s_vp.guest_image, NULL);
+@@ -839,6 +1581,8 @@ void xbox_vulkan_presenter_stop(void)
+     }
+     if (s_vp.volk_ready)
+         volkFinalize();
++    if (s_vp.queue_lock_ready)
++        DeleteCriticalSection(&s_vp.queue_lock);
+     memset(&s_vp, 0, sizeof(s_vp));
+ }
+ #endif
+diff --git a/src/video/fb_vulkan_present.h b/src/video/fb_vulkan_present.h
+index 8e9819d..68075cd 100644
+--- a/src/video/fb_vulkan_present.h
++++ b/src/video/fb_vulkan_present.h
+@@ -7,6 +7,11 @@
+ 
+ int xbox_vulkan_presenter_start(HWND window, uint32_t width, uint32_t height);
+ int xbox_vulkan_presenter_present(const uint32_t *bgra_pixels);
++int xbox_vulkan_raster_textured_triangles(
++    uint8_t *surface, uint32_t pitch, uint32_t width, uint32_t height,
++    uint32_t clip_x, uint32_t clip_y, uint32_t clip_w, uint32_t clip_h,
++    const float vertices[][8], uint32_t vertex_count,
++    const uint8_t *rgba, uint32_t texture_width, uint32_t texture_height);
+ void xbox_vulkan_presenter_stop(void);
+ #endif
+ 
+diff --git a/src/video/nv2a_textured.hlsl b/src/video/nv2a_textured.hlsl
+new file mode 100644
+index 0000000..9a99940
+--- /dev/null
++++ b/src/video/nv2a_textured.hlsl
+@@ -0,0 +1,32 @@
++struct VertexInput {
++    float2 position : POSITION;
++    float4 color : COLOR;
++    float2 uv : TEXCOORD0;
++};
++
++struct VertexOutput {
++    float4 position : SV_POSITION;
++    float4 color : COLOR;
++    float2 uv : TEXCOORD0;
++};
++
++cbuffer DrawParameters : register(b0) {
++    float4 target_extent;
++};
++
++VertexOutput main_vs(VertexInput input) {
++    VertexOutput output;
++    float2 ndc = float2(2.0 * input.position.x / target_extent.x - 1.0,
++                        2.0 * input.position.y / target_extent.y - 1.0);
++    output.position = float4(ndc, 0.0, 1.0);
++    output.color = input.color;
++    output.uv = input.uv;
++    return output;
++}
++
++Texture2D<float4> source_texture : register(t0);
++SamplerState source_sampler : register(s0);
++
++float4 main_ps(VertexOutput input) : SV_TARGET {
++    return saturate(source_texture.Sample(source_sampler, input.uv) * input.color);
++}
+diff --git a/src/video/nv2a_vk_shaders_spv.h b/src/video/nv2a_vk_shaders_spv.h
+new file mode 100644
+index 0000000..b7073b4
+--- /dev/null
++++ b/src/video/nv2a_vk_shaders_spv.h
+@@ -0,0 +1,105 @@
++#ifndef XBOX_NV2A_VK_SHADERS_SPV_H
++#define XBOX_NV2A_VK_SHADERS_SPV_H
++#include <stdint.h>
++static const uint32_t nv2a_textured_vs_spv[] = {
++    0x07230203u, 0x00010000u, 0x000E0000u, 0x0000002Cu, 0x00000000u, 0x00020011u,
++    0x00000001u, 0x0003000Eu, 0x00000000u, 0x00000001u, 0x000B000Fu, 0x00000000u,
++    0x00000001u, 0x6E69616Du, 0x0073765Fu, 0x00000002u, 0x00000003u, 0x00000004u,
++    0x00000005u, 0x00000006u, 0x00000007u, 0x00030003u, 0x00000005u, 0x00000258u,
++    0x00070005u, 0x00000008u, 0x65707974u, 0x6172442Eu, 0x72615077u, 0x74656D61u,
++    0x00737265u, 0x00070006u, 0x00000008u, 0x00000000u, 0x67726174u, 0x655F7465u,
++    0x6E657478u, 0x00000074u, 0x00060005u, 0x00000009u, 0x77617244u, 0x61726150u,
++    0x6574656Du, 0x00007372u, 0x00060005u, 0x00000002u, 0x762E6E69u, 0x502E7261u,
++    0x5449534Fu, 0x004E4F49u, 0x00060005u, 0x00000003u, 0x762E6E69u, 0x432E7261u,
++    0x524F4C4Fu, 0x00000000u, 0x00070005u, 0x00000004u, 0x762E6E69u, 0x542E7261u,
++    0x4F435845u, 0x3044524Fu, 0x00000000u, 0x00060005u, 0x00000006u, 0x2E74756Fu,
++    0x2E726176u, 0x4F4C4F43u, 0x00000052u, 0x00070005u, 0x00000007u, 0x2E74756Fu,
++    0x2E726176u, 0x43584554u, 0x44524F4Fu, 0x00000030u, 0x00040005u, 0x00000001u,
++    0x6E69616Du, 0x0073765Fu, 0x00040047u, 0x00000005u, 0x0000000Bu, 0x00000000u,
++    0x00040047u, 0x00000002u, 0x0000001Eu, 0x00000000u, 0x00040047u, 0x00000003u,
++    0x0000001Eu, 0x00000001u, 0x00040047u, 0x00000004u, 0x0000001Eu, 0x00000002u,
++    0x00040047u, 0x00000006u, 0x0000001Eu, 0x00000000u, 0x00040047u, 0x00000007u,
++    0x0000001Eu, 0x00000001u, 0x00040047u, 0x00000009u, 0x00000022u, 0x00000000u,
++    0x00040047u, 0x00000009u, 0x00000021u, 0x00000000u, 0x00050048u, 0x00000008u,
++    0x00000000u, 0x00000023u, 0x00000000u, 0x00030047u, 0x00000008u, 0x00000002u,
++    0x00030016u, 0x0000000Au, 0x00000020u, 0x0004002Bu, 0x0000000Au, 0x0000000Bu,
++    0x40000000u, 0x00040015u, 0x0000000Cu, 0x00000020u, 0x00000001u, 0x0004002Bu,
++    0x0000000Cu, 0x0000000Du, 0x00000000u, 0x0004002Bu, 0x0000000Au, 0x0000000Eu,
++    0x3F800000u, 0x0004002Bu, 0x0000000Cu, 0x0000000Fu, 0x00000001u, 0x0004002Bu,
++    0x0000000Au, 0x00000010u, 0x00000000u, 0x00040017u, 0x00000011u, 0x0000000Au,
++    0x00000004u, 0x0003001Eu, 0x00000008u, 0x00000011u, 0x00040020u, 0x00000012u,
++    0x00000002u, 0x00000008u, 0x00040017u, 0x00000013u, 0x0000000Au, 0x00000002u,
++    0x00040020u, 0x00000014u, 0x00000001u, 0x00000013u, 0x00040020u, 0x00000015u,
++    0x00000001u, 0x00000011u, 0x00040020u, 0x00000016u, 0x00000003u, 0x00000011u,
++    0x00040020u, 0x00000017u, 0x00000003u, 0x00000013u, 0x00020013u, 0x00000018u,
++    0x00030021u, 0x00000019u, 0x00000018u, 0x00040020u, 0x0000001Au, 0x00000002u,
++    0x0000000Au, 0x0004003Bu, 0x00000012u, 0x00000009u, 0x00000002u, 0x0004003Bu,
++    0x00000014u, 0x00000002u, 0x00000001u, 0x0004003Bu, 0x00000015u, 0x00000003u,
++    0x00000001u, 0x0004003Bu, 0x00000014u, 0x00000004u, 0x00000001u, 0x0004003Bu,
++    0x00000016u, 0x00000005u, 0x00000003u, 0x0004003Bu, 0x00000016u, 0x00000006u,
++    0x00000003u, 0x0004003Bu, 0x00000017u, 0x00000007u, 0x00000003u, 0x00050036u,
++    0x00000018u, 0x00000001u, 0x00000000u, 0x00000019u, 0x000200F8u, 0x0000001Bu,
++    0x0004003Du, 0x00000013u, 0x0000001Cu, 0x00000002u, 0x0004003Du, 0x00000011u,
++    0x0000001Du, 0x00000003u, 0x0004003Du, 0x00000013u, 0x0000001Eu, 0x00000004u,
++    0x00050051u, 0x0000000Au, 0x0000001Fu, 0x0000001Cu, 0x00000000u, 0x00050085u,
++    0x0000000Au, 0x00000020u, 0x0000000Bu, 0x0000001Fu, 0x00060041u, 0x0000001Au,
++    0x00000021u, 0x00000009u, 0x0000000Du, 0x0000000Du, 0x0004003Du, 0x0000000Au,
++    0x00000022u, 0x00000021u, 0x00050088u, 0x0000000Au, 0x00000023u, 0x00000020u,
++    0x00000022u, 0x00050083u, 0x0000000Au, 0x00000024u, 0x00000023u, 0x0000000Eu,
++    0x00050051u, 0x0000000Au, 0x00000025u, 0x0000001Cu, 0x00000001u, 0x00050085u,
++    0x0000000Au, 0x00000026u, 0x0000000Bu, 0x00000025u, 0x00060041u, 0x0000001Au,
++    0x00000027u, 0x00000009u, 0x0000000Du, 0x0000000Fu, 0x0004003Du, 0x0000000Au,
++    0x00000028u, 0x00000027u, 0x00050088u, 0x0000000Au, 0x00000029u, 0x00000026u,
++    0x00000028u, 0x00050083u, 0x0000000Au, 0x0000002Au, 0x00000029u, 0x0000000Eu,
++    0x00070050u, 0x00000011u, 0x0000002Bu, 0x00000024u, 0x0000002Au, 0x00000010u,
++    0x0000000Eu, 0x0003003Eu, 0x00000005u, 0x0000002Bu, 0x0003003Eu, 0x00000006u,
++    0x0000001Du, 0x0003003Eu, 0x00000007u, 0x0000001Eu, 0x000100FDu, 0x00010038u,
++};
++static const uint32_t nv2a_textured_vs_spv_bytes = 1248u;
++static const uint32_t nv2a_textured_ps_spv[] = {
++    0x07230203u, 0x00010000u, 0x000E0000u, 0x00000022u, 0x00000000u, 0x00020011u,
++    0x00000001u, 0x0006000Bu, 0x00000001u, 0x4C534C47u, 0x6474732Eu, 0x3035342Eu,
++    0x00000000u, 0x0003000Eu, 0x00000000u, 0x00000001u, 0x0008000Fu, 0x00000004u,
++    0x00000002u, 0x6E69616Du, 0x0073705Fu, 0x00000003u, 0x00000004u, 0x00000005u,
++    0x00030010u, 0x00000002u, 0x00000007u, 0x00030003u, 0x00000005u, 0x00000258u,
++    0x00060005u, 0x00000006u, 0x65707974u, 0x2E64322Eu, 0x67616D69u, 0x00000065u,
++    0x00060005u, 0x00000007u, 0x72756F73u, 0x745F6563u, 0x75747865u, 0x00006572u,
++    0x00060005u, 0x00000008u, 0x65707974u, 0x6D61732Eu, 0x72656C70u, 0x00000000u,
++    0x00060005u, 0x00000009u, 0x72756F73u, 0x735F6563u, 0x6C706D61u, 0x00007265u,
++    0x00060005u, 0x00000003u, 0x762E6E69u, 0x432E7261u, 0x524F4C4Fu, 0x00000000u,
++    0x00070005u, 0x00000004u, 0x762E6E69u, 0x542E7261u, 0x4F435845u, 0x3044524Fu,
++    0x00000000u, 0x00070005u, 0x00000005u, 0x2E74756Fu, 0x2E726176u, 0x545F5653u,
++    0x45475241u, 0x00000054u, 0x00040005u, 0x00000002u, 0x6E69616Du, 0x0073705Fu,
++    0x00070005u, 0x0000000Au, 0x65707974u, 0x6D61732Eu, 0x64656C70u, 0x616D692Eu,
++    0x00006567u, 0x00040047u, 0x00000003u, 0x0000001Eu, 0x00000000u, 0x00040047u,
++    0x00000004u, 0x0000001Eu, 0x00000001u, 0x00040047u, 0x00000005u, 0x0000001Eu,
++    0x00000000u, 0x00040047u, 0x00000007u, 0x00000022u, 0x00000000u, 0x00040047u,
++    0x00000007u, 0x00000021u, 0x00000001u, 0x00040047u, 0x00000009u, 0x00000022u,
++    0x00000000u, 0x00040047u, 0x00000009u, 0x00000021u, 0x00000002u, 0x00030016u,
++    0x0000000Bu, 0x00000020u, 0x0004002Bu, 0x0000000Bu, 0x0000000Cu, 0x00000000u,
++    0x00040017u, 0x0000000Du, 0x0000000Bu, 0x00000004u, 0x0007002Cu, 0x0000000Du,
++    0x0000000Eu, 0x0000000Cu, 0x0000000Cu, 0x0000000Cu, 0x0000000Cu, 0x0004002Bu,
++    0x0000000Bu, 0x0000000Fu, 0x3F800000u, 0x0007002Cu, 0x0000000Du, 0x00000010u,
++    0x0000000Fu, 0x0000000Fu, 0x0000000Fu, 0x0000000Fu, 0x00090019u, 0x00000006u,
++    0x0000000Bu, 0x00000001u, 0x00000002u, 0x00000000u, 0x00000000u, 0x00000001u,
++    0x00000000u, 0x00040020u, 0x00000011u, 0x00000000u, 0x00000006u, 0x0002001Au,
++    0x00000008u, 0x00040020u, 0x00000012u, 0x00000000u, 0x00000008u, 0x00040020u,
++    0x00000013u, 0x00000001u, 0x0000000Du, 0x00040017u, 0x00000014u, 0x0000000Bu,
++    0x00000002u, 0x00040020u, 0x00000015u, 0x00000001u, 0x00000014u, 0x00040020u,
++    0x00000016u, 0x00000003u, 0x0000000Du, 0x00020013u, 0x00000017u, 0x00030021u,
++    0x00000018u, 0x00000017u, 0x0003001Bu, 0x0000000Au, 0x00000006u, 0x0004003Bu,
++    0x00000011u, 0x00000007u, 0x00000000u, 0x0004003Bu, 0x00000012u, 0x00000009u,
++    0x00000000u, 0x0004003Bu, 0x00000013u, 0x00000003u, 0x00000001u, 0x0004003Bu,
++    0x00000015u, 0x00000004u, 0x00000001u, 0x0004003Bu, 0x00000016u, 0x00000005u,
++    0x00000003u, 0x00050036u, 0x00000017u, 0x00000002u, 0x00000000u, 0x00000018u,
++    0x000200F8u, 0x00000019u, 0x0004003Du, 0x0000000Du, 0x0000001Au, 0x00000003u,
++    0x0004003Du, 0x00000014u, 0x0000001Bu, 0x00000004u, 0x0004003Du, 0x00000006u,
++    0x0000001Cu, 0x00000007u, 0x0004003Du, 0x00000008u, 0x0000001Du, 0x00000009u,
++    0x00050056u, 0x0000000Au, 0x0000001Eu, 0x0000001Cu, 0x0000001Du, 0x00060057u,
++    0x0000000Du, 0x0000001Fu, 0x0000001Eu, 0x0000001Bu, 0x00000000u, 0x00050085u,
++    0x0000000Du, 0x00000020u, 0x0000001Fu, 0x0000001Au, 0x0008000Cu, 0x0000000Du,
++    0x00000021u, 0x00000001u, 0x0000002Bu, 0x00000020u, 0x0000000Eu, 0x00000010u,
++    0x0003003Eu, 0x00000005u, 0x00000021u, 0x000100FDu, 0x00010038u,
++};
++static const uint32_t nv2a_textured_ps_spv_bytes = 1028u;
++#endif
