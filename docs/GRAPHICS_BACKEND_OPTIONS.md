@@ -1,6 +1,6 @@
 # Graphics Backend Decision Record
 
-**Status:** Backend selected by performance and platform review; no renderer implementation started
+**Status:** D3D12 selected as the primary Windows backend; comparative game-workload performance is not yet verified
 **Current milestone:** Milestone 3, Boot and Compatibility
 **Static recompilation architecture:** Retained. The options below change only how translated NV2A rendering is produced; none replaces the project with full-system emulation.
 
@@ -24,16 +24,17 @@
 
 ## Recommended decision
 
-**Select native Direct3D 12 for the Windows NV2A backend.** The available evidence does not establish a universal performance winner between D3D12 and Vulkan on NVIDIA GPUs. NVIDIA describes both as explicit, low-overhead APIs and notes that performance depends on resource binding and workload choices; its tooling supports profiling both APIs. The decisive performance evidence in this project is that the current software rasterizer spends 2.18–2.40 seconds per sampled splash frame in `raster_batch()`. Replacing that CPU pixel loop with a correct hardware renderer is expected to matter far more than a presumed API-wide speed difference.
+**Select native Direct3D 12 as the primary Windows NV2A backend.** Research does not establish a universal performance winner between D3D12 and Vulkan on NVIDIA GPUs, nor a controlled Vulkan advantage for Steel Battalion. Both APIs expose explicit command submission and ordered per-pixel mechanisms (D3D12 ROVs and Vulkan fragment shader interlock) relevant to emulating NV2A render ordering. The decisive measured bottleneck in this project is that the current software rasterizer spends 2.18–2.40 seconds per sampled splash frame in `raster_batch()`. Replacing that CPU pixel loop with a correct, batched hardware renderer is expected to matter far more than an API-wide difference that has not been measured here.
 
-D3D12 is the strongest evidence-based fit for this Windows-only application and RTX 4070 Super: it is a native Windows API, matches the requested target, and avoids porting the xemu Vulkan renderer. The Steel Battalion community fork [Xemu-SB-VK](https://github.com/quizerno/Xemu-SB-VK) provides useful controller and Vulkan implementation research, but its README says original Steel Battalion performance is inconsistent and does not publish a controlled Vulkan-versus-D3D12 benchmark. Reusing xemu's Vulkan NV2A implementation would also conflict with the checked-out XboxRecomp contribution policy against porting GPL code. A fresh Vulkan backend would require substantial independent work without evidence it would run faster here.
+D3D12 is the selected primary API for this Windows-only application and RTX 4070 Super: it is native to the target, matches the requested Windows graphics stack, and avoids porting xemu's GPL-licensed Vulkan renderer against the checked-out XboxRecomp contribution policy. The Steel Battalion community fork [Xemu-SB-VK](https://github.com/quizerno/Xemu-SB-VK) is useful controller and Vulkan research, but its README says original Steel Battalion performance is inconsistent and does not publish a controlled Vulkan-versus-D3D12 benchmark. A new Vulkan backend could be considered only if a matched capture benchmark shows a reproducible performance win while preserving output parity. The current evidence therefore supports D3D12 as the best-supported performance path for this project's target, but does not prove D3D12 is faster than Vulkan.
 
-This is a reasoned architecture choice, **not a measured API benchmark**. No Direct3D 12 backend is implemented or verified. The Windows static-recompilation CPU/kernel architecture stays unchanged. D3D11 remains an interim-only option and is not the selected final backend.
+This is a reasoned architecture choice, **not a measured API benchmark**. The local prototype verifies only a synthetic triangle and has no game-frame parity or speedup evidence. No usable D3D12 game renderer is verified. The Windows static-recompilation CPU/kernel architecture stays unchanged. D3D11 remains an interim-only option and is not the selected final backend.
 
 ### Research sources
 
 - [NVIDIA Advanced API Performance: Descriptors](https://developer.nvidia.com/blog/advanced-api-performance-descriptors/) — discusses resource-binding performance practices for Direct3D 12 and Vulkan.
 - [NVIDIA Nsight Graphics](https://developer.nvidia.com/nsight-graphics) — supports profiling Direct3D 12 and Vulkan applications, enabling a later matched-workload comparison.
+- [Microsoft D3D12 rasterizer-ordered views](https://learn.microsoft.com/en-us/windows/win32/direct3d12/rasterizer-order-views) and [Khronos Vulkan fragment shader interlock](https://registry.khronos.org/vulkan/specs/latest/man/html/VK_EXT_fragment_shader_interlock.html) — ordered pixel access options that can support blending/order-sensitive legacy rendering; availability and cost must be measured on the target device.
 - [Xemu-SB-VK project notes](https://github.com/quizerno/Xemu-SB-VK) — community Steel Battalion fork and its stated Vulkan/non-Vulkan limitations.
 - [xemu NV2A Vulkan renderer](https://github.com/xemu-project/xemu/tree/master/hw/xbox/nv2a/pgraph/vk) — reference implementation for research; licensing and project policy constrain direct reuse.
 
