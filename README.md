@@ -77,6 +77,7 @@ The project is prioritizing campaign reliability and original controller support
 
 - New to the project? Read the [player guide](docs/PLAYER_GUIDE.md).
 - Want technical detail? See [research and architecture](docs/milestone-1-research.md).
+- Want the audio reuse plan? Read the [MCPX DSP integration plan](docs/audio-dsp-integration-plan.md).
 - Want all current progress bars? Open the [development status page](docs/DEVELOPMENT_STATUS.md).
 - Looking for image sources and licenses? See [image credits](docs/ATTRIBUTIONS.md).
 - Want to help? Share reproducible compatibility findings or join the [Steel Battalion Online community on Reddit](https://www.reddit.com/r/steelbattaliononline/) and [Discord](https://discord.gg/steelbattalion).

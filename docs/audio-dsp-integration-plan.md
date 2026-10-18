@@ -1,0 +1,53 @@
+# MCPX GP/EP DSP integration plan
+
+**Status:** research and interface analysis only. No DSP core has been integrated, and no audio behavior is verified.
+
+## Execution architecture
+
+The Xbox x86 game remains statically translated by XboxRecomp and runs against its Windows compatibility runtime. The MCPX Global Processor (GP) and Encode Processor (EP) are separate DSP56300 coprocessors. Using a DSP56300 JIT for those two processors would emulate the audio coprocessors only; it would not replace the game's static x86 translation with full-system Xbox emulation. The runtime and its documentation must describe those paths separately.
+
+## Reuse and licensing findings
+
+- The local XboxRecomp APU is extracted from xemu and marks its APU files LGPL-2.1-or-later. Its existing notice and license files must continue to ship with any redistributed build.
+- [xemu's GP/EP APU implementation](https://github.com/xemu-project/xemu/blob/master/hw/xbox/mcpx/apu/dsp/gp_ep.c) supplies useful behavioral reference for MMIO windows, reset transitions, scatter-gather transfers, FIFOs, mixbin flow, and frame scheduling. The file is LGPL-2.1-or-later. Keep any direct reuse isolated, attributed, and under its applicable license.
+- xemu's current [Rust JIT bridge](https://github.com/xemu-project/xemu/blob/master/hw/xbox/mcpx/apu/dsp/dsp_jit.c) already connects the DSP56300 C FFI to xemu's APU. It demonstrates persistent host-owned X/Y/P buffers, a callback-backed peripheral region, scratch-to-program-memory bootstrap with 24-bit masking and cache invalidation, and batched state synchronization. That bridge is GPL-2.0-or-later and depends on xemu's private `DSPState` and DMA types; it is a behavioral and architectural reference, not a drop-in file for XboxRecomp. Reuse would require preserving its GPL terms and reviewing the project's combined license obligations.
+- [xemu-project/dsp56300](https://github.com/xemu-project/dsp56300) is MIT-licensed and publishes a C FFI crate as a Rust static library. Its current workspace declares Rust 1.99 and edition 2024. The official [FFI header](https://github.com/xemu-project/dsp56300/blob/main/crates/emu-ffi/include/dsp56300.h), [quickstart](https://github.com/xemu-project/dsp56300/blob/main/crates/emu-ffi/examples/quickstart.c), and [crate manifest](https://github.com/xemu-project/dsp56300/blob/main/crates/emu-ffi/Cargo.toml) describe the interface. The local environment currently has no `cargo` or `rustc` command, so the FFI library has not been built or tested here.
+- An MIT DSP core does not remove the XboxRecomp APU's LGPL obligations. Dependency and notice review is still required before selecting the final project-wide license or distributing binaries.
+
+## Required runtime integration
+
+### Guest-visible memory windows
+
+The local runtime currently routes main APU and Voice Processor MMIO, while GP (`APU base + 0x30000`) and EP (`APU base + 0x50000`) are ignored. Add separate GP and EP dispatch paths for those 64 KiB windows. Keep the current XboxRecomp API's exact access widths and offsets visible in traces while mapping the windows.
+
+The xemu model provides the first address-space map to reconcile with the pinned DSP core:
+
+| Processor | DSP memory exposed through APU MMIO | Initial size indicated by xemu |
+| --- | --- | ---: |
+| GP | X memory, Y memory, P program memory, and the X mixbin window | X 0x1000 words, Y 0x800 words, P 0x1000 words; mixbin window starts at X address 0x1400 |
+| EP | X memory, Y memory, and P program memory | X 0xC00 words, Y 0x100 words, P 0x1000 words |
+
+Use independently owned word buffers or stable callback state for each DSP instance. The C FFI requires mapped buffers and callback context to remain valid for the instance lifetime. Route guest P-memory writes through the core's write API or batch-write API so its translated-code cache is invalidated correctly. Confirm the upstream APU's address units, 24-bit masking, unmapped ranges, and overlapping mixbin semantics before adopting these sizes verbatim.
+
+### Reset and bootstrap behavior
+
+Static analysis of the user's XBE found GP and EP setup sequences that write reset/control value 1 followed by 3. The xemu reference resets a DSP while either required reset bit is low and bootstraps it on the transition to both bits high. The C FFI does not provide a named bootstrap operation. xemu's bridge implements bootstrap in host code by loading scratch memory into P memory, masking words to 24 bits, and invalidating the JIT cache. Adapt this behavior to XboxRecomp's memory layout only after confirming its scratch DMA and bootstrap contract. Do not treat a command-doorbell clear as DSP execution.
+
+### Peripheral callbacks, DMA, and frame scheduling
+
+xemu's GP/EP path performs scratch DMA and circular FIFO transfers through scatter-gather tables, advances FIFO current pointers, writes VP mixbins into GP X memory, runs GP per APU frame, and runs EP on an 8-frame divider. These are reference semantics, not independently verified hardware timing.
+
+The C FFI provides memory callbacks and run-cycle functions, but its callback documentation says callbacks must not modify the DSP's internal registers, stack, or PC while compiled code is running. Build host-owned callback state for scratch/FIFO DMA and peripheral registers. xemu handles start-frame and DMA status in host-side peripheral state read and written through DSP callbacks; its shared frame hook sets a peripheral flag rather than requiring a new FFI interrupt API. Reproduce only after validating the XboxRecomp callback ordering and guest-visible read/clear semantics. The FFI's interrupt-pipeline fields are for core state synchronization and should not be mutated as a shortcut for peripheral events.
+
+Preserve the existing APU worker's locking, frame pacing, and shutdown lifecycle. Do not call DSP callbacks while holding a lock that their DMA path also needs. Track GP and EP cycle counts separately and bound each work slice so a bad guest program cannot stall the statically translated game indefinitely.
+
+## Work sequence before claiming audio support
+
+1. Pin a specific MIT `dsp56300` revision and record its complete transitive licenses and required Rust toolchain. Decide separately whether to adapt xemu's GPL bridge or write a narrow XboxRecomp-specific bridge against the MIT API; do not mix their licensing assumptions.
+2. Build only the FFI static library when a safe build window is available; do not install Rust system-wide. Confirm the C header and Windows x64 linker output with a small independent smoke program.
+3. Implement GP/EP storage and MMIO routing behind the project's diagnostics while preserving the existing APU register path.
+4. Add reset/bootstrap, peripheral callback, scratch/FIFO, start-frame, and bounded cycle-scheduling behavior, each with isolated synthetic tests.
+5. Compare observed guest writes, DSP memory, cycle counters, and DMA effects against xemu's behavior; keep xemu-specific assumptions labeled as such.
+6. Run a Steel Battalion startup test only when the user is not playing and a test window is permitted. Capture runtime/audio logs and demonstrate real DSP processing and audible game output before advancing those progress bars.
+
+The last step does not prove campaign audio or full campaign compatibility. Those still require mission-by-mission verification.
