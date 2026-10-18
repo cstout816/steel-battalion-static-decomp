@@ -1,0 +1,172 @@
+diff --git a/src/usb/usb_gamepad.c b/src/usb/usb_gamepad.c
+index bd00f3f..78cc5cd 100644
+--- a/src/usb/usb_gamepad.c
++++ b/src/usb/usb_gamepad.c
+@@ -38,6 +38,23 @@ static const uint8_t s_device_desc[18] = {
+     0x01            /* bNumConfigurations                         */
+ };
+ 
++/* The Steel Battalion XID profile is opt-in so other games continue to see
++ * the ordinary Controller-S device. */
++static int usb_steel_battalion_profile(void)
++{
++    static int profile = -1;
++    if (profile < 0) {
++        const char *value = getenv("RECOMP_USB_PROFILE");
++        profile = value && strcmp(value, "steel-battalion") == 0;
++    }
++    return profile;
++}
++
++static const uint8_t s_steel_battalion_device_desc[18] = {
++    18, 0x01, 0x10, 0x01, 0x00, 0x00, 0x00, 0x08,
++    0x7B, 0x0A, 0x00, 0xD0, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01
++};
++
+ /* Configuration, interface and both endpoints, in the one block a
+  * GET_DESCRIPTOR(CONFIGURATION) returns. wTotalLength covers all of it. */
+ static const uint8_t s_config_desc[32] = {
+@@ -51,6 +68,13 @@ static const uint8_t s_config_desc[32] = {
+     7, 0x05, 0x02, 0x03, 0x20, 0x00, 0x04
+ };
+ 
++static const uint8_t s_steel_battalion_config_desc[32] = {
++    9, 0x02, 32, 0x00, 0x01, 0x01, 0x00, 0x80, 250,
++    9, 0x04, 0x00, 0x00, 0x02, 0x58, 0x42, 0x00, 0x00,
++    7, 0x05, 0x82, 0x03, 0x20, 0x00, 0x04,
++    7, 0x05, 0x01, 0x03, 0x20, 0x00, 0x04
++};
++
+ static uint8_t s_address[USB_GAMEPAD_MAX];
+ static uint8_t s_configuration[USB_GAMEPAD_MAX];
+ 
+@@ -92,11 +116,19 @@ int usb_gamepad_control(int pad, const UsbSetup *setup, uint8_t *out, int max)
+         case REQ_GET_DESCRIPTOR:
+             switch (setup->wValue >> 8) {
+             case DESC_DEVICE:
+-                return copy_out(out, max, s_device_desc,
+-                                (int)sizeof s_device_desc, setup->wLength);
++                if (usb_steel_battalion_profile())
++                    return copy_out(out, max, s_steel_battalion_device_desc,
++                                    (int)sizeof s_steel_battalion_device_desc,
++                                    setup->wLength);
++                return copy_out(out, max, s_device_desc, (int)sizeof s_device_desc,
++                                setup->wLength);
+             case DESC_CONFIGURATION:
+-                return copy_out(out, max, s_config_desc,
+-                                (int)sizeof s_config_desc, setup->wLength);
++                if (usb_steel_battalion_profile())
++                    return copy_out(out, max, s_steel_battalion_config_desc,
++                                    (int)sizeof s_steel_battalion_config_desc,
++                                    setup->wLength);
++                return copy_out(out, max, s_config_desc, (int)sizeof s_config_desc,
++                                setup->wLength);
+             case DESC_STRING:
+                 /* No string descriptors. Stalling is the correct answer and
+                  * the one a host expects; returning an empty descriptor gets
+@@ -152,7 +184,7 @@ int usb_gamepad_control(int pad, const UsbSetup *setup, uint8_t *out, int max)
+     if ((setup->bmRequestType & 0x60u) == 0x20u        /* class */
+         && setup->bRequest == 0x01u                    /* GET_REPORT */
+         && is_in) {
+-        uint8_t report[20];
++        uint8_t report[26];
+         int n = usb_gamepad_report(pad, report, (int)sizeof report);
+         if (n <= 0)
+             return -1;
+@@ -193,14 +225,40 @@ int usb_gamepad_control(int pad, const UsbSetup *setup, uint8_t *out, int max)
+         static const uint8_t caps_out[6] = {
+             0x00, 6, 0xFF, 0xFF, 0xFF, 0xFF
+         };
++        static const uint8_t xid_sb_desc[16] = {
++            0x10, 0x42, 0x00, 0x01, 0x80, 0x01, 26, 22,
++            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
++        };
++        static const uint8_t caps_sb_in[26] = {
++            0x00, 26, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
++            0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
++            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
++        };
++        static const uint8_t caps_sb_out[22] = {
++            0x00, 22, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
++            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xF0,
++            0xFF, 0xFF, 0xFF, 0x00
++        };
+ 
+         if (!is_in)
+             return 0;                     /* accept, nothing to send back */
+         if (setup->bRequest == REQ_GET_DESCRIPTOR
+-                && (setup->wValue >> 8) == 0x42)
++                && (setup->wValue >> 8) == 0x42) {
++            if (usb_steel_battalion_profile())
++                return copy_out(out, max, xid_sb_desc, (int)sizeof xid_sb_desc,
++                                setup->wLength);
+             return copy_out(out, max, xid_desc, (int)sizeof xid_desc,
+                             setup->wLength);
++        }
+         if (setup->bRequest == 0x01) {    /* GET_CAPABILITIES */
++            if (usb_steel_battalion_profile()) {
++                if ((setup->wValue >> 8) == 0x01)
++                    return copy_out(out, max, caps_sb_in,
++                                    (int)sizeof caps_sb_in, setup->wLength);
++                if ((setup->wValue >> 8) == 0x02)
++                    return copy_out(out, max, caps_sb_out,
++                                    (int)sizeof caps_sb_out, setup->wLength);
++            }
+             if ((setup->wValue >> 8) == 0x01)
+                 return copy_out(out, max, caps_in, (int)sizeof caps_in,
+                                 setup->wLength);
+@@ -556,7 +614,7 @@ static void pad_script_apply(int pad, uint8_t *out)
+     }
+ }
+ 
+-int usb_gamepad_report(int pad, uint8_t *out, int max)
++static int usb_gamepad_standard_report(int pad, uint8_t *out, int max)
+ {
+     XBOX_INPUT_STATE state;
+     const XBOX_GAMEPAD *g;
+@@ -630,3 +688,45 @@ int usb_gamepad_report(int pad, uint8_t *out, int max)
+     pad_script_apply(pad, out);
+     return 20;
+ }
++
++int usb_gamepad_report(int pad, uint8_t *out, int max)
++{
++    uint8_t standard[20];
++    int32_t axis;
++    uint16_t unsigned_axis;
++
++    if (!usb_steel_battalion_profile())
++        return usb_gamepad_standard_report(pad, out, max);
++    if (max < 26)
++        return 0;
++    usb_gamepad_standard_report(pad, standard, sizeof standard);
++    memset(out, 0, 26);
++    out[0] = 0;
++    out[1] = 26;
++    /* The original Start control is bit 6 of byte 2. Preserve this one
++     * unambiguous mapping for the existing synthetic Start diagnostic. */
++    if (standard[2] & 0x10u)
++        out[2] |= 0x40u;
++    /* Aiming lever from the right stick; rotation and sight-change axes from
++     * the left stick. This fallback is intentionally partial: it does not
++     * replace a native Steel Battalion controller or a complete remapper. */
++    axis = (int16_t)((uint16_t)standard[16]
++                     | ((uint16_t)standard[17] << 8));
++    unsigned_axis = (uint16_t)(axis + 32768);
++    out[9] = (uint8_t)unsigned_axis; out[10] = (uint8_t)(unsigned_axis >> 8);
++    axis = (int16_t)((uint16_t)standard[18]
++                     | ((uint16_t)standard[19] << 8));
++    axis = 32768 - axis;
++    if (axis > 65535) axis = 65535;
++    unsigned_axis = (uint16_t)axis;
++    out[11] = (uint8_t)unsigned_axis; out[12] = (uint8_t)(unsigned_axis >> 8);
++    out[13] = standard[12]; out[14] = standard[13];
++    axis = -(int16_t)((uint16_t)standard[14]
++                      | ((uint16_t)standard[15] << 8));
++    out[15] = (uint8_t)axis; out[16] = (uint8_t)((uint16_t)axis >> 8);
++    out[17] = 0; out[18] = 0; out[19] = 0; out[20] = 0; /* pedals */
++    out[21] = 0; out[22] = 0; out[23] = 0; /* pedals */
++    out[24] = 0; /* tuner */
++    out[25] = 0xFF; /* neutral gear */
++    return 26;
++}
