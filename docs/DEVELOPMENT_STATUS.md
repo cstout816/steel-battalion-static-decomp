@@ -8,6 +8,8 @@ For the plain-language overview, see the [README](../README.md) or the [player g
 
 The latest bounded diagnostic launch rebuilt successfully with the Vulkan path and isolated watchdog logging. It exited at 45 seconds with code 3 after 171 flips; sampled NV2A `PUT` and `GET` were equal at `0x6AAB8`. Startup read `STRM00.WAV` and `STRM01.WAV`; the guest stack contained the return address from a `KeWaitForSingleObject` wrapper. This does not establish why the guest was waiting, verify audible output, or reach the Steel Battalion title screen. The watchdog's separate log path is a local diagnostic change and has not been added to the dependency patch stack.
 
+A follow-up 60-second run added timer-thread stage markers. They continued through `before/after-vblank`, `before/after-irq`, and `before/after-dpc` at loop 3000; the isolated watchdog ended the process at 60 seconds. This rules out a timer-thread stall in those three stages for that run. The guest still had not reached the title screen, and the run does not establish why game-thread progress stopped. Diagnostics remain local and ignored. Vulkan remains the fixed renderer choice; this result does not reopen API selection.
+
 See [the Vulkan migration map](VULKAN_MIGRATION_MAP.md) for source call paths, verified runtime boundaries, and the remaining implementation steps.
 
 ### Detailed field progress
