@@ -1,0 +1,117 @@
+--- a/src/apu/apu_dsp56300_bridge.c
++++ b/src/apu/apu_dsp56300_bridge.c
+@@ -12,6 +12,8 @@
+ #include "dsp56300.h"
+ #endif
+ 
++#include <stdio.h>
++#include <stdlib.h>
+ #include <string.h>
+ 
+ #define GP_X_RAM_WORDS 0x1000u
+@@ -181,6 +183,7 @@
+ uint32_t mcpx_apu_dsp_engine_run_frame(DSPState *dsp, uint32_t cycle_budget)
+ {
+ #ifdef MCPX_APU_USE_DSP56300
++    static unsigned int trace_count;
+     if (!dsp || !dsp->jit || cycle_budget == 0 ||
+         cycle_budget > (uint32_t)INT32_MAX) {
+         return 0;
+@@ -194,6 +197,47 @@
+         dsp56300_set_halt_requested((Dsp56300Jit *)dsp->jit, true);
+     }
+     dsp->core.cycle_count = dsp56300_cycle_count((Dsp56300Jit *)dsp->jit);
++    if (getenv("RECOMP_APU_DSP_TRACE") && trace_count++ < 32u) {
++        Dsp56300State state;
++        uint32_t ppc = 0;
++        dsp56300_get_state((Dsp56300Jit *)dsp->jit, &state);
++        if (state.pc < DSP_P_RAM_WORDS) {
++            ppc = dsp56300_read_memory((Dsp56300Jit *)dsp->jit,
++                                       DSP56300_MEM_SPACE_P, state.pc);
++        }
++        fprintf(stderr,
++                "[APU-DSP] %s PC=%06X cycles=%u SR=%06X SP=%06X "
++                "SSH=%06X SSL=%06X X0=%06X X1=%06X Y0=%06X Y1=%06X "
++                "P={0:%06X 1:%06X 2:%06X 3:%06X 7FF:%06X PC:%06X} "
++                "DMA={start=%06X next=%06X control=%06X config=%06X eol=%u} "
++                "interrupts=%08X\n",
++                dsp->is_gp ? "GP" : "EP", state.pc,
++                (unsigned)state.cycle_count,
++                (unsigned)state.registers[DSP56300_REG_SR],
++                (unsigned)state.registers[DSP56300_REG_SP],
++                (unsigned)state.registers[DSP56300_REG_SSH],
++                (unsigned)state.registers[DSP56300_REG_SSL],
++                (unsigned)state.registers[DSP56300_REG_X0],
++                (unsigned)state.registers[DSP56300_REG_X1],
++                (unsigned)state.registers[DSP56300_REG_Y0],
++                (unsigned)state.registers[DSP56300_REG_Y1],
++                (unsigned)dsp56300_read_memory((Dsp56300Jit *)dsp->jit,
++                                               DSP56300_MEM_SPACE_P, 0),
++                (unsigned)dsp56300_read_memory((Dsp56300Jit *)dsp->jit,
++                                               DSP56300_MEM_SPACE_P, 1),
++                (unsigned)dsp56300_read_memory((Dsp56300Jit *)dsp->jit,
++                                               DSP56300_MEM_SPACE_P, 2),
++                (unsigned)dsp56300_read_memory((Dsp56300Jit *)dsp->jit,
++                                               DSP56300_MEM_SPACE_P, 3),
++                (unsigned)dsp56300_read_memory((Dsp56300Jit *)dsp->jit,
++                                               DSP56300_MEM_SPACE_P, 0x7FFu),
++                (unsigned)ppc,
++                (unsigned)dsp->dma.start_block,
++                (unsigned)dsp->dma.next_block,
++                (unsigned)dsp->dma.control,
++                (unsigned)dsp->dma.configuration,
++                dsp->dma.eol ? 1u : 0u, (unsigned)dsp->interrupts);
++    }
+     return dsp->core.cycle_count;
+ #else
+     (void)dsp;
+--- a/src/apu/apu_dsp.c
++++ b/src/apu/apu_dsp.c
+@@ -48,6 +48,14 @@
+     return mcpx_apu_phys(address);
+ }
+ 
++static uint32_t read_le32(const uint8_t *p)
++{
++    return (uint32_t)p[0] |
++           ((uint32_t)p[1] << 8) |
++           ((uint32_t)p[2] << 16) |
++           ((uint32_t)p[3] << 24);
++}
++
+ static bool apu_gp_ep_trace_enabled(void)
+ {
+     static int enabled = -1;
+@@ -64,6 +72,32 @@
++    static unsigned int trace_notice_count;
+     DSPState *dsp = is_gp ? d->gp.dsp : d->ep.dsp;
+     uint32_t sge_base = d->regs[is_gp ? NV_PAPU_GPSADDR : NV_PAPU_EPSADDR];
+     uint32_t max_sge = d->regs[is_gp ? NV_PAPU_GPSMAXSGE : NV_PAPU_EPSMAXSGE];
++
++    if (getenv("RECOMP_APU_DSP_TRACE") && trace_notice_count++ < 8u) {
++        uint8_t *descriptor = apu_dsp_resolve_physical(sge_base, 8u);
++        if (descriptor) {
++            uint32_t payload_address = read_le32(descriptor);
++            uint8_t *payload = apu_dsp_resolve_physical(payload_address, 32u);
++            if (payload) {
++                fprintf(stderr,
++                        "[APU-DSP] %s scratch SGE=%08X max=%u "
++                        "descriptor={%08X,%08X} payload=%08X "
++                        "words={%06X,%06X,%06X,%06X,%06X,%06X,%06X,%06X}\n",
++                        is_gp ? "GP" : "EP", sge_base, max_sge,
++                        read_le32(descriptor), read_le32(descriptor + 4),
++                        payload_address,
++                        read_le32(payload) & 0x00FFFFFFu,
++                        read_le32(payload + 4) & 0x00FFFFFFu,
++                        read_le32(payload + 8) & 0x00FFFFFFu,
++                        read_le32(payload + 12) & 0x00FFFFFFu,
++                        read_le32(payload + 16) & 0x00FFFFFFu,
++                        read_le32(payload + 20) & 0x00FFFFFFu,
++                        read_le32(payload + 24) & 0x00FFFFFFu,
++                        read_le32(payload + 28) & 0x00FFFFFFu);
++            }
++        }
++    }
+ 
+     if (!mcpx_apu_dsp_bootstrap_from_scratch(
+             dsp, sge_base, max_sge, 0x0800u, apu_dsp_resolve_physical)) {

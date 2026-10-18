@@ -1,0 +1,15 @@
+--- a/src/apu/apu_dsp56300_bridge.c
++++ b/src/apu/apu_dsp56300_bridge.c
+@@ -442,6 +442,12 @@
+             return false;
+         }
+         physical_address = read_le32(descriptor);
++        /* An unwritten SGE slot reads as zero in the standalone RAM map.
++         * Do not treat that zero-filled table as a valid 2 KiB DSP program:
++         * reset may be released before the title has built its scratch list. */
++        if (physical_address == 0) {
++            return false;
++        }
+         if ((uint64_t)physical_address + offset_in_page > UINT32_MAX ||
+             (uint64_t)physical_address + offset_in_page + bytes_to_copy > UINT32_MAX) {
+             return false;
