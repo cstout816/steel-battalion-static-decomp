@@ -32,7 +32,7 @@ Xbox runtime: guest entry and asset read         [##------------------] 2 / 4 (5
 Xbox runtime: title screen and gameplay frame    [--------------------] 0 / 2 (0%)
 Xbox kernel and synchronization                  [--------------------] 0 / 3 (0%)
 Filesystem and ISO validation                    [--------------------] 0 / 3 (0%)
-Direct3D/NV2A: full scene rendering              [--------------------] 0 / 3 (0%)
+Vulkan/NV2A: full scene rendering                 [--------------------] 0 / 3 (0%)
 Audio: guest DSP execution and audible output     [##########----------] 1 / 2 (50%)
 
 Original SB controller: input, mapping, lights   [--------------------] 0 / 3 (0%)

@@ -65,7 +65,7 @@ Most of the research, code, and documentation in this repository have been produ
 
 ## Technical approach
 
-The current foundation is [sp00nznet/xboxrecomp](https://github.com/sp00nznet/xboxrecomp), which translates Xbox x86 code ahead of time. The documented Windows graphics path uses Direct3D 11; the requested Direct3D 12 path is not implemented. Xbox kernel, graphics, audio, filesystem, and controller behavior still need compatibility work. The project will not quietly replace static recompilation with ordinary emulation.
+The current foundation is [sp00nznet/xboxrecomp](https://github.com/sp00nznet/xboxrecomp), which translates Xbox x86 code ahead of time. Its documented Windows graphics path uses Direct3D 11. Vulkan is the selected candidate for the NV2A renderer because xemu has an established Vulkan implementation; integration and license review are still in progress. Xbox kernel, graphics, audio, filesystem, and controller behavior still need compatibility work. The project will not quietly replace static recompilation with ordinary emulation.
 
 The work prioritizes campaign reliability and the original Steel Battalion controller before visual enhancements. See the [community compatibility and preservation plan](docs/community-compatibility-preservation.md) for planned controller support, campaign checks, accessibility, and future Line of Contact research.
 
