@@ -41,7 +41,7 @@ When a tested release exists, players will need to provide their own legally obt
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [####----------------] 2/5 | Opt-in event wait released and GPU commands consumed; only a dim CAPCOM startup logo is observed, with real DSP startup and the game title screen still unverified. |
+| Boot and compatibility | [######--------------] 3/5 | A corrected run bootstraps the guest-loaded GP/EP DSP programs and executes bounded instruction slices. GPU methods and a DSP command still stall; the Steel Battalion title screen is not verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
 These bars describe engineering work, not playable features or campaign completion. See the [detailed tracker](docs/DEVELOPMENT_STATUS.md) for field-by-field evidence.

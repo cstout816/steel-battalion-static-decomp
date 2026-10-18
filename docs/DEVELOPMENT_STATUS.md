@@ -33,7 +33,7 @@ Xbox runtime: title screen and gameplay frame    [--------------------] 0 / 2 (0
 Xbox kernel and synchronization                  [--------------------] 0 / 3 (0%)
 Filesystem and ISO validation                    [--------------------] 0 / 3 (0%)
 Direct3D/NV2A: full scene rendering              [--------------------] 0 / 3 (0%)
-Audio: DSP processing and audible output         [--------------------] 0 / 2 (0%)
+Audio: DSP processing and audible output         [##########----------] 1 / 2 (50%)
 
 Original SB controller: input, mapping, lights   [--------------------] 0 / 3 (0%)
 Modern controller and accessibility profiles     [--------------------] 0 / 4 (0%)
@@ -55,7 +55,7 @@ Line of Contact: network and separate profile     [--------------------] 0 / 3 (
 Distribution: clean package, licenses, docs      [#-------------------] 1 / 3 (33%)
 ```
 
-For example, “guest entry and asset read” records two observed startup checkpoints, while “title screen and gameplay frame” remains at zero. The DSP doorbell acknowledgment is diagnostic only, so it does not count as DSP processing or audible output. Diagnostic logging and local project documentation exist, but deterministic replay, a clean playable package, and completed license review do not. Counts will move only when the corresponding outcome is verified. These detailed bars supplement the milestone and top-level field bars above; they do not change the milestone gate or imply campaign compatibility.
+For example, “guest entry and asset read” records observed startup checkpoints, while “title screen and gameplay frame” remains at zero. A corrected run now verifies that guest-loaded GP/EP programs execute in bounded DSP slices without the fake doorbell acknowledgment; this does not verify command completion or audible output. Diagnostic logging and local project documentation exist, but deterministic replay, a clean playable package, and completed license review do not. Counts move only when the corresponding outcome is verified. These detailed bars supplement the milestone and top-level field bars above; they do not change the milestone gate or imply campaign compatibility.
 
 ### Requirement-by-requirement progress
 
@@ -144,7 +144,7 @@ Audio: GP/EP DSP MMIO windows routed                        [-------------------
 Audio: GP/EP X/Y/P memory mapped                             [####################] 1 / 1 (100%)
 Audio: GP/EP scratch DMA and reset bootstrap integrated       [####################] 1 / 1 (100%)
 Audio: DSP status callbacks and bounded run tested           [#-------------------] 1 / 1 (synthetic)
-Audio: game DSP instruction execution verified              [--------------------] 0 / 1 (0%)
+Audio: game DSP instruction execution verified              [#-------------------] 1 / 1 (bounded diagnostic)
 Audio: DSP56300 bounded run path built and linked           [#-------------------] 1 / 1 (100%)
 Audio: DSP cycles, interrupts, and DMA verified               [--------------------] 0 / 1 (0%)
 Audio: game sound output verified                            [--------------------] 0 / 1 (0%)
@@ -192,7 +192,7 @@ Windows executable builds locally                      [#-------------------] 1 
 Title-screen boot verified                             [--------------------] 0 / 1 (0%)
 
 BOOT AND RUNTIME COMPATIBILITY
-Guest startup progression                              [#-------------------] 1 / 3 (33%)
+Guest startup progression                              [#############-------] 2 / 3 (67%)
 ISO and game-file access                               [#-------------------] 1 / 3 (33%)
 Title screen rendered correctly                        [--------------------] 0 / 1 (0%)
 Kernel threads, scheduling, and TLS                    [--------------------] 0 / 3 (0%)
@@ -211,12 +211,12 @@ Upstream xemu GP/EP semantics mapped                    [#-------------------] 1
 GP/EP DSP MMIO routing                                 [--------------------] 0 / 1 (0%)
 GP/EP DSP X/Y/P memory and register mapping            [--------------------] 0 / 1 (0%)
 DSP56300 FFI memory-map/lifecycle harness passed         [#-------------------] 1 / 1 (100%)
-GP/EP guest firmware loading and execution             [--------------------] 0 / 1 (0%)
+GP/EP guest firmware loading and execution             [#-------------------] 1 / 1 (bounded diagnostic)
 DSP cycle, interrupt, FIFO, and DMA behavior           [--------------------] 0 / 1 (0%)
 DSP processing and audible game sound                  [--------------------] 0 / 2 (0%)
 Basic in-game input                                    [--------------------] 0 / 1 (0%)
 
-The optional C harness for GP/EP memory boundaries, engine initialization, reset, and destruction compiled, linked, and passed in an isolated verification worktree. This verifies only the C FFI mapping/lifecycle scaffold; GP/EP MMIO, firmware, cycles, interrupts, DMA, DSP output, and game audio remain unimplemented or unverified.
+The optional C harness for GP/EP memory boundaries, engine initialization, reset, and destruction compiled, linked, and passed in an isolated verification worktree. A later corrected game run bootstrapped 2,048 program words to GP and EP from guest scratch DMA and executed bounded DSP instruction slices without the synthetic doorbell acknowledgment. This verifies guest-loaded DSP code execution only; complete GP/EP MMIO, command completion, interrupts, DMA behavior, DSP output, and game audio remain unimplemented or unverified.
 
 ORIGINAL STEEL BATTALION CONTROLLER AND ACCESSIBILITY
 Original controller adapter/device detection          [--------------------] 0 / 1 (0%)
@@ -404,4 +404,4 @@ Implemented a bounded 0x800-word reset bootstrap using the corrected SGE registe
 
 ### Bounded GP/EP execution scaffold (2026-10-18)
 
-The XboxRecomp-specific bridge maps the DSP peripheral-status region through callbacks, keeps program-bootstrap readiness separate from the architectural interrupt bits, and schedules a 1,000-cycle FFI run for GP each APU frame and EP every eight frames. The JIT can consume whole translated blocks, so this value is a run budget rather than a strict maximum. Synthetic Windows x64 coverage verifies GP/EP status reads and clears, DMA-register round-tripping, scratch bootstrap, and bounded loop execution. The harness, APU library, and full game target build. A corrected watchdog-bounded startup attempt with pushbuffer execution and synthetic AC'97 readiness—but without fake `RECOMP_APU_DSP_ACK`—did not reach DSP reset/bootstrap before it entered repeated unresolved indirect-call failures; it was force-closed at the 15-second outer bound, and no game process remained. A prior run that logged DSP cycles used an incorrect readiness marker in the interrupt register and is not valid compatibility evidence. DSP execution by the corrected game path, DMA/control behavior, doorbell completion, usable output, sound, title screen, and campaign remain unverified. The optional FFI remains disabled by default. Only synthetic bridge and build engineering bars advance; DSP gameplay and player-facing audio stay at zero.
+The XboxRecomp-specific bridge maps the DSP peripheral-status region through callbacks, keeps program-bootstrap readiness separate from the architectural interrupt bits, and schedules a 1,000-cycle FFI run for GP each APU frame and EP every eight frames. The JIT can consume whole translated blocks, so this value is a run budget rather than a strict maximum. Synthetic Windows x64 coverage verifies GP/EP status reads and clears, DMA-register round-tripping, scratch bootstrap, and bounded loop execution. The harness, APU library, and full game target build. The first corrected startup attempt exposed a stale generated dispatcher: five valid functions present in the refreshed XBE analysis were absent from the output. Regenerating the current 9,148-function translation added those entries with zero translation failures. The rebuilt target then ran for 20 seconds with pushbuffer execution and synthetic AC'97 readiness, but without fake `RECOMP_APU_DSP_ACK`; it had zero unresolved indirect-call failures, entered the title-driven APU startup, bootstrapped 2,048 GP and 2,048 EP program words, and logged bounded GP/EP instruction slices. The watchdog exited with code 3 while the guest polled command word `0x803B8810`; USER DMA PUT/GET were both `0x495C`. GPU diagnostics still reported 235 unhandled NV2A methods, and no verified Steel Battalion title screen appeared. This verifies guest-loaded DSP instruction execution only; DMA/control behavior, command completion, usable output, audible sound, title screen, and campaign remain unverified. The optional FFI remains disabled by default. Synthetic bridge, full build, and bounded guest-DSP execution are verified; player-facing audio stays unverified.
