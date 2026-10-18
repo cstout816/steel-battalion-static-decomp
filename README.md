@@ -144,6 +144,45 @@ Line of Contact: separate game profile and network study [--------------------] 
 
 These feature bars complement the engineering checkpoint bars above. They are intentionally zero until the feature is implemented and verified; a planned feature or research note alone does not advance them.
 
+### Runtime and campaign field bars
+
+This final breakdown shows the lower-level compatibility fields and the campaign matrix separately. Analysis, generated output, local builds, diagnostic observations, and working runtime behavior are tracked only in bars labeled for that evidence. Diagnostic traces do not count as a working game feature.
+
+```text
+XBE analysis: entry point and section map                  [####################] 1 / 1 (100%)
+XBE analysis: function boundaries and control flow         [--------------------] 0 / 2 (0%)
+XBE analysis: guest memory map and runtime behavior         [--------------------] 0 / 2 (0%)
+Translation: emitted functions                            [####################] 9,148 / 9,148 (100%)
+Translation: unsupported instruction sites resolved        [--------------------] 0 / 243 (0%)
+Translation: unresolved call targets implemented           [--------------------] 0 / 351 (0%)
+Windows build: generated executable links                  [####################] 1 / 1 (100%)
+
+Kernel: threads and scheduling                             [--------------------] 0 / 1 (0%)
+Kernel: events, semaphores, and synchronization             [--------------------] 0 / 1 (0%)
+Kernel: memory, exceptions, and timing                      [--------------------] 0 / 1 (0%)
+Filesystem: ISO import and XBE discovery                    [--------------------] 0 / 1 (0%)
+Filesystem: title-asset read diagnostic                    [####################] 1 / 1 (100%)
+Filesystem: saves and persistent settings                   [--------------------] 0 / 1 (0%)
+Graphics: pushbuffer and GPU command handling               [#-------------------] 1 / 4 (25%)
+Graphics: textures and shader output                       [--------------------] 0 / 2 (0%)
+Graphics: correct presented game image                     [--------------------] 0 / 1 (0%)
+Audio: device initialization                               [#-------------------] 1 / 3 (33%)
+Audio: DSP processing and game sound                       [--------------------] 0 / 2 (0%)
+Input: original Steel Battalion hardware                   [--------------------] 0 / 3 (0%)
+Input: keyboard/mouse, gamepad, and HOTAS                   [--------------------] 0 / 3 (0%)
+
+Campaign matrix: mission loading                           [--------------------] 0 / 1 (0%)
+Campaign matrix: stable gameplay                            [--------------------] 0 / 1 (0%)
+Campaign matrix: cinematics                                 [--------------------] 0 / 1 (0%)
+Campaign matrix: audio                                      [--------------------] 0 / 1 (0%)
+Campaign matrix: controller behavior                        [--------------------] 0 / 1 (0%)
+Campaign matrix: save/load                                  [--------------------] 0 / 1 (0%)
+Campaign matrix: frame pacing                               [--------------------] 0 / 1 (0%)
+Campaign matrix: mission completion and progression         [--------------------] 0 / 1 (0%)
+```
+
+The XBE entry point and section map are documented; that is static analysis, not verified runtime behavior. The title-asset bar records a diagnostic read of the three title XPR files only, not complete filesystem compatibility. Pushbuffer handling records command processing and draw calls, not a correct rendered scene. The campaign bars remain at zero because no mission has been verified from loading through completion and progression.
+
 | Area | Status |
 | --- | --- |
 | Research and architecture | Complete; static recompilation remains the chosen approach. |
