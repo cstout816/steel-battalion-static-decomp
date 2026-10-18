@@ -17,14 +17,17 @@
      if (!dsp || !dsp->jit || cycle_budget == 0 ||
          cycle_budget > (uint32_t)INT32_MAX) {
          return 0;
-@@ -194,6 +197,47 @@
+@@ -194,6 +197,59 @@
          dsp56300_set_halt_requested((Dsp56300Jit *)dsp->jit, true);
      }
      dsp->core.cycle_count = dsp56300_cycle_count((Dsp56300Jit *)dsp->jit);
 +    if (getenv("RECOMP_APU_DSP_TRACE") && trace_count++ < 32u) {
 +        Dsp56300State state;
 +        uint32_t ppc = 0;
++        uint32_t pc_window_start;
++        uint32_t i;
 +        dsp56300_get_state((Dsp56300Jit *)dsp->jit, &state);
++        pc_window_start = state.pc >= 4u ? state.pc - 4u : 0u;
 +        if (state.pc < DSP_P_RAM_WORDS) {
 +            ppc = dsp56300_read_memory((Dsp56300Jit *)dsp->jit,
 +                                       DSP56300_MEM_SPACE_P, state.pc);
@@ -61,6 +64,15 @@
 +                (unsigned)dsp->dma.control,
 +                (unsigned)dsp->dma.configuration,
 +                dsp->dma.eol ? 1u : 0u, (unsigned)dsp->interrupts);
++        fprintf(stderr, "[APU-DSP] %s P-window @%06X:",
++                dsp->is_gp ? "GP" : "EP", pc_window_start);
++        for (i = 0; i < 9u && pc_window_start + i < DSP_P_RAM_WORDS; ++i) {
++            fprintf(stderr, " %06X",
++                    (unsigned)dsp56300_read_memory(
++                        (Dsp56300Jit *)dsp->jit,
++                        DSP56300_MEM_SPACE_P, pc_window_start + i));
++        }
++        fputc('\n', stderr);
 +    }
      return dsp->core.cycle_count;
  #else

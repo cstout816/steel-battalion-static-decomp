@@ -161,16 +161,25 @@ diff --git a/src/apu/apu_dsp56300_bridge.c b/src/apu/apu_dsp56300_bridge.c
 index c43dce5..11d433e 100644
 --- a/src/apu/apu_dsp56300_bridge.c
 +++ b/src/apu/apu_dsp56300_bridge.c
-@@ -25,6 +25,8 @@
+@@ -25,6 +25,17 @@
  #define DSP_BOOTSTRAP_WORDS 0x0800u
  #define DSP_SCRATCH_PAGE_BYTES 0x1000u
  #define DSP_MAX_SGE_ENTRIES 0x4000u
 +#define DSP_INTERRUPT_START_FRAME 0x02u
 +#define DSP_INTERRUPT_DMA_EOL 0x80u
++#define DSP_DMA_ACTION_MASK 0x07u
++#define DSP_DMA_ACTION_START 0x01u
++#define DSP_DMA_ACTION_STOP 0x02u
++#define DSP_DMA_ACTION_FREEZE 0x03u
++#define DSP_DMA_ACTION_UNFREEZE 0x04u
++#define DSP_DMA_ACTION_ABORT 0x05u
++#define DSP_DMA_CONTROL_FROZEN 0x08u
++#define DSP_DMA_CONTROL_RUNNING 0x10u
++#define DSP_DMA_CONTROL_STOPPED 0x20u
  
  typedef enum {
      DSP_MMIO_SPACE_X,
-@@ -42,6 +44,63 @@ _Static_assert(DSP_MIXBUFFER_SIZE == GP_MIXBUF_WORDS,
+@@ -42,6 +44,90 @@
                 "GP mixbin window and backing storage differ");
  
  #ifdef MCPX_APU_USE_DSP56300
@@ -198,6 +207,33 @@ index c43dce5..11d433e 100644
 +    }
 +}
 +
++static void dsp_dma_control_write(DSPState *dsp, uint32_t value)
++{
++    switch (value & DSP_DMA_ACTION_MASK) {
++    case DSP_DMA_ACTION_START:
++        dsp->dma.control |= DSP_DMA_CONTROL_RUNNING;
++        dsp->dma.control &= ~DSP_DMA_CONTROL_STOPPED;
++        break;
++    case DSP_DMA_ACTION_STOP:
++        dsp->dma.control |= DSP_DMA_CONTROL_STOPPED;
++        dsp->dma.control &= ~DSP_DMA_CONTROL_RUNNING;
++        break;
++    case DSP_DMA_ACTION_FREEZE:
++        dsp->dma.control |= DSP_DMA_CONTROL_FROZEN;
++        break;
++    case DSP_DMA_ACTION_UNFREEZE:
++        dsp->dma.control &= ~DSP_DMA_CONTROL_FROZEN;
++        break;
++    case DSP_DMA_ACTION_ABORT:
++        dsp->dma.control |= DSP_DMA_CONTROL_STOPPED;
++        dsp->dma.control &= ~(DSP_DMA_CONTROL_RUNNING | DSP_DMA_CONTROL_FROZEN);
++        break;
++    default:
++        break;
++    }
++    dsp->dma.control &= ~DSP_DMA_ACTION_MASK;
++}
++
 +static void dsp_peripheral_write(void *opaque, uint32_t address, uint32_t value)
 +{
 +    DSPState *dsp = (DSPState *)opaque;
@@ -221,7 +257,7 @@ index c43dce5..11d433e 100644
 +        dsp->dma.start_block = value;
 +        break;
 +    case 0xFFFFD6u:
-+        dsp->dma.control = value;
++        dsp_dma_control_write(dsp, value);
 +        break;
 +    case 0xFFFFD7u:
 +        dsp->dma.configuration = value;
