@@ -226,6 +226,7 @@ Original controller adapter/device detection          [--------------------] 0 /
 Original buttons, toggle switches, and gear controls   [--------------------] 0 / 1 (0%)
 Original analog controls and calibration               [--------------------] 0 / 1 (0%)
 Original indicators and output feedback                [--------------------] 0 / 1 (0%)
+Automatic detection across connected input devices     [--------------------] 0 / 1 (0%)
 Labeled controller editor and remapping                [--------------------] 0 / 2 (0%)
 Keyboard/mouse profile and in-game input               [--------------------] 0 / 2 (0%)
 Xbox/PlayStation controller profile and input          [--------------------] 0 / 2 (0%)
@@ -277,6 +278,7 @@ Update file verification and settings preservation    [--------------------] 0 /
 Portable mode and launcher without configured ISO      [--------------------] 0 / 2 (0%)
 Community profiles, troubleshooting, and docs          [--------------------] 0 / 3 (0%)
 Crash reporting with user consent                     [--------------------] 0 / 1 (0%)
+Screenshots and video-friendly presentation            [--------------------] 0 / 2 (0%)
 Dependency review and clean package                   [--------------------] 0 / 2 (0%)
 Player-ready release and installation guide           [--------------------] 0 / 2 (0%)
 
