@@ -168,6 +168,7 @@ Graphics: textures and shader output                       [--------------------
 Graphics: correct presented game image                     [--------------------] 0 / 1 (0%)
 NV2A analysis: PMC interrupt-enable write mapped            [#-------------------] 1 / 1 (100%)
 NV2A startup: PCRTC vblank clear/enable sequence observed    [#-------------------] 1 / 1 (100%)
+NV2A runtime: modeled periodic vblank source                 [--------------------] 0 / 1 (0%)
 NV2A bridge: PCI IRQ routed to connected guest ISR            [--------------------] 0 / 1 (0%)
 NV2A runtime: hardware-valid interrupt delivery verified    [--------------------] 0 / 1 (0%)
 Audio: device initialization                               [#-------------------] 1 / 3 (33%)
