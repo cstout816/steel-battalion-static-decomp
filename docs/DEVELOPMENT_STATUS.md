@@ -133,6 +133,7 @@ Audio cleanup: safe initialization and cleanup verified         [---------------
 Audio: device initialization                               [#-------------------] 1 / 3 (33%)
 Audio: compatible DSP backend candidate researched           [#-------------------] 1 / 1 research (100%)
 Audio: XBE GP/EP startup sequence mapped                     [#-------------------] 1 / 1 static analysis (100%)
+Audio: `DSSTDFX.BIN` read and passed to DSOUND             [#-------------------] 1 / 1 diagnostic (100%)
 Audio: upstream xemu GP/EP behavior mapped                   [#-------------------] 1 / 1 research (100%)
 Audio: DSP56300 C FFI capabilities and gaps reviewed          [#-------------------] 1 / 1 research (100%)
 Audio: existing xemu Rust-JIT adapter audited                 [#-------------------] 1 / 1 research (100%)
@@ -162,6 +163,10 @@ The XBE entry point and section map are documented; that is static analysis, not
 #### Latest bounded rebuild and pixel trace (2026-10-17)
 
 The isolated `RelWithDebInfo` game target rebuilt successfully with the installed Visual Studio CMake. A 15-second watchdog-bounded launch using the existing diagnostic AC'97-ready and fake DSP-ack options reached guest entry `0x00192C47`, read game resources, and produced a framebuffer capture. The capture was not a recognizable title screen; the trace still logged unusable texture batches and a mostly black output. Pixel tracing sampled the full-screen textured quad: texture samples and RGB output were nonzero, while diffuse alpha and final combiner alpha were zero. A vertex-program dump showed that the XBE's inline data supplied diffuse alpha `0` and its vertex program directly copied that attribute to the color output. With source-alpha blending enabled (`0x302/0x303`), the transparent quad correctly leaves the black destination unchanged. This rules out the current vertex interpreter inventing alpha zero for this draw, but it does not establish whether the game should advance to a later screen or change the submitted fade alpha. No renderer fix was applied. Diagnostic audio shortcuts remain in effect, so DSP execution and audible output are still unverified. No progress bars advance, and no title-screen or campaign compatibility is claimed.
+
+#### Latest bounded DSP effects-image trace (2026-10-17)
+
+The Windows target built successfully with a temporary local-only trace inside the translated DSOUND-section function. A watchdog-bounded launch read all 24,936 bytes of `Media\SndEff\DSSTDFX.BIN`; the function received the buffer and returned `S_OK`. The trace was then removed and the ordinary diagnostic executable rebuilt. A second 8-second watchdog sample showed GP/EP `GPSADDR`/`MAXSGE` registers and the first sampled P-memory words still zero, with both DSP reset registers at `3`. Synthetic AC'97 readiness and fake DSP doorbell acknowledgement were enabled, so `S_OK` does not verify DSP execution, effects, audible output, or the title screen. The image-read/handoff diagnostic bar records only those observed steps; audio and all playable-feature bars remain unchanged.
 
 ### Full project field tracker
 
