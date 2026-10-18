@@ -24,9 +24,9 @@
 
 ## Recommended decision
 
-Approve **Option A as a temporary, isolated boot-path experiment** only if D3D11 is acceptable as an interim renderer. It has the shortest route to compare hardware raster output against the current software path using code already in the chosen runtime. This would not satisfy the final D3D12 graphics requirement; the project would keep that requirement open and record the remaining migration work. The Xbox x86 code would remain statically translated, and the NV2A command stream would remain handled by compatibility code.
+**Option B, a native D3D12 NV2A raster backend, is the recommendation** because Direct3D 12 is the requested target API. It best matches the stated end state, although the local XboxRecomp tree does not provide a ready-made D3D12 backend and the renderer semantics will need substantial implementation and validation. The Xbox x86 code would remain statically translated, and the NV2A command stream would remain handled by compatibility code.
 
-If D3D11 is not acceptable even for an interim boot path, Option B is the aligned choice. Option C should not proceed without the project-wide license decision and review described above. No implementation starts until one option is approved.
+Option A remains an interim-only alternative if a D3D11 boot experiment is preferred despite leaving the final API migration open. Option C should not proceed without the project-wide license decision and review described above. No implementation starts until one option is approved.
 
 ## Validation gates after approval
 
