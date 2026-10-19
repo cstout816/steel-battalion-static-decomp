@@ -1506,3 +1506,15 @@ The watchdog sample had 329,742 guest indirect calls and NV2A USER `PUT=GET=0x00
 Restored the kernel bridge to baseline SHA-256 `2190BBD3E20DA13238802F655F198ECEE5BCC8A123CF6A774142C298F47CF232`, rebuilt Release successfully, verified temporary event markers are absent from the executable, and confirmed no game process remains. The user's controller-profile patch is untouched. Milestone 3 and progress bars remain unchanged.
 
 Next: correct the imported-call return-address capture, then obtain a single trace spanning the DCF4 queue wait and its candidate setter. Separately map the guest path handling missing save files and determine whether those not-found results are expected fallback behavior.
+
+### DCE4 wait can remain pending (2026-10-19 correction)
+
+A corrected bridge trace captured guest return addresses for five-argument `KeWaitForSingleObject` calls. In a 90-second run, DCE4 (`0x0021DCE4`) had 141 wait entries and 140 successful returns; its final wait remained pending at watchdog expiry. The guest `SignalState` was zero at that wait, and no later DCE4 set was recorded before capture. NV2A USER `PUT=GET=0x00032580`, so this pending wait was not the pushbuffer-full DCF4 case. This corrects the prior conclusion that DCE4 was simply cycling successfully: it returned repeatedly in earlier samples, but can also be the terminal startup wait in another run.
+
+The wait return site was `0x0002DB56`. Generated code maps that to `sub_0002DB50`, which waits through `sub_0020EC60` and then consumes a 16-bit value from a shared ring buffer. Its caller was `0x000DFE7C` in `sub_000DFBC0`, after a sequence of generated graphics/command helper calls. This places the current capture's stall in a ring-buffer consumer path; the exact event producer and why it stopped signaling remain unproven. The separate DCF4 wait and candidate setter at `0x0021701E` were not reached in this run.
+
+Return-address trace caveat: `g_esp+20` produced the verified return site for the five-argument wait bridge. The earlier suggestion to use `g_esp-4` was incorrect. For the three-argument `KeSetEvent` bridge, `g_esp+12` yielded `0xFD000000`, so that set-call return field is invalid; inspect the thunk stack layout before using or reporting KeSetEvent caller addresses.
+
+The 90-second capture reached 343,604 guest indirect calls and watchdog exit code 3. Restored kernel bridge SHA-256 `2190BBD3E20DA13238802F655F198ECEE5BCC8A123CF6A774142C298F47CF232` and generated `recomp_0015.c` from pre-trace copies; rebuilt Release successfully; verified no temporary event or setter markers remain in the executable and no game process remains. No title screen, audio, controller input, or gameplay was verified. Milestone 3 and progress bars remain unchanged; preserve the user's XID profile patch.
+
+Next: trace the DCE4 event's real signal source and ring-buffer producer/consumer together, with a validated KeSetEvent call-site capture. Do not conflate that path with DCF4 queue-space handling.
