@@ -1845,3 +1845,15 @@ A 60-second watchdog run with a capped probe at the start of `sub_00211E10` repr
 Restored the generated `recomp_0015.c` baseline hash `2C9B70812633A82ABFC8C2EA2CC2D6B3FA400818385AF341EC73B93ED9BB7867`, forced a clean translation-unit rebuild, confirmed both DCF4 trace strings are absent from the final executable, and confirmed no runtime process remains. Logs remain ignored at `iso/local-analysis/logs/m3-dcf4-entry-60s-20261019/`. Progress bars and Milestone 3 remain unchanged.
 
 Next capture branch-specific state before and after `sub_00211B20`, `sub_00211AB0`, and the indirect callback in `sub_00211E10`; distinguish a ring-capacity predicate from a callback wait using an actual call-site trace. No queue or USB semantics change is justified by this snapshot.
+
+### 2026-10-19 pushbuffer-enabled XID startup
+
+The control-only USB stalls were caused by the diagnostic launch omitting `RECOMP_PB_EXEC=1`. Static inspection and the watchdog's guest registers identify the no-executor spin at `sub_00211E10`'s fence loop: it waits until the completion word at `0x80003000` reaches the caller's target. In the non-executing run, the producer advanced to 11 while the completion word remained 3, so the report endpoint was never initialized. This explains those particular setup-only runs; it is not a controller-protocol failure.
+
+Repeated the bounded run with `RECOMP_PB_EXEC=1`. The guest fence completed (the completion word advanced from 3 to 7), then USB enumeration issued the 26-byte `GET_REPORT` and began periodic XID polling. A 60-second capture served 2,247 periodic reports; a 180-second capture served 10,322. In the longer run, appending a live `a` press changed input-report byte 2 bit 0 to `1`, then returned it to `0`, matching the documented Main Weapon field. This verifies the virtual profile's transport and report mapping under this startup configuration, not game-side input acceptance or a physical controller.
+
+The 180-second run's final framebuffer capture is black; this run does not verify the title screen or a visible response to the input. Keep the earlier title-screen capture as a separate one-run result. The virtual XID progress bar remains 1/3: report delivery is verified; guest state and accepted title action remain unverified. Original Steel Battalion hardware remains 0/3.
+
+Generated `recomp_0015.c` was restored to baseline SHA-256 `2C9B70812633A82ABFC8C2EA2CC2D6B3FA400818385AF341EC73B93ED9BB7867`, the Release x64 executable was rebuilt, diagnostic markers are absent, and no game process remains. The final test logs/screenshots are ignored under `iso/local-analysis/logs/m3-queue-callback-pbexec-60s-20261019/` and `m3-pbexec-title-input-180s-20261019/`. Use `RECOMP_PB_EXEC=1` for future boot/input diagnostics; without it the guest cannot retire queued GPU work.
+
+Next verify visible framebuffer progression with the same pushbuffer-enabled configuration, then test whether the title's Main Weapon prompt reacts while the report bit is active. Do not advance compatibility or controller progress based only on transport success. Audio, gameplay, saves, and campaign completion remain unverified.
