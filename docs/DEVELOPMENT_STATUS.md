@@ -4,6 +4,14 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
+### Current title-screen reproduction (2026-10-19)
+
+Repeated the prior modeled-vblank, Steel Battalion USB-profile launch on the current Release executable with a 120-second watchdog, periodic framebuffer capture, and an A pulse scheduled for 90 seconds after USB input began. The periodic captures `screen.bmp00001.bmp` through `screen.bmp00010.bmp` have identical SHA-256 `257DE5B4D13936BFF146FEA2219FE4381F52C91CDC3358C174CFEEF4304F77F4`; visual inspection confirms the Steel Battalion title art and “PRESS MAIN WEAPON BUTTON” prompt remained on screen across the capture interval. This reproduces title presentation on the current executable.
+
+The watchdog ended the run at 120 seconds. Its stack places the guest in `KeWaitForSingleObject` on event `0x0021DCF4`; NV2A `PUT=GET=0x81468`. The run's stdout/stderr were not captured because the GUI executable detached from the launching shell, so the scheduled A pulse itself is unverified here. Identical captures show no visible transition, but cannot prove whether the game consumed a press. No audio or gameplay was verified, and the runtime process is no longer present. The local capture and watchdog log are ignored under `iso/local-analysis/logs/m3-title-repro-current-120s-20261019/`. No progress bars advance; Milestone 3 remains active.
+
+Next: use a capture method that records both the scheduled input event and guest-visible controller state during this reproducible title session, then verify a game response before changing the mapping.
+
 ### Latest controller poll and black-frame sample (2026-10-19)
 
 A 150-second watchdog-bounded run traced changes to the guest controller result and scheduled A at 90 seconds after the first USB report. The trace showed a neutral result; the scheduled pulse did not appear in the log, and the captured window frames remained black. OHCI served 576 input reports before its counters stopped advancing. The watchdog again captured the font-load call chain (`ESP=0x00F7FE18`, `EDI=0x00261918`); this is not evidence of controller rejection or a title-screen input test.
