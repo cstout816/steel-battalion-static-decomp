@@ -1,0 +1,289 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Preserve guest state across kernel callbacks
+
+Backport the upstream callback register/stack fix (sp00nznet/xboxrecomp commit 117a649) and add an inline file-I/O APC regression test.
+
+diff --git a/src/kernel/kernel_bridge.c b/src/kernel/kernel_bridge.c
+index 0d94f07..260b727 100644
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -1946,6 +1946,7 @@ static void bridge_NtUserIoApcDispatcher(void)
+     uint32_t status      = iostatus ? BRIDGE_MEM32(iostatus) : 0;
+     uint32_t information = iostatus ? BRIDGE_MEM32(iostatus + 4) : 0;
+     recomp_func_t fn;
++    CallbackRegs saved;
+ 
+     fn = recomp_lookup(apc_context);
+     if (!fn) fn = recomp_lookup_manual(apc_context);
+@@ -1959,11 +1960,13 @@ static void bridge_NtUserIoApcDispatcher(void)
+ 
+     /* __stdcall, right-to-left. The callee's `ret 12` consumes the dummy
+      * return address and all three arguments, so g_esp needs no fixup here. */
++    callback_regs_save(&saved);
+     g_esp -= 4; BRIDGE_MEM32(g_esp) = iostatus;
+     g_esp -= 4; BRIDGE_MEM32(g_esp) = information;
+     g_esp -= 4; BRIDGE_MEM32(g_esp) = (status == 0) ? 0 : status;
+     g_esp -= 4; BRIDGE_MEM32(g_esp) = 0;
+     fn();
++    callback_regs_restore(&saved, 0);
+ 
+     g_eax = 0;
+ }
+@@ -2197,13 +2200,16 @@ static int kernel_run_dpc(uint32_t dpc_va, uint32_t arg1, uint32_t arg2)
+     BRIDGE_MEM32(dpc_va + 24) = arg2;
+ 
+     {
+-            g_esp -= 4; BRIDGE_MEM32(g_esp) = arg2;
++        CallbackRegs saved;
++        callback_regs_save(&saved);
++        g_esp -= 4; BRIDGE_MEM32(g_esp) = arg2;
+         g_esp -= 4; BRIDGE_MEM32(g_esp) = arg1;
+         g_esp -= 4; BRIDGE_MEM32(g_esp) = context;
+         g_esp -= 4; BRIDGE_MEM32(g_esp) = dpc_va;
+         g_esp -= 4; BRIDGE_MEM32(g_esp) = 0;
+         { int _irql = xbox_IrqlEnterInterrupt(2); fn(); xbox_IrqlLeaveInterrupt(_irql); }
+-        }
++        callback_regs_restore(&saved, 0);
++    }
+     return 1;
+ }
+ 
+@@ -2228,6 +2234,7 @@ static void bridge_KeSynchronizeExecution(void)
+     uint32_t routine = STACK_ARG(1);
+     uint32_t context = STACK_ARG(2);
+     recomp_func_t fn;
++    CallbackRegs saved;
+ 
+     fn = routine ? recomp_lookup(routine) : NULL;
+     if (!fn && routine) fn = recomp_lookup_manual(routine);
+@@ -2241,10 +2248,12 @@ static void bridge_KeSynchronizeExecution(void)
+ 
+     /* BOOLEAN SynchronizeRoutine(PVOID Context), __stdcall. Its `ret 4` takes
+      * the dummy return address and the argument, so g_esp needs no fixup. */
++    callback_regs_save(&saved);
+     g_esp -= 4; BRIDGE_MEM32(g_esp) = context;
+     g_esp -= 4; BRIDGE_MEM32(g_esp) = 0;
+     fn();
+     /* g_eax is whatever the routine returned, which is this call's result. */
++    callback_regs_restore(&saved, 1);
+ }
+ 
+ /* -- KeRemoveQueueDpc (ordinal 137) ------------------------
+@@ -3387,13 +3396,15 @@ static void deliver_one_apc(uint32_t apc_routine, uint32_t apc_context,
+     if (!fn) fn = recomp_lookup_manual(apc_routine);
+     if (!fn) fn = recomp_lookup_kernel(apc_routine);
+     if (fn) {
++        CallbackRegs saved;
+         /* VOID ApcRoutine(PVOID ApcContext, PIO_STATUS_BLOCK, ULONG) */
++        callback_regs_save(&saved);
+         g_esp -= 4; BRIDGE_MEM32(g_esp) = 0;
+         g_esp -= 4; BRIDGE_MEM32(g_esp) = iostatus;
+         g_esp -= 4; BRIDGE_MEM32(g_esp) = apc_context;
+         g_esp -= 4; BRIDGE_MEM32(g_esp) = 0;   /* dummy return address */
+         fn();
+-        g_esp += 12;
++        callback_regs_restore(&saved, 0);
+     } else {
+         uint32_t ord = 0;
+         if (apc_routine >= KERNEL_VA_BASE && apc_routine < KERNEL_VA_END) {
+diff --git a/tests/kernel_io_apc/CMakeLists.txt b/tests/kernel_io_apc/CMakeLists.txt
+new file mode 100644
+index 0000000..3d347a8
+--- /dev/null
++++ b/tests/kernel_io_apc/CMakeLists.txt
+@@ -0,0 +1,12 @@
++cmake_minimum_required(VERSION 3.20)
++project(kernel_io_apc_test C)
++if(NOT WIN32)
++    message(FATAL_ERROR "kernel_io_apc drives the Win32 file API: Windows only")
++endif()
++set(CMAKE_C_STANDARD 11)
++add_subdirectory(../.. runtime)
++add_executable(kernel_io_apc_test test_main.c)
++target_include_directories(kernel_io_apc_test PRIVATE ../../src/kernel)
++target_link_libraries(kernel_io_apc_test PRIVATE xboxrecomp dbghelp)
++enable_testing()
++add_test(NAME kernel_io_apc_test COMMAND kernel_io_apc_test)
+diff --git a/tests/kernel_io_apc/test_main.c b/tests/kernel_io_apc/test_main.c
+new file mode 100644
+index 0000000..a060b67
+--- /dev/null
++++ b/tests/kernel_io_apc/test_main.c
+@@ -0,0 +1,177 @@
++/*
++ * File I/O APCs: where they run, and what they leave on the guest stack.
++ *
++ * ReadFileEx hands NtReadFile an APC routine. This regression exercises the
++ * runtime's inline completion path through the same thunk table a title uses.
++ * The APC routine is a C function this test hands back from recomp_lookup for
++ * a made-up guest VA.
++ *
++ * Checked:
++ *   - The routine runs during NtReadFile.
++ *   - Caller registers and the exact guest stack are restored after callback.
++ */
++#include "kernel.h"
++#include "xbox_memory_layout.h"   /* RECOMP_TLS */
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++typedef void (*recomp_func_t)(void);
++
++extern recomp_func_t recomp_lookup_kernel(uint32_t xbox_va);
++extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi, g_esp;
++extern ptrdiff_t g_xbox_mem_offset;
++
++#define APC_VA       0x00005000u   /* "guest" address of the APC routine */
++#define APC_CONTEXT  0x0000C0DEu
++
++static uint8_t *mem;
++static int apc_runs;
++static uint32_t apc_seen_context;
++
++/* VOID NTAPI ApcRoutine(PVOID ApcContext, PIO_STATUS_BLOCK, ULONG):
++ * stdcall, so it pops its return address and three arguments. */
++static void test_apc(void)
++{
++    apc_seen_context = *(uint32_t *)(mem + g_esp + 4);
++    apc_runs++;
++    /* Deliberately clobber the register model as an inline guest callback can. */
++    g_eax = 0xA0A0A0A0u; g_ecx = 0xC0C0C0C0u; g_edx = 0xD0D0D0D0u;
++    g_ebx = 0xB0B0B0B0u; g_esi = 0x51515151u; g_edi = 0xD1D1D1D1u;
++    g_esp += 16;
++}
++
++recomp_func_t recomp_lookup(uint32_t xbox_va);
++recomp_func_t recomp_lookup(uint32_t xbox_va)
++{
++    return xbox_va == APC_VA ? test_apc : NULL;
++}
++recomp_func_t recomp_lookup_manual(uint32_t xbox_va);
++recomp_func_t recomp_lookup_manual(uint32_t xbox_va) { (void)xbox_va; return NULL; }
++
++static int failures;
++
++static void check(int ok, const char *what, const char *detail)
++{
++    printf("  %-62s %s", what, ok ? "PASS" : "FAIL");
++    if (!ok && detail) printf(" -- %s", detail);
++    putchar('\n');
++    if (!ok) failures++;
++}
++
++/* Guest layout. */
++enum {
++    THUNK_VA = 0x10000,   /* NtOpenFile, NtReadFile, NtWaitForSingleObjectEx */
++    STACK_VA = 0x20000,
++    NAME_VA  = 0x30000,   /* path characters */
++    ANSI_VA  = 0x30100,   /* ANSI_STRING */
++    OA_VA    = 0x30200,   /* OBJECT_ATTRIBUTES */
++    IOSB_VA  = 0x30300,
++    HANDLE_VA = 0x30400,
++    BUF_VA   = 0x31000,
++};
++
++static void call(int slot, const uint32_t *args, int n)
++{
++    uint32_t *sp = (uint32_t *)(mem + STACK_VA);
++    int i;
++
++    sp[0] = 0xBEEF0000u | (uint32_t)slot;   /* guest return address */
++    for (i = 0; i < n; i++)
++        sp[1 + i] = args[i];
++    g_esp = STACK_VA;
++    g_eax = 0xDEADBEEFu;
++    recomp_lookup_kernel(*(uint32_t *)(mem + THUNK_VA + 4 * slot))();
++}
++
++static uint32_t open_file(void)
++{
++    const char *path = "\\Device\\CdRom0\\apc.bin";
++    uint32_t args[6] = { HANDLE_VA, 0x80100000u /* GENERIC_READ|SYNCHRONIZE */,
++                         OA_VA, IOSB_VA, 1 /* FILE_SHARE_READ */,
++                         0x20 /* FILE_SYNCHRONOUS_IO_NONALERT */ };
++
++    strcpy((char *)mem + NAME_VA, path);
++    *(uint16_t *)(mem + ANSI_VA)     = (uint16_t)strlen(path);
++    *(uint16_t *)(mem + ANSI_VA + 2) = (uint16_t)strlen(path) + 1;
++    *(uint32_t *)(mem + ANSI_VA + 4) = NAME_VA;
++    *(uint32_t *)(mem + OA_VA)     = 0;         /* RootDirectory */
++    *(uint32_t *)(mem + OA_VA + 4) = ANSI_VA;   /* ObjectName */
++    *(uint32_t *)(mem + OA_VA + 8) = 0x40;      /* OBJ_CASE_INSENSITIVE */
++    call(0, args, 6);
++    return g_eax == 0 ? *(uint32_t *)(mem + HANDLE_VA) : 0;
++}
++
++static void read_with_apc(uint32_t handle)
++{
++    uint32_t args[8] = { handle, 0, APC_VA, APC_CONTEXT, IOSB_VA,
++                         BUF_VA, 4, 0 };
++    call(1, args, 8);
++}
++
++int main(void)
++{
++    char dir[MAX_PATH], file[MAX_PATH], detail[160];
++    FILE *f;
++    uint32_t h;
++
++    setvbuf(stdout, NULL, _IONBF, 0);
++
++    mem = VirtualAlloc(NULL, 16 * 1024 * 1024, MEM_RESERVE | MEM_COMMIT,
++                       PAGE_READWRITE);
++    if (!mem) {
++        printf("guest memory stand-in not allocated\n");
++        return 1;
++    }
++    g_xbox_mem_offset = (ptrdiff_t)mem;
++
++    /* A host directory standing in for the disc, holding one file. */
++    GetTempPathA(sizeof dir, dir);
++    strcat(dir, "xr_io_apc");
++    CreateDirectoryA(dir, NULL);
++    snprintf(file, sizeof file, "%s\\apc.bin", dir);
++    f = fopen(file, "wb");
++    if (!f) {
++        printf("cannot create %s\n", file);
++        return 1;
++    }
++    fwrite("APC!", 1, 4, f);
++    fclose(f);
++
++    *(uint32_t *)(mem + THUNK_VA)     = 0x80000000u | 202u;  /* NtOpenFile */
++    *(uint32_t *)(mem + THUNK_VA + 4) = 0x80000000u | 219u;  /* NtReadFile */
++    xbox_kernel_set_thunk_address(THUNK_VA, 2);
++    xbox_kernel_init();
++    xbox_path_init(dir, dir);
++    xbox_kernel_bridge_init();
++
++    h = open_file();
++    snprintf(detail, sizeof detail, "status 0x%08X", g_eax);
++    check(h != 0, "NtOpenFile opens the stand-in disc file", detail);
++    if (!h)
++        goto done;
++
++    /* Inline (the default). */
++    g_ecx = 0x11111111u; g_edx = 0x22222222u;
++    g_ebx = 0x33333333u; g_esi = 0x44444444u; g_edi = 0x55555555u;
++    read_with_apc(h);
++    check(g_eax == 0 && memcmp(mem + BUF_VA, "APC!", 4) == 0,
++          "inline: NtReadFile reads the file", NULL);
++    check(apc_runs == 1 && apc_seen_context == APC_CONTEXT,
++          "inline: the APC runs during NtReadFile, with its context", NULL);
++    check(g_ecx == 0x11111111u && g_edx == 0x22222222u
++          && g_ebx == 0x33333333u && g_esi == 0x44444444u
++          && g_edi == 0x55555555u,
++          "inline: caller registers survive the guest callback", NULL);
++    snprintf(detail, sizeof detail, "esp 0x%08X, expected 0x%08X",
++             g_esp, STACK_VA + 4 + 32);
++    check(g_esp == STACK_VA + 4 + 32,
++          "inline: esp is exactly past NtReadFile's arguments", detail);
++
++done:
++    DeleteFileA(file);
++    RemoveDirectoryA(dir);
++    printf("\n%d failure(s)\n", failures);
++    return failures ? 1 : 0;
++}
