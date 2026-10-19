@@ -40,6 +40,14 @@ At the 130-second watchdog, the guest stack again passed through `ESP=0x00F7FE18
 
 Next: correlate changes to this event, USB report buffer, and XInput state with guest wait returns and USB DPC callbacks during a title-reaching run.
 
+### Correlated state sample on a black-frame startup (2026-10-19)
+
+A further 180-second normal Release launch sampled the same three guest addresses without instrumenting generated code. It advanced from the Nude Maker logo to a black framebuffer, then stopped producing captures. In the first sample, about 40 seconds after launch, the event signal was `1`, the OHCI report buffer was neutral (`00 1A 00 00 ...`), and XInput packet counter was `0x00000650`. At 80 seconds and again at 84 seconds, the event and USB buffer were unchanged and the XInput counter remained `0x650`; buttons and triggers were zero and sticks centered. The live-input file remained empty because the title prompt never appeared.
+
+The watchdog at 180 seconds again sampled `ESP=0x00F7FE18`, `EDI=0x00261918` and NV2A `PUT=GET=0x6A554`; the process exited. File logging shows the stream reader completed the 1.76 MB `STRM00.WAV` read, then opened `STRM01.WAV` and `COPYCHECK.DAT`; those file operations were on another logged path and are not proven to cause the sampled guest wait. The signaled event, unchanged input buffers, black frame, and font-load stack are correlated observations only. No title, input response, audio, or gameplay was verified. Progress bars remain unchanged; Milestone 3 stays active.
+
+Next: trace the guest thread and file/event operations that diverge after the stream handoff, while retaining external reads of the event, report buffer, and XInput result.
+
 ### Latest controller poll and black-frame sample (2026-10-19)
 
 A 150-second watchdog-bounded run traced changes to the guest controller result and scheduled A at 90 seconds after the first USB report. The trace showed a neutral result; the scheduled pulse did not appear in the log, and the captured window frames remained black. OHCI served 576 input reports before its counters stopped advancing. The watchdog again captured the font-load call chain (`ESP=0x00F7FE18`, `EDI=0x00261918`); this is not evidence of controller rejection or a title-screen input test.
