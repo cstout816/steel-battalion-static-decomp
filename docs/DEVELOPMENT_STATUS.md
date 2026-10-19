@@ -1349,3 +1349,13 @@ Static inspection of `sub_0025C308` shows it reads HCCA `DoneHead` from controll
 The configured A-button script was parsed but never logged a press before the 35-second watchdog, so this run is not an input test and did not reach a verified title screen. The runtime exited with expected watchdog code 3; no process remains. Restored `kernel_bridge.c` byte-for-byte (SHA-256 `2190BBD3E20DA13238802F655F198ECEE5BCC8A123CF6A774142C298F47CF232`), forced recompilation, rebuilt the Release x64 target successfully, and verified the temporary DPC trace markers are absent from the executable. Logs and captures remain local/ignored. Progress bars stay unchanged and Milestone 3 remains active.
 
 Next: trace the guest DPC's completed TD address, endpoint, completion code, and buffer pointer, then correlate the XID report bytes with the game-side state copy.
+
+### Headless versus windowed draw timing correction (2026-10-19)
+
+The earlier pushbuffer method-timing result (about 2.68 seconds in `SET_BEGIN_END`) was collected without `RECOMP_FB_WINDOW`. That run had no window presenter, so the logo fast path was unavailable and the draw fell back to CPU rasterization. Do not treat its method duration or 0.53 FPS as displayed-game performance.
+
+A matched 60-second run with `RECOMP_FB_WINDOW=1` logged repeated `path=vulkan-logo` draws at approximately 13.9–16.1 ms each. Its diagnostic FPS sample reached 2.36 FPS (67 flips), and the watchdog exited the process after 60 seconds. This confirms only the fullscreen splash/logo draw took that measured path; most other draw classes still need separate timing. No screenshot was captured for visual review, and title input, audible output, or gameplay were not verified. The measured rate remains a startup diagnostic, not a gameplay benchmark.
+
+The process ended and no project game process remains. No source edits were made in this run; ignored logs are under `iso/local-analysis/logs/m3-windowed-pb-timing-60s-20261019/`. Progress bars remain unchanged; Milestone 3 remains active. Preserve the uncommitted XID mapping patch.
+
+Next: capture and inspect the actual window output, then profile remaining draw classes under the same windowed mode before making broader performance claims.
