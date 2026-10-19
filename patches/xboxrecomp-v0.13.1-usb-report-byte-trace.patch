@@ -1,0 +1,30 @@
+diff --git a/src/usb/ohci.c b/src/usb/ohci.c
+--- a/src/usb/ohci.c
++++ b/src/usb/ohci.c
+@@ -627,7 +627,26 @@ static uint32_t ohci_do_td(OhciController *hc, uint32_t ed0, uint32_t td)
+             uint8_t rep[32];
+             s_n_report++;
+             int n = usb_gamepad_report(pad, rep, (int)sizeof rep);
+             if (n > len) n = len;
++            /* Opt-in bring-up trace: report only the first packet and changes
++             * so a button press/release is visible without flooding the log. */
++            {
++                static uint8_t last[4][32];
++                static int last_len[4];
++                static uint8_t have_last[4];
++                if (s_trace && pad >= 0 && pad < 4 && n > 0
++                        && (!have_last[pad] || last_len[pad] != n
++                            || memcmp(last[pad], rep, (size_t)n) != 0)) {
++                    int j;
++                    fprintf(stderr, "  [XID%d] IN report len=%d:", pad, n);
++                    for (j = 0; j < n; j++) fprintf(stderr, " %02X", rep[j]);
++                    fputc('\n', stderr);
++                    fflush(stderr);
++                    memcpy(last[pad], rep, (size_t)n);
++                    last_len[pad] = n;
++                    have_last[pad] = 1;
++                }
++            }
+             if (n > 0 && guest_ptr(cbp, (uint32_t)n))
+                 memcpy(guest_ptr(cbp, (uint32_t)n), rep, (size_t)n);
+             moved = n;
