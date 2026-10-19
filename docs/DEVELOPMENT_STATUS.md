@@ -12,6 +12,16 @@ The watchdog ended the run at 120 seconds. Its stack places the guest in `KeWait
 
 Next: use a capture method that records both the scheduled input event and guest-visible controller state during this reproducible title session, then verify a game response before changing the mapping.
 
+### Guest XInput state captured with redirected GUI logs (2026-10-19)
+
+Corrected the launch harness to redirect stdout/stderr from the Windows GUI executable. A bounded diagnostic build traced `sub_00257103`'s 16-byte result buffer at `0x004AF670`. It repeatedly returned neutral controls: `buttons=0000`, triggers `00/00`, centered sticks (`0000 0000 8000 8000`). In the USB-trace variant, the guest query ran 137 times but OHCI stopped at 15 periodic reports; the scheduled pulse did not fire and the title prompt was not reached. This is not evidence that the game rejects the controller.
+
+A second lower-overhead run used live input and did not enable USB report tracing. The guest query continued through call 161 with neutral button/stick fields; OHCI logged 381 periodic reports. The screen remained at the Nude Maker splash, and the live-input file stayed empty because no title prompt appeared to trigger a press. The watchdog again sampled the font-load call chain (`ESP=0x00F7FE18`, `EDI=0x00261918`) with NV2A `PUT=GET=0x56208`. These diagnostic runs therefore still do not pair a button press with a title-time guest result; their different startup progress also means the instrumentation's effect has not been isolated.
+
+Restored generated `recomp_0017.c` byte-for-byte (SHA-256 `DE5C51273DA352EB863775DE2DC387C6CCFE9426A671C36BF068EBE57FEB8F15`), forced recompilation of the configured generated-code tree, rebuilt Release x64 successfully, verified the temporary `[XID_STATE]` marker is absent from the executable, and confirmed no runtime remains. Generated source, ISO data, screenshots, and diagnostic logs remain local/ignored. Progress bars remain unchanged; Milestone 3 stays active.
+
+Next: isolate the startup timing difference, then observe game-visible controls during a title run without adding per-query diagnostics or sending input before the prompt.
+
 ### Latest controller poll and black-frame sample (2026-10-19)
 
 A 150-second watchdog-bounded run traced changes to the guest controller result and scheduled A at 90 seconds after the first USB report. The trace showed a neutral result; the scheduled pulse did not appear in the log, and the captured window frames remained black. OHCI served 576 input reports before its counters stopped advancing. The watchdog again captured the font-load call chain (`ESP=0x00F7FE18`, `EDI=0x00261918`); this is not evidence of controller rejection or a title-screen input test.
