@@ -37,10 +37,10 @@ Function translation output emitted              [####################] 9,400 / 
 Unsupported instruction sites resolved           [--------------------] 0 / 243 (0%)
 Unresolved call targets implemented              [##############------] 251 / 351 (72%)
 Generated Windows executable builds              [####################] 1 / 1 (100%)
-Verified title-screen startup                    [--------------------] 0 / 1 (0%)
+Verified title-screen startup                    [####################] 1 / 1 (100%)
 ```
 
-The ordinal bar records names mapped to the kernel import table, not implementations verified against live game behavior. The build bar records a local executable build only. Startup still fails before a verified title screen; the 9,400 emitted functions do not imply complete or correct decompilation.
+The ordinal bar records names mapped to the kernel import table, not implementations verified against live game behavior. The build bar records a local executable build only. One bounded guest-framebuffer capture verifies title-screen presentation; other runs still stall at the Nude Maker splash. A title capture does not imply complete or correct decompilation.
 
 ```text
 Static recompilation: functions emitted       [####################] 9,400 / 9,400 (100%)
@@ -48,7 +48,7 @@ Static recompilation: unsupported ops resolved [--------------------] 0 / 243 (0
 Static recompilation: unresolved calls resolved [##############------] 251 / 351 (72%)
 Windows target: build completes locally         [#-------------------] 1 / 1 (100%)
 Xbox runtime: guest entry and asset read         [##------------------] 2 / 4 (50%)
-Xbox runtime: title screen and gameplay frame    [--------------------] 0 / 2 (0%)
+Xbox runtime: title screen and gameplay frame    [##########----------] 1 / 2 (50%)
 Xbox kernel and synchronization                  [--------------------] 0 / 3 (0%)
 Filesystem and ISO validation                    [--------------------] 0 / 3 (0%)
 Vulkan/NV2A: full scene rendering                 [--------------------] 0 / 3 (0%)
@@ -76,7 +76,7 @@ Line of Contact: network and separate profile     [--------------------] 0 / 3 (
 Distribution: clean package, licenses, docs      [#-------------------] 1 / 3 (33%)
 ```
 
-For example, “guest entry and asset read” records observed startup checkpoints, while “title screen and gameplay frame” remains at zero. A corrected run now verifies that guest-loaded GP/EP programs execute in bounded DSP slices without the fake doorbell acknowledgment; this does not verify command completion or audible output. Diagnostic logging and local project documentation exist, but deterministic replay, a clean playable package, and completed license review do not. Counts move only when the corresponding outcome is verified. These detailed bars supplement the milestone and top-level field bars above; they do not change the milestone gate or imply campaign compatibility.
+For example, “guest entry and asset read” records observed startup checkpoints, while “title screen and gameplay frame” now records title presentation but not a gameplay frame. A corrected run now verifies that guest-loaded GP/EP programs execute in bounded DSP slices without the fake doorbell acknowledgment; this does not verify command completion or audible output. Diagnostic logging and local project documentation exist, but deterministic replay, a clean playable package, and completed license review do not. Counts move only when the corresponding outcome is verified. These detailed bars supplement the milestone and top-level field bars above; they do not change the milestone gate or imply campaign compatibility.
 
 ### Requirement-by-requirement progress
 
@@ -1108,6 +1108,13 @@ Follow-up call-graph review confirms `sub_00049970` is directly called only from
 
 ### Static path to the start prompt and input query (2026-10-18)
 
-Corrected the prompt identification by following its actual string references. The “PRESS THE START BUTTON”/“PLEASE CONNECT THE CONTROLLER THEN” strings at XBE VAs 0x002607F0 and 0x00260814 are referenced by the guest UI code around 0x00030BE0. A different string found earlier, “PRESS MAIN WEAPON BUTTON” at 0x00269A10, is grouped with controller verification labels and is not a reliable title-screen marker. Earlier uses of “title prompt” for captures without confirming the visible text should be treated as unverified.
+The 120-second guest-framebuffer capture m3-guest-file-helper-trace-120s-20261018/screen_00010.bmp visibly shows the Steel Battalion title art and “PRESS MAIN WEAPON BUTTON.” That text exists at XBE VA 0x00269A10 and also appears near controller-verification labels, so it is not exclusive to calibration. This capture verifies one title-screen presentation. A separate “PLEASE CONNECT THE CONTROLLER THEN / PRESS THE START BUTTON” UI path uses strings at 0x00260814 and 0x002607F0; its rendering routine sub_00030BE0 is called from sub_00046623, which also updates input and queries sub_00048B80(0, 6, 0x30). Keep this as a distinct controller-connection prompt path until runtime evidence identifies where it appears.
 
-Static call-site inspection found the relevant screen loop in sub_00046623: it calls sub_0004AA80 (input/update), sub_000493B0, then sub_00030BE0 (prompt drawing), checks the device gate at global 0x00351CB0, and invokes sub_00048B80 with parameters (0, 6, 0x30) on the follow-up branch. This identifies a concrete guest path for the next runtime trace; the meaning of those query parameters, live button recognition, and a successful transition remain unverified. No mapping changes or progress bars are justified by this static result. Next: instrument the sub_00046623 loop and the 0x48B80 query result during a boot that visibly reaches the start prompt.
+Static call-site inspection found the relevant screen loop in sub_00046623: it calls sub_0004AA80 (input/update), sub_000493B0, then sub_00030BE0 (prompt drawing), checks the device gate at global 0x00351CB0, and invokes sub_00048B80 with parameters (0, 6, 0x30) on the follow-up branch. This identifies a concrete guest path for the next runtime trace; the meaning of those query parameters, live button recognition, and a successful transition remain unverified. No mapping change follows from this static result. The verified title capture and the later splash-only run are reconciled below. Next: compare their startup conditions, then identify the title-screen main-weapon input consumer.
+
+
+### Start-prompt trace and title capture reconciliation (2026-10-18)
+
+A 150-second run with temporary entry/query logging in guest sub_00046623 never entered that function. It produced 12 guest-framebuffer captures and ended on the Nude Maker splash at watchdog ESP 0x00F7FED8; OHCI recorded 929 periodic transfers. No [SB_START_LOOP] or [SB_START_QUERY] records appeared, so this run did not reach either the controller-connection prompt path or title input, and no button response was tested. The last capture is ignored locally under iso/local-analysis/logs/m3-start-loop-input-trace-20261018/frame_00011.bmp.
+
+Compared with the prior bounded m3-guest-file-helper-trace-120s-20261018 run, whose screen_00010.bmp visibly shows the Steel Battalion title screen and its main-weapon prompt. That image verifies title-screen presentation on at least one run; the inconsistent splash-only run means reliable startup remains unverified. Updated the title-screen startup bar to 1/1 and the runtime title/gameplay bar to 1/2; no gameplay, audio, input response, or campaign bar advances. Restored generated C byte-for-byte (SHA-256 B67252979427C1CB1C6E3CB27D82FE2311B4B36DF8AD59A30E66F299CFC7BA94), rebuilt Release x64 successfully, verified both temporary trace markers are absent from the executable, and confirmed no game process remains. Next compare the successful title run exact startup inputs with the splash-only run, then trace the main-weapon title prompt consumer rather than assuming the separate start-button prompt is the same loop.
