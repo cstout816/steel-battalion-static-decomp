@@ -141,6 +141,15 @@ prepared for redistribution. Before distributing binaries, retain all upstream
 notices and license texts and satisfy the LGPL relinking/source requirements.
 The project license remains undecided pending the full dependency review.
 
+The opt-in Steel Battalion XID input profile has a separate report-layout
+correction in
+[`patches/xboxrecomp-v0.13.1-steel-battalion-xid-report-offsets.patch`](../patches/xboxrecomp-v0.13.1-steel-battalion-xid-report-offsets.patch).
+Apply it after the project Steel Battalion XID profile patch. It places the
+analog fields according to the packed 26-byte report layout exercised by the
+public [Xbox-side XID test](https://gist.github.com/Ryzee119/5b74e94eb765bcc54e68afde9ddc7623).
+The corrected layout and synthetic report transport were observed locally;
+guest-side acceptance and gameplay behavior are not yet verified.
+
 ## Pinned Vulkan presentation dependencies
 
 The Windows Vulkan framebuffer presenter fetches two pinned dependencies

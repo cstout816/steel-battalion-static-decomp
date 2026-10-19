@@ -1,0 +1,25 @@
+diff --git a/src/usb/usb_gamepad.c b/src/usb/usb_gamepad.c
+--- a/src/usb/usb_gamepad.c
++++ b/src/usb/usb_gamepad.c
+@@ -718,17 +718,17 @@ int usb_gamepad_report(int pad, uint8_t *out, int max)
+     axis = (int16_t)((uint16_t)standard[16]
+                      | ((uint16_t)standard[17] << 8));
+     unsigned_axis = (uint16_t)(axis + 32768);
+-    out[9] = (uint8_t)unsigned_axis; out[10] = (uint8_t)(unsigned_axis >> 8);
++    out[8] = (uint8_t)unsigned_axis; out[9] = (uint8_t)(unsigned_axis >> 8);
+     axis = (int16_t)((uint16_t)standard[18]
+                      | ((uint16_t)standard[19] << 8));
+     axis = 32768 - axis;
+     if (axis > 65535) axis = 65535;
+     unsigned_axis = (uint16_t)axis;
+-    out[11] = (uint8_t)unsigned_axis; out[12] = (uint8_t)(unsigned_axis >> 8);
+-    out[13] = standard[12]; out[14] = standard[13];
++    out[10] = (uint8_t)unsigned_axis; out[11] = (uint8_t)(unsigned_axis >> 8);
++    out[12] = standard[12]; out[13] = standard[13];
+     axis = -(int16_t)((uint16_t)standard[14]
+                       | ((uint16_t)standard[15] << 8));
+-    out[15] = (uint8_t)axis; out[16] = (uint8_t)((uint16_t)axis >> 8);
++    out[14] = (uint8_t)axis; out[15] = (uint8_t)((uint16_t)axis >> 8);
+     out[17] = 0; out[18] = 0; out[19] = 0; out[20] = 0; /* pedals */
+     out[21] = 0; out[22] = 0; out[23] = 0; /* pedals */
+     out[24] = 0; /* tuner */
