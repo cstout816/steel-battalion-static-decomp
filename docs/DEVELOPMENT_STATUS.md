@@ -1889,3 +1889,11 @@ A 30-second window-enabled run logged one cache refresh and four subsequent byte
 The reusable change is isolated in `patches/xboxrecomp-v0.13.1-vulkan-logo-texture-cache.patch`. Verified that the patch applies to the saved post-Vulkan-logo baseline and reproduces the local modified source hash. Removed temporary timing code from the framebuffer presenter, restored the kernel source except for the cache change, rebuilt the Release x64 target successfully, verified no temporary gate/timing markers remain in the executable, and confirmed no game process remains. User's modified XID profile patch is untouched.
 
 Next profile the remaining roughly 27 ms between the total draw and measured Vulkan stage, including time waiting for the presenter queue lock. Then measure and improve the per-draw surface readback/serialization without changing guest timing or raster semantics. Keep Milestone 3 active; repeatable title boot, audio, accepted guest input, original controller hardware, and campaign remain unverified.
+
+### 2026-10-19 presenter-lock follow-up
+
+A follow-up window-enabled startup run instrumented the presenter critical-section wait and the guest vertex transform. Across six logo draws the lock wait was 0.000 ms; the vertex transform measured about 0.001 ms. This rules out those two suspected sources for the remaining draw cost in this sample. Additional nested phase timers disagreed with the enclosing draw timer and were affected by instrumentation, so they are not used to assign the remaining time. No optimization or guest/render semantic change was made from those inconsistent values.
+
+Removed both temporary probes, restored the presenter and NV2A sources byte-for-byte to their saved baselines (the NV2A baseline includes the previously verified texture cache), forced recompilation, and rebuilt the Release x64 executable successfully. Verified the final executable has no temporary lock/stage timing strings, and no project process remains. Logs are local/ignored under `iso/local-analysis/logs/m3-vk-lock-timing/`. Progress bars and Milestone 3 remain unchanged.
+
+Next collect a lower-overhead matched trace of time outside the measured Vulkan submission, with logging minimized, before changing any renderer synchronization or framebuffer semantics.
