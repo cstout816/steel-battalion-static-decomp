@@ -37,7 +37,7 @@ Function translation output emitted              [####################] 9,400 / 
 Unsupported instruction sites resolved           [--------------------] 0 / 243 (0%)
 Unresolved call targets implemented              [##############------] 251 / 351 (72%)
 Generated Windows executable builds              [####################] 1 / 1 (100%)
-Verified title-screen startup                    [####################] 1 / 1 (100%)
+Title screen shown in one bounded run             [####################] 1 / 1 (100%)
 ```
 
 The ordinal bar records names mapped to the kernel import table, not implementations verified against live game behavior. The build bar records a local executable build only. One bounded guest-framebuffer capture verifies title-screen presentation; other runs still stall at the Nude Maker splash. A title capture does not imply complete or correct decompilation.
@@ -1118,3 +1118,12 @@ Static call-site inspection found the relevant screen loop in sub_00046623: it c
 A 150-second run with temporary entry/query logging in guest sub_00046623 never entered that function. It produced 12 guest-framebuffer captures and ended on the Nude Maker splash at watchdog ESP 0x00F7FED8; OHCI recorded 929 periodic transfers. No [SB_START_LOOP] or [SB_START_QUERY] records appeared, so this run did not reach either the controller-connection prompt path or title input, and no button response was tested. The last capture is ignored locally under iso/local-analysis/logs/m3-start-loop-input-trace-20261018/frame_00011.bmp.
 
 Compared with the prior bounded m3-guest-file-helper-trace-120s-20261018 run, whose screen_00010.bmp visibly shows the Steel Battalion title screen and its main-weapon prompt. That image verifies title-screen presentation on at least one run; the inconsistent splash-only run means reliable startup remains unverified. Updated the title-screen startup bar to 1/1 and the runtime title/gameplay bar to 1/2; no gameplay, audio, input response, or campaign bar advances. Restored generated C byte-for-byte (SHA-256 B67252979427C1CB1C6E3CB27D82FE2311B4B36DF8AD59A30E66F299CFC7BA94), rebuilt Release x64 successfully, verified both temporary trace markers are absent from the executable, and confirmed no game process remains. Next compare the successful title run exact startup inputs with the splash-only run, then trace the main-weapon title prompt consumer rather than assuming the separate start-button prompt is the same loop.
+
+
+### Intro-draw stack comparison (2026-10-18)
+
+A 120-second trace in the current 9,401-function generated build recorded no [SB_SCREEN_STATE] result and no call to the prompt loop. The watchdog guest stack instead returned through 0x0004683E from sub_000E0200, with nested returns through sub_000E035B and sub_000DFE75 (sub_000DFBC0, the logo draw path). At the bound, the framebuffer had produced 10 captures, OHCI had 873 periodic transfers, and NV2A USER PUT/GET were 0x1A7D8/0x19D40. This is direct evidence that the run was still in intro rendering before the state query; it is not evidence about title input handling.
+
+The earlier successful title capture’s watchdog stack had reached return address 0x00046845, immediately after the sub_000E3510 state query, so the splash draw had returned in that run. A same-settings 120-second comparison using the older 9,148-function generated-fixed executable ended on a black framebuffer and sampled return address 0x000467CF earlier in initialization. Thus the title capture remains a verified one-run result, but neither executable reproduced it in these comparisons. A prior isolated QPC probe measured 2.18–2.40 seconds per sampled splash raster_batch and 0.38 guest FPS; the current stack is consistent with that measured draw workload, though it does not prove rasterization is the only delay.
+
+Restored recomp_0001.c to the verified untraced SHA-256 B67252979427C1CB1C6E3CB27D82FE2311B4B36DF8AD59A30E66F299CFC7BA94, rebuilt Release x64, verified the temporary state markers are absent from the binary, and confirmed no runtime remains. No gameplay, audio, input response, or campaign bar changes. Next: run a matched splash-only timing sample that records raster-worker count and time per batch in the current build, then focus on whichever measured guest draw path dominates before retesting title progression.
