@@ -1421,3 +1421,13 @@ To identify writes associated with the watchdog's title-state event address, a b
 The broad page watch was intrusive: this run stalled earlier in the font-loading path (`EDI=0x00261918`) and ended at the 120-second watchdog with `PUT=GET=0x00069ABC`. USB again showed zero periodic transfers and no scheduled button report. The run did not reach the title prompt. Treat the single transition as a lead only; do not infer that it caused or released the later title wait. No runtime source changed, the process exited at its watchdog, and the log remains local/ignored under `iso/local-analysis/logs/m3-title-event-usb-watch-120s-20261019/`. Progress bars remain unchanged and Milestone 3 stays active.
 
 Next: replace the page-wide memory watch with a lower-overhead trace of the exact wait/set calls for `0x0021DCF4`, then investigate why no interrupt endpoint is queued after USB configuration.
+
+### Targeted title-event wait trace (2026-10-19)
+
+A 120-second windowed run captured the dark Steel Battalion title screen and “PRESS MAIN WEAPON BUTTON.” A temporary trace filtered to guest event `0x0021DCF4` recorded one `KeWaitForSingleObject` entry with signal state 0, but no matching set or wait-return record before the watchdog sample. The watchdog again found the guest at return site `0x00046845`, event `0x0021DCF4`, with NV2A `PUT=GET=0x0006CBD0`. This indicates that this guest wait remained blocked for the capture interval; it does not identify the missing producer. The image remained visible, but its low brightness is unchanged.
+
+The USB run recorded no scheduled A pulse and no XID input report; OHCI periodic transfers remained at zero. Therefore this run does not test game-side input. Audio output and gameplay remain unverified. No progress bars advance; Milestone 3 remains active.
+
+Removed the temporary trace and verified `kernel_bridge.c` returned byte-for-byte to SHA-256 `2190BBD3E20DA13238802F655F198ECEE5BCC8A123CF6A774142C298F47CF232`; no trace markers remain. Rebuilt the normal Release executable successfully, and confirmed no game process remains. Logs and the framebuffer capture remain local/ignored. Preserve the user's uncommitted controller-profile patch.
+
+Next: trace why the title-state event wait at `0x0021DCF4` is reached without USB periodic transfers, correlating endpoint scheduling with the event's guest producer before changing controller or event behavior.
