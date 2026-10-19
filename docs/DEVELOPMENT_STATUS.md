@@ -34,7 +34,19 @@ A follow-up used the runtime's own guest-memory sampler with the pushbuffer exec
 
 The normal Release executable was rebuilt with the original bridge SHA-256 `2190BBD3E20DA13238802F655F198ECEE5BCC8A123CF6A774142C298F47CF232`; the temporary `EVENTTRACE` marker is absent. Both follow-up diagnostic runs are complete, and no game process remains. Keep progress bars unchanged; Milestone 3 stays active.
 
-Next: trace why pushbuffer GET stopped at `0x11E08` while PUT remained at `0x128A0`, then verify whether accurate executor progress closes the 12-entry producer/completion gap.
+Next: inspect the current GET packet window and measure the executor's per-method cost; the GET value is only updated after the submitted segment finishes.
+
+### Pushbuffer GET-window inspection (2026-10-19)
+
+A temporary watchdog-only dump captured the current GET window in a matched 90-second executor run. At the watchdog, USER `GET=0x12DEC`, `PUT=0x13DE8`; the first dword at GET was `0x00081D98`, an increasing packet for `SET_CLEAR_RECT_HORIZONTAL` and `SET_CLEAR_RECT_VERTICAL`, with full-screen bounds `0x027F0000` and `0x01DF0000`. The following words form ordinary NV097 clear/depth and state packets. An earlier sample at `GET=0x11E08` contained the same valid packet sequence, and the later sample had advanced to `0x12DEC`; this rules out a fixed malformed header at `0x11E08`.
+
+The watchdog can observe a pending submission before the executor finishes it: the runtime updates USER GET to PUT only after `nv2a_pb_scan` executes the submitted segment. Thus a GET-window dump identifies the queue's last reported completion point, not necessarily the exact command executing on the worker thread. The same run reported 22 segments and 14,210 scanned words with no unrecognised words, 41 flips at 0.66 reported FPS, 80 vertex-program batches and about 24.6 million pixel writes. It had no textured batches in the measured summary and no visual capture; the low rate is a bring-up performance measurement, not an accurate gameplay benchmark.
+
+The dump hook was removed immediately after collection, the normal Release target rebuilt successfully, and the test process ended at its watchdog. Logs and the GET-window sample remain local/ignored. Progress bars remain unchanged; Milestone 3 stays active.
+
+A separate 60-second `RECOMP_PB_TIMING` run measured the latest submitted segment (`0x80005F40`–`0x800069D8`, 678 words). Method `0x17FC` (`SET_BEGIN_END`) accounted for 2,678.572 ms across eight packets; the next reported method total was below 1 ms. In the runtime, closing `SET_BEGIN_END` calls `draw_primitive` for these buffered batches, and the same report counted 12 vertex-program batches and 48 vertices. This localizes the largest measured cost to the CPU draw path, rather than to the clear-rectangle packet seen at GET. The 60-second run reached 19 flips at 0.53 reported FPS and ended at the watchdog; it did not verify the title screen, audio, input, or gameplay. These are bring-up measurements, not gameplay benchmarks.
+
+Next: trace the `draw_primitive` program path and compare its CPU raster workload against an exact small reference scene before optimizing it; preserve framebuffer output and command ordering.
 
 ### Current title-screen reproduction (2026-10-19)
 
