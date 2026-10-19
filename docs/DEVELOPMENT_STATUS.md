@@ -1365,3 +1365,9 @@ Next: capture and inspect the actual window output, then profile remaining draw 
 A second 60-second windowed diagnostic wrote periodic dumps from the framebuffer address used by the presentation window. The captured sequence shows the Dolby Digital splash, followed by the Steel Battalion logo screen at very low brightness during its fade. This verifies those startup images reached the presented framebuffer; it does not show the title prompt or verify input, sound output, or gameplay. The windowed process exited after the bounded run.
 
 The captures are local and ignored under `iso/local-analysis/logs/m3-windowed-fb-capture-60s-20261019/`; no copyrighted frame was added to GitHub. Milestone 3 and progress bars remain unchanged. Next inspect why the Steel Battalion screen remains very dim and determine whether the guest proceeds to its title prompt before testing input.
+
+### Startup frame stability check (2026-10-19)
+
+Comparing the five windowed framebuffer dumps shows the first sample contains the Dolby splash, while the next four samples—taken about ten seconds apart—are byte-for-byte identical Steel Battalion logo frames. The capture therefore records a transition to the logo followed by no visible framebuffer change for the rest of this bounded run. This supports a stalled startup presentation in this run; it does not establish whether the guest, its event wait, or a draw/update path caused the stall.
+
+Next: collect the periodic window framebuffer dump and watchdog guest/event state in the same run to locate the exact point where visible startup stops progressing.
