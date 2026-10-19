@@ -22,6 +22,17 @@ A separate repeat without a dedicated watchdog log stopped updating its log whil
 
 Next: trace which guest thread sets and resets `0x0021DCF8` around ordinal 159, and correlate that with the host event handle's signaled state before changing synchronization.
 
+### Queue-event mapping and bridge trace (2026-10-19)
+
+Static inspection separates two adjacent guest events. The queue-space helper `sub_00211E10` waits on object `0x0021DCF4` (global object `0x0021B790` + `0x2564`), whose signal-state dword is `0x0021DCF8`. Its blocking call is at guest return site `0x00211F3B`; the helper first checks the NV2A ring-buffer producer/completion counters and waits when space is insufficient. The nearby event `0x0021DCE4` (`+0x2554`, signal state `0x0021DCE8`) is a separate notification event used by `sub_0020EC60`. Earlier traces that grouped them as one event were ambiguous and should be read with this distinction.
+
+A temporary, opt-in bridge trace captured the queue wait at call `156010`: caller `0x00211F3B`, guest signal state `0`, host event result `WAIT_TIMEOUT` (258), notification type, then `WaitForSingleObjectEx`. No `KeSetEvent` for `0x0021DCF4` appeared before that wait. An all-event trace changed startup timing and logged repeated sets for the separate `0x0021DCE4` event from caller `0x00216CAE`; it did not establish the queue event's producer.
+
+After restoring the bridge source byte-for-byte and forcing a normal rebuild, an uninstrumented 75-second run stopped at the same queue-event wait. External reads showed producer counter `0x529`, completion pointer `0x80003000`, queue-event state `0`, and separate title-event state `1`. The process memory reader could not read the completion word through the high alias, so the producer/completion gap remains unmeasured. The watchdog saw NV2A `PUT=GET=0x7274C`; renderer logs counted 322 flips, 692 draws and 1,384 triangles, but no screenshot was collected for visual inspection. No title-screen, audio, input, or gameplay result is verified.
+
+The normal Release executable was rebuilt with the original bridge SHA-256 `2190BBD3E20DA13238802F655F198ECEE5BCC8A123CF6A774142C298F47CF232`; the temporary `EVENTTRACE` marker is absent. No game process remains. Keep progress bars unchanged; Milestone 3 stays active.
+
+Next: read the completion word through the runtime's mapped physical alias and trace the NV2A completion callback that should advance the producer/completion gap and signal `0x0021DCF4`.
 ### Current title-screen reproduction (2026-10-19)
 
 Repeated the prior modeled-vblank, Steel Battalion USB-profile launch on the current Release executable with a 120-second watchdog, periodic framebuffer capture, and an A pulse scheduled for 90 seconds after USB input began. The periodic captures `screen.bmp00001.bmp` through `screen.bmp00010.bmp` have identical SHA-256 `257DE5B4D13936BFF146FEA2219FE4381F52C91CDC3358C174CFEEF4304F77F4`; visual inspection confirms the Steel Battalion title art and “PRESS MAIN WEAPON BUTTON” prompt remained on screen across the capture interval. This reproduces title presentation on the current executable.
