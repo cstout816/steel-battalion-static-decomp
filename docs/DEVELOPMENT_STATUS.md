@@ -1368,6 +1368,16 @@ The captures are local and ignored under `iso/local-analysis/logs/m3-windowed-fb
 
 ### Startup frame stability check (2026-10-19)
 
-Comparing the five windowed framebuffer dumps shows the first sample contains the Dolby splash, while the next four samples—taken about ten seconds apart—are byte-for-byte identical Steel Battalion logo frames. The capture therefore records a transition to the logo followed by no visible framebuffer change for the rest of this bounded run. This supports a stalled startup presentation in this run; it does not establish whether the guest, its event wait, or a draw/update path caused the stall.
+Comparing the five windowed framebuffer dumps from this particular run shows the first sample contains the Dolby splash and the next four samples—taken about ten seconds apart—are identical Steel Battalion logo frames. That established a period without visible change in that capture, but did not prove the startup was permanently stalled. A later correlated run showed several distinct startup logos across its captures before reaching a wait; see the follow-up below.
 
-Next: collect the periodic window framebuffer dump and watchdog guest/event state in the same run to locate the exact point where visible startup stops progressing.
+Next: correlate the frame sequence with the guest wait and event signal state in one run.
+
+### Windowed startup and notification-event correlation (2026-10-19)
+
+A repeated 90-second windowed run captured changing startup logo frames before the presentation remained on the Dolby screen in the last samples. The earlier set of four identical Steel Battalion-logo frames was a limited unchanged interval; it did not establish a permanent startup freeze. The run used the separate watchdog log so heavy stderr output could not hide the timeout report. The watchdog exited the process after 90 seconds.
+
+The watchdog guest stack places the guest at return site `0x0020EC83`, waiting on event object `0x0021DCE4`; NV2A USER PUT and GET were equal at `0x0003F990`. A separate watch of that event's signal-state word `0x0021DCE8` observed transitions between 0 and 1 across concurrent kernel calls, including calls to the wait and set-event bridges. This does not establish whether the host wait was released and re-entered, or whether a wake was lost. It narrows the next trace to the host wait result and setter/waiter ordering for this exact notification event.
+
+No title prompt, audio output, controller response, or gameplay was verified. Captures and logs remain local/ignored under `iso/local-analysis/logs/m3-windowed-event-state-90s-20261019/`. Progress bars stay unchanged; Milestone 3 remains active.
+
+Next: trace the host wait result and event setter ordering for `0x0021DCE4`, then confirm whether startup reaches the title prompt.
