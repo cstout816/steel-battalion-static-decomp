@@ -51,11 +51,11 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active; title-screen boot is unverified. |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active; the title appeared in one bounded run, but reliable startup is unverified. |
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [######--------------] 3/5 | A local 180-second run visually reached the title screen; it was very dark and displayed “PRESS MAIN WEAPON BUTTON.” Input response, audio, and gameplay are not yet verified. |
+| Boot and compatibility | [######--------------] 3/5 | One local run reached the title screen, but recent bounded launches still stop during startup. Input response, audio, gameplay, and reliable boot are not yet verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
 These bars describe engineering work, not playable features or campaign completion. See the [detailed tracker](docs/DEVELOPMENT_STATUS.md) for field-by-field evidence.
