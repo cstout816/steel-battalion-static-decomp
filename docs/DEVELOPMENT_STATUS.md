@@ -1381,3 +1381,13 @@ The watchdog guest stack places the guest at return site `0x0020EC83`, waiting o
 No title prompt, audio output, controller response, or gameplay was verified. Captures and logs remain local/ignored under `iso/local-analysis/logs/m3-windowed-event-state-90s-20261019/`. Progress bars stay unchanged; Milestone 3 remains active.
 
 Next: trace the host wait result and event setter ordering for `0x0021DCE4`, then confirm whether startup reaches the title prompt.
+
+### Notification-event call trace (2026-10-19)
+
+A temporary trace limited to guest event `0x0021DCE4` recorded 166 wait entries and 166 successful wait returns (status `0`) in the 90-second run. The setter at guest caller `0x00216CAE` repeatedly succeeded (`SetEvent` returned true), including a set from state 0 to 1 that immediately preceded a successful wait return. This rules out a simple lost wakeup for the observed cycles; the final watchdog snapshot later caught the guest in the previously observed font-load call chain (`EDI=0x00261918`, return site `0x0004F496`). The queue was drained (`PUT=GET=0x0003AA04` in the event-state run's watchdog sample).
+
+The temporary trace was removed. Restored `kernel_bridge.c` matches its baseline SHA-256 `2190BBD3E20DA13238802F655F198ECEE5BCC8A123CF6A774142C298F47CF232`; rebuilt Release x64 and verified the trace markers are absent from the executable. No persistent runtime code was changed.
+
+The title prompt, audio output, controller response, and gameplay remain unverified. Logs and captures remain local/ignored under `iso/local-analysis/logs/m3-title-event-call-trace-90s-20261019/`. Progress bars remain unchanged; Milestone 3 is active.
+
+Next: trace the font loader's file-open/read path for `D:\media\fonts\ari26nml.bmf` and compare its host path/result with the guest call chain at watchdog time.
