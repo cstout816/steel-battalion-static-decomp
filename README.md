@@ -55,7 +55,7 @@ When a tested release exists, players will need to provide their own legally obt
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [######--------------] 3/5 | One run displayed “PRESS MAIN WEAPON BUTTON” and delivered a mapped 26-byte USB report, but the prompt did not respond. Other runs stall during startup. Audio, gameplay, and reliable boot are not verified. |
+| Boot and compatibility | [######--------------] 3/5 | A report-layout fix now places analog fields correctly, and a bounded trace confirms 26-byte reports complete through the guest XID callback. The game still stops after one rendered flip in that sample; prompt response, audio, gameplay, and reliable boot remain unverified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
 These bars describe engineering work, not playable features or campaign completion. See the [detailed tracker](docs/DEVELOPMENT_STATUS.md) for field-by-field evidence.
