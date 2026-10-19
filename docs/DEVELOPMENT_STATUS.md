@@ -12,6 +12,16 @@ Restored `kernel_bridge.c` byte-for-byte to baseline SHA-256 `2190BBD3E20DA13238
 
 Next: test the visible title prompt with a controlled input report while sampling the guest-visible input result, and verify audible output independently.
 
+### Controlled input run with external guest-state sampling (2026-10-19)
+
+A 240-second bounded Release run sampled the guest XInput result and Steel Battalion USB report buffer every two seconds, with an A press scheduled at 180 seconds after the first controller report. The framebuffer stayed black and stopped updating after about 50 seconds. The guest XInput packet counter reached 659 and then remained fixed through the watchdog; the report buffer stayed neutral. The scheduled press did not appear in the input log, so this run never tested title-prompt acceptance. OHCI logged 726 periodic transfers and 618 reports before stopping.
+
+At watchdog, the guest was again waiting on DCE4 through helper `sub_0020EC60` (return site `0x0020EC83` / wait return `0x0002DB6A`), with NV2A USER `PUT=GET=0x53CF4`. The captured guest stack maps to the previously identified font-load helper path, but does not identify the wait's producer or prove that file loading caused the stall. This run's additional USB/input diagnostics and memory sampling also mean its timing cannot be compared directly with the title-reaching DCE4 trace.
+
+The run ended at the watchdog, not a crash. No source instrumentation was added; the normal Release executable remains in place, no game process remains, and the user's XID profile patch is untouched. Audio, title input, gameplay, saves, and campaign progression remain unverified. Logs and screenshots are local/ignored under `iso/local-analysis/logs/m3-title-input-guest-state-retry-240s-20261019/`. Milestone 3 and all progress bars remain unchanged.
+
+Next: reproduce the title-reaching run, then send a live press only after visually confirming the prompt while sampling guest input state; if startup again stalls, compare its thread, file, and event paths against the successful title capture.
+
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
 ### Startup queue and event-wait comparison (2026-10-19)
