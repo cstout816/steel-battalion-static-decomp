@@ -32,6 +32,14 @@ No source instrumentation was added, the normal Release build remains the execut
 
 Next: capture the DCE4 signal-state word and shared-ring indices alongside the guest wait and file-read state in the same low-overhead run; compare those values with the title-reaching trace before changing synchronization or I/O behavior.
 
+### DCE4 event and shared-ring state sample (2026-10-19)
+
+A 120-second low-overhead run again remained on a black framebuffer and ended at the watchdog with the DCE4 wait frame (`0x0021DCE4`, return site `0x0020EC83` / `0x0002DB6A`); USER `PUT=GET=0x5EBD8`. External sampling showed the guest XInput packet counter stop at 1,593 and the USB report remain neutral. Across 26 corrected two-second samples from about 6 to 50 seconds, DCE4's guest signal-state word was `1`, ring field `0x351F58` was `2`, and `0x355730` and `0x351F5C` both held `1,254`. The ring count did not advance in that interval while the event remained signaled. The initial sampler used incorrect host addresses for the latter two fields; the corrected addresses add the runtime's `0x10000` guest-memory offset, and a direct process-memory read confirmed the same values.
+
+This refines the diagnosis: a simple unsignaled DCE4 event is not supported by these samples. The ring appears at its observed limit while the event is signaled, but the current trace does not identify the field meanings beyond the generated code's accesses or the guest producer that should advance them. The watchdog stack can retain a wait frame and is not by itself proof that the guest was blocked inside the host wait at that exact instant. No title, title input, audio, or gameplay was verified. No source changes or instrumentation; no process remains. Logs/captures are local/ignored under `iso/local-analysis/logs/m3-dce4-ring-state-120s-20261019/`; progress bars and M3 remain unchanged; user XID patch untouched.
+
+Next: trace the guest code that updates the shared-ring limit and identify which thread owns the producer side; correlate those writes with DCE4 signal calls in a title-reaching capture before altering the ring or event behavior.
+
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
 ### Startup queue and event-wait comparison (2026-10-19)
