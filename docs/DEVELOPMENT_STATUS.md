@@ -4,6 +4,12 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
+### Latest guest controller-query trace (2026-10-19)
+
+A 180-second watchdog-bounded run added temporary change-only logging to guest `sub_00257103`, which writes the queried gamepad fields into a guest result buffer. Its initial successful result was neutral (`buttons=0000`, triggers `00/00`, centered sticks). The virtual Steel Battalion endpoint reached 230 input reports before its counters stopped advancing; the scheduled 140-second A pulse never appeared in the log, so the run did not deliver the pulse after the startup stall. No title prompt or screenshot was captured. At watchdog, the NV2A pushbuffer was idle at `PUT=GET=0x610EC`; guest registers included `ESP=0x00F7FE18`, `EAX=0x00F7FE60`, and `EDI=0x00261918`. Mapping the saved return address `0x0004F496` identifies the caller as `sub_0004F460`; its stack arguments point to `D:\media\fonts\ari26nml.bmf` and buffer record `0x004CA140`, passed to the font-load helper `sub_0004E6F0`. This places the stall in that font-loading call chain, but does not yet identify the blocked file API or explain the stall.
+
+Restored generated `recomp_0017.c` byte-for-byte (SHA-256 `DE5C51273DA352EB863775DE2DC387C6CCFE9426A671C36BF068EBE57FEB8F15`), forced recompilation, rebuilt Release x64, and verified the trace marker is absent from the executable and no runtime remains. The attempted title-loop input test is inconclusive because the runtime stalled before the scheduled report. Milestone 3 and all progress bars remain unchanged. Next: trace the font-load call into the kernel file path/read bridge to locate the stall, then repeat the controller query during a verified title prompt.
+
 ### Latest OHCI completed-transfer callback trace (2026-10-19)
 
 A 50-second bounded diagnostic run captured the Steel Battalion interrupt-IN endpoint (endpoint 2) completing transfers with OHCI completion code 0. The guest buffer was `0x010816C3`; the observed first bytes were `00 1A 01 00`. The same TD addresses appeared in the guest writeback-done DPC handler (`sub_0025BFA3`), confirming the done list reached guest completion processing. OHCI stats recorded 70 periodic transfers and 59 input reports in the captured sample.
