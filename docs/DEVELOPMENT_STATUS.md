@@ -1413,3 +1413,11 @@ The same run then stopped producing new frames after 247 flips; the final watchd
 The captured files and logs remain local/ignored at `iso/local-analysis/logs/m3-profiled-full-boot-120s-20261019/`; no game image or derived game code was added to Git. The process exited at its watchdog. README status now reflects this evidence; progress bars stay unchanged and Milestone 3 remains active. Preserve the user's uncommitted controller-profile patch.
 
 Next: trace what holds guest event `0x0021DCF4` in the title state, and why the configured USB device receives no periodic endpoint requests; then capture the guest input-state buffer and screen around a confirmed report before claiming controller response. The public [XboxDevWiki input-device reference](https://xboxdevwiki.net/Xbox_Input_Devices) documents the Steel Battalion USB identity (`VID 0x0A7B`, `PID 0xD000`), 26-byte XID input report, and interrupt endpoints, which can be compared against the local descriptor implementation.
+
+### Title-state memory watch attempt (2026-10-19)
+
+To identify writes associated with the watchdog's title-state event address, a bounded run watched guest dword `0x0021DCF8` (page protection with single-step recovery). It caught one transition from `0` to `1`; the guest stack included `sub_002119E0` and `sub_00216010`. This occurred during early setup and does not prove that it was the later title-state event signal.
+
+The broad page watch was intrusive: this run stalled earlier in the font-loading path (`EDI=0x00261918`) and ended at the 120-second watchdog with `PUT=GET=0x00069ABC`. USB again showed zero periodic transfers and no scheduled button report. The run did not reach the title prompt. Treat the single transition as a lead only; do not infer that it caused or released the later title wait. No runtime source changed, the process exited at its watchdog, and the log remains local/ignored under `iso/local-analysis/logs/m3-title-event-usb-watch-120s-20261019/`. Progress bars remain unchanged and Milestone 3 stays active.
+
+Next: replace the page-wide memory watch with a lower-overhead trace of the exact wait/set calls for `0x0021DCF4`, then investigate why no interrupt endpoint is queued after USB configuration.
