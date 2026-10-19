@@ -1359,3 +1359,9 @@ A matched 60-second run with `RECOMP_FB_WINDOW=1` logged repeated `path=vulkan-l
 The process ended and no project game process remains. No source edits were made in this run; ignored logs are under `iso/local-analysis/logs/m3-windowed-pb-timing-60s-20261019/`. Progress bars remain unchanged; Milestone 3 remains active. Preserve the uncommitted XID mapping patch.
 
 Next: capture and inspect the actual window output, then profile remaining draw classes under the same windowed mode before making broader performance claims.
+
+### Windowed framebuffer visual check (2026-10-19)
+
+A second 60-second windowed diagnostic wrote periodic dumps from the framebuffer address used by the presentation window. The captured sequence shows the Dolby Digital splash, followed by the Steel Battalion logo screen at very low brightness during its fade. This verifies those startup images reached the presented framebuffer; it does not show the title prompt or verify input, sound output, or gameplay. The windowed process exited after the bounded run.
+
+The captures are local and ignored under `iso/local-analysis/logs/m3-windowed-fb-capture-60s-20261019/`; no copyrighted frame was added to GitHub. Milestone 3 and progress bars remain unchanged. Next inspect why the Steel Battalion screen remains very dim and determine whether the guest proceeds to its title prompt before testing input.
