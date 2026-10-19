@@ -22,6 +22,16 @@ Restored generated `recomp_0017.c` byte-for-byte (SHA-256 `DE5C51273DA352EB86377
 
 Next: isolate the startup timing difference, then observe game-visible controls during a title run without adding per-query diagnostics or sending input before the prompt.
 
+### Title-prompt input pulse with external state sampling (2026-10-19)
+
+Ran the restored, uninstrumented Release executable and sampled the guest XInput result buffer from outside the process (`guest VA 0x004AF670`, host mapping `0x004BF670`). The title art and “PRESS MAIN WEAPON BUTTON” prompt appeared and remained stable. The guest packet counter advanced to `0x00000A68`, then stayed fixed; buttons, triggers, and sticks read neutral (`0000`, `00/00`, centered axes).
+
+After visually confirming the prompt, appended one live A input. The runtime logged it at `t=88422 ms` as analog `0x01` (the Steel Battalion profile's Main Weapon mapping). Guest state remained unchanged in eight samples after the pulse. Framebuffer captures `screen.bmp00005.bmp` through `screen.bmp00011.bmp`, covering the interval before and after the press, are byte-identical (SHA-256 `558381570A71F0BD550EB775350A9F872F8B54F1F571570D749EEF09EC96A403`). Prior OHCI diagnostics verify this profile can emit the corresponding Main Weapon report bit and deliver its transfer to the guest callback; this run did not independently trace the packet bytes. The unchanged guest buffer and screen do not prove the mapping is wrong: the guest may have stopped polling before the pulse.
+
+At 150 seconds, the watchdog found the guest waiting on event `0x0021DCF4`; NV2A `PUT=GET=0x62CD0`. The process exited and no runtime remains. This verifies a repeatable title presentation plus a scripted pulse after the visible prompt, but not game-side input acceptance, audio, or gameplay. No progress bars advance; Milestone 3 remains active.
+
+Next: trace the producer and waiter for `0x0021DCF4` and observe whether the USB completion path updates the guest state before the title's wait resumes.
+
 ### Latest controller poll and black-frame sample (2026-10-19)
 
 A 150-second watchdog-bounded run traced changes to the guest controller result and scheduled A at 90 seconds after the first USB report. The trace showed a neutral result; the scheduled pulse did not appear in the log, and the captured window frames remained black. OHCI served 576 input reports before its counters stopped advancing. The watchdog again captured the font-load call chain (`ESP=0x00F7FE18`, `EDI=0x00261918`); this is not evidence of controller rejection or a title-screen input test.
