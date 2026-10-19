@@ -1546,3 +1546,11 @@ Implemented that device behavior in the local runtime and saved it as the isolat
 The same run ended at the 120-second watchdog in the separate queue-space wait on event `0x0021DCF4`, with guest `PUT=0x00080F6C` and `GET=0x0007C52C`. Audio output, a confirmed button response, gameplay, and campaign progression remain unverified. No progress bars advance; Milestone 3 remains active. No game image or generated game code was added to Git.
 
 Next: trace the queue-space producer and the executor's pending segment at the watchdog, including the completion semaphore and the event's set path, then repeat the title-start input with guest-visible controller state.
+
+### DCF4 producer and waiter correlation (2026-10-19)
+
+A bounded 120-second trace recorded 13 waits on queue event `0x0021DCF4`. Twelve returned successfully with `STATUS_SUCCESS`; 12 corresponding `KeSetEvent` calls were observed from guest caller `0x0021702F`, and the guest event state was `1` at each logged return. This shows that the DCF4 event/set/wait bridge can make progress during startup. The last wait had no later return before the watchdog. At capture, the guest was in the DCF4 wait helper (`ESP=0x00F7FEEC`, `ESI=0x0021DCF4`), with NV2A USER `PUT=0x0007FA3C`, `GET=0x0007AFFC`, after 620,126 indirect calls. The trace does not identify why this final producer/completion cycle did not finish; the `KeSetEvent` call site alone is insufficient to prove the intended queue producer was healthy.
+
+Restored `kernel_bridge.c` byte-for-byte to SHA-256 `2190BBD3E20DA13238802F655F198ECEE5BCC8A123CF6A774142C298F47CF232`. A clean Release x64 rebuild completed successfully. The rebuilt executable contains no `[DCF4-*]` trace strings, and no game process remains. The logs and captures are local/ignored under `iso/local-analysis/logs/m3-dcf4-event-wait-trace-120s-20261019/`. This run did not verify title-screen interaction, audio output, controller response, or gameplay. Progress bars remain unchanged; Milestone 3 remains active.
+
+Next: correlate the final pending DCF4 wait with the guest queue producer, semaphore/completion values, and the executor's last completed pushbuffer segment in one capture. Do not modify event signaling based only on the successful cycles.
