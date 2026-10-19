@@ -1223,3 +1223,13 @@ Static generated-code inspection traced guest function `sub_00257103`: it calls 
 An earlier, more verbose attempt stalled before its 90-second pulse and is not a valid input comparison. Restored generated file `recomp_0017.c` byte-for-byte to SHA-256 `DE5C51273DA352EB863775DE2DC387C6CCFE9426A671C36BF068EBE57FEB8F15`, forced recompilation after restoring its timestamp, and rebuilt the Release x64 target successfully. Verified the temporary `XID_GUEST_STATE` and `RECOMP_XID_GUEST_TRACE` strings are absent from the executable; no game process remains. Captures and traces remain local/ignored. Progress bars stay unchanged and Milestone 3 remains active.
 
 Next: trace the OHCI done-queue consumer and the guest XID object's state update from the interrupt handler, using a stable title-loop run before claiming controller response.
+
+### OHCI ISR and guest DPC path (2026-10-19)
+
+The USB controller is connected to guest interrupt vector 1 with ISR `0x0025BD47` and context `0x01081A18`. Static XBE data resolves the ISR's callback slot at `0x0025D278` to the kernel import `KeInsertQueueDpc`. The ISR queues guest DPC `0x0025C308` (`DPC=0x01081E58`, same context). A 35-second watchdog-bounded run traced eight enqueue calls for that USB DPC and seven executions before the watchdog; OHCI reported its WDH interrupt as claimed. The final OHCI sample showed 156 periodic transfers and 101 input reports. This confirms the interrupt-to-DPC path runs during startup.
+
+Static inspection of `sub_0025C308` shows it reads HCCA `DoneHead` from controller context offset `+8+0x84`, clears the field, walks the completed descriptor list, and dispatches completion routines including `sub_0025C982` and `sub_0025BFA3`. This narrows the remaining gap to whether the interrupt-IN completion for the Steel Battalion report is traversed and how its guest buffer reaches the state returned by `sub_00257103`.
+
+The configured A-button script was parsed but never logged a press before the 35-second watchdog, so this run is not an input test and did not reach a verified title screen. The runtime exited with expected watchdog code 3; no process remains. Restored `kernel_bridge.c` byte-for-byte (SHA-256 `2190BBD3E20DA13238802F655F198ECEE5BCC8A123CF6A774142C298F47CF232`), forced recompilation, rebuilt the Release x64 target successfully, and verified the temporary DPC trace markers are absent from the executable. Logs and captures remain local/ignored. Progress bars stay unchanged and Milestone 3 remains active.
+
+Next: trace the guest DPC's completed TD address, endpoint, completion code, and buffer pointer, then correlate the XID report bytes with the game-side state copy.
