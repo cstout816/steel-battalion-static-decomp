@@ -1391,3 +1391,13 @@ The temporary trace was removed. Restored `kernel_bridge.c` matches its baseline
 The title prompt, audio output, controller response, and gameplay remain unverified. Logs and captures remain local/ignored under `iso/local-analysis/logs/m3-title-event-call-trace-90s-20261019/`. Progress bars remain unchanged; Milestone 3 is active.
 
 Next: trace the font loader's file-open/read path for `D:\media\fonts\ari26nml.bmf` and compare its host path/result with the guest call chain at watchdog time.
+
+### Title prompt and controller report checkpoint (2026-10-19)
+
+The windowed startup capture reached the Steel Battalion title prompt, “PRESS MAIN WEAPON BUTTON,” during a diagnostic run. This verifies title-screen imagery can be presented; it does not verify sound or game-side input. A first live-press attempt is invalid for compatibility conclusions because it omitted the opt-in Steel Battalion USB profile, so no press was counted from that run.
+
+With `RECOMP_USB_PROFILE=steel-battalion`, a scripted A press produced a 26-byte guest XID report whose button byte changed from `00` to `01` while pressed and returned to `00` on release. This verifies the configured A-to-Main-Weapon packet mapping reaches the guest USB report path. In a separate correctly profiled 180-second startup, captures stopped at the Nude Maker splash and the watchdog later sampled the font-load call chain; no title prompt was available for a game-side response check. Do not conflate report delivery with the game consuming the input.
+
+The temporary font/event trace hooks were removed, the normal Release target was rebuilt, and no diagnostic source marker remains in the executable. The local framebuffer and USB logs are ignored under `iso/local-analysis/logs/`; no copyrighted game images were committed. Audio output, game-side button response, and gameplay remain unverified. Milestone 3 and all progress bars remain active/unchanged.
+
+Next: make startup with the Steel Battalion USB profile reliably reach the title prompt, then repeat the Main Weapon press while capturing both the guest report and visible game response. Keep audio verification separate.
