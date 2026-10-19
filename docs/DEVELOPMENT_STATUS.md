@@ -2,6 +2,18 @@
 
 This page is for people who want the detailed engineering tracker. The project is experimental. A local diagnostic run has visually reached the title screen, but this does not mean the game is playable. Progress bars describe tracked work; they do not mean that a game feature is playable.
 
+### Independent XBE analysis and upstream research (2026-10-19)
+
+Reviewed the maintained [xboxrecomp toolkit](https://github.com/sp00nznet/xboxrecomp), its [v0.13.1 release](https://github.com/sp00nznet/xboxrecomp/releases/tag/v0.13.1), the [Ghidra XBE loader](https://github.com/XboxDev/ghidra-xbe), and [xemu's Steel Battalion compatibility record](https://xemu.app/titles/43430002/). The local toolkit is already at v0.13.1 and Visual Studio is installed, so neither a toolkit upgrade nor a new system-wide compiler was needed. The upstream XBE-to-C pipeline includes Ghidra headless scripts; a local Ghidra 12.1.4 + JDK 21 install was used for an independent pass. All tool files and game-derived analysis remain local/ignored.
+
+Imported a flat raw image of the user's XBE at image base `0x00010000`. Ghidra's focused auto-analysis completed successfully in 97 seconds. It independently identified instruction/function starts at `0x0002DB50`, `0x000DFF40`, `0x00211E10`, `0x0020DBC0`, `0x00216BE0`, and `0x00216EA0`, corroborating the existing function boundaries. Decompiled `0x000DFF40` calls `0x0002DB50(0x19)` (25 entries). `0x0002DB50` calls `0x0020EC60`, obtains the limit through `0x0020F2C0`, and waits in a predicate loop until `consumer + requested_count <= limit`. `0x00216BE0` has six call references and calls the XBE thunk at `0x0025D1E8`. This independently confirms the caller/request-size and callback path already under investigation; it does not explain why the runtime sometimes stops before the queue becomes available, nor justify a kernel/event change.
+
+The broad Ghidra pass with decompiler-wide parameter analysis was stopped after repeated expensive speculative-code warnings; no exports were lost because the targeted pass completed independently. Ghidra's optional Jython export script was unavailable, so the successful targeted report was generated with a local Java script. No decompiled game code, XBE, or asset was added to Git. Progress bars and Milestone 3 are unchanged.
+
+The xemu compatibility report still rates Steel Battalion “Intro” based on a January 2022 report; linked graphics assertions concern emulator rendering and do not match the native runtime's observed queue wait. Stock xemu also documents no Steel Battalion controller mapping. This is contextual comparison only, not a diagnosis of this project's stall.
+
+Next: reproduce the prior title-reaching startup configuration and capture the active `0x000DFF40` call, its 25-entry request, producer/consumer limit, and DCE4 wait/return together in one low-overhead run. Keep the instrumentation diagnostic-only until the sequence identifies a missing publication or signal. Title input, audio output, gameplay, saving, and campaign progression remain unverified.
+
 ### DCE4 event trace and title-screen capture (2026-10-19)
 
 A bounded 180-second run with temporary bridge tracing logged 7,190 `KeSetEvent` calls for DCE4, all from guest caller `0x00216CAE`, plus 400 waits from helper return `0x0020EC83`; all 400 waits returned `STATUS_SUCCESS`. The title screen was visible in the final framebuffer capture, including “PRESS MAIN WEAPON BUTTON.” The watchdog ended the run because the game process remained active; it did not report a crash. These results show that DCE4 is being signaled and its observed waits are completing in this run. They do not establish that DCE4 is responsible for earlier intermittent startup delays.
