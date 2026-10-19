@@ -1572,3 +1572,13 @@ During the extended run, a live `a:400` press was queued after the visible “PR
 Restored `nv2a_pb_exec.c` and `xbox_memory_layout.c` byte-for-byte to the pre-trace copies and rebuilt Release x64. Verified their hashes match the saved baselines, the executable contains no primitive-trace markers, and no game process remains. The controller-profile patch remains the only uncommitted Git change. Progress bars remain unchanged; Milestone 3 is active.
 
 Next: verify whether the title guest polls the Steel Battalion Main Weapon input report after the prompt, pairing a report-level trace with a guest-side state/result and a visible transition. Keep the DCF4 wait as a timing observation until a stalled interval is reproduced.
+
+### USB report and guest XInput correlation (2026-10-19)
+
+A 180-second startup run enabled USB report tracing/statistics and sampled the guest XInput result buffer every five seconds. OHCI counted 262 reports (309 periodic transfers total). The only changed Steel Battalion report observed was neutral: `00 1A 00 00 00 00 00 00 00 00 80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 FF`. The guest XInput packet counter progressed from 0 to 656 during startup; the final eight samples held at 656 with zero buttons/triggers and centered axes. `XInputGetState` returned Windows error 1167 (no host XInput device). This run sent no synthetic button press because the title prompt did not appear.
+
+The latest captured framebuffer remained at the Dolby Digital intro and stopped updating at 57 seconds. At the 180-second watchdog the guest was in the same font-load call chain seen in earlier runs (`ESP=0x00F7FE18`, `EDI=0x00261918`), with NV2A USER `PUT=0x00053CF4`, `GET=0x000537A8`. This run therefore did not reach the title screen or test game-side controller acceptance. OHCI report delivery and the earlier XInput polling during startup are observed; title input response, audio output, and gameplay remain unverified. Local logs/captures are ignored under `iso/local-analysis/logs/m3-xinput-report-correlation-180s-20261019/`.
+
+No source instrumentation was added for this capture. The ordinary Release build is in use, no game process remains, and the user's uncommitted controller-profile patch is untouched. Progress bars stay unchanged; Milestone 3 remains active.
+
+Next: resolve the startup font-load stall or timing variability sufficiently to reach the title prompt, then repeat a live button press while correlating the USB report and guest result. Do not infer title-control failure from a run that never reached the title.
