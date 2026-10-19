@@ -4,6 +4,14 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
+### Latest OHCI completed-transfer callback trace (2026-10-19)
+
+A 50-second bounded diagnostic run captured the Steel Battalion interrupt-IN endpoint (endpoint 2) completing transfers with OHCI completion code 0. The guest buffer was `0x010816C3`; the observed first bytes were `00 1A 01 00`. The same TD addresses appeared in the guest writeback-done DPC handler (`sub_0025BFA3`), confirming the done list reached guest completion processing. OHCI stats recorded 70 periodic transfers and 59 input reports in the captured sample.
+
+The zero-time input script was accepted, but its own log reported digital bits `0x00` and analog byte `0x01`. This does not demonstrate that a game-recognized A-button bit was sent or that the game consumed it; no title prompt or visible response was verified. The run exited through the 35-second guest watchdog (code 3). Audio and gameplay remain unverified.
+
+Restored `ohci.c` and generated `recomp_0018.c` byte-for-byte from local backups, forced recompilation, and rebuilt the Release x64 target successfully. Verified the temporary trace markers are absent from the executable and no runtime remains. The only repository change carried forward is this documentation; the pre-existing local XID mapping patch remains untouched. Milestone 3 and all progress bars remain unchanged. Next: trace the USB report bytes through the guest's XID state update and map the script's analog/digital fields to the Steel Battalion report format before trying another title interaction test.
+
 ### Latest modeled-vblank title and controller probe (2026-10-19)
 
 Static inspection of the saved watchdog stack mapped guest call target `0xFE00010C` to the XBE's `KeWaitForSingleObject` import. The guest was waiting on its device event at `0x0021DCE4`; its signal-state field at `0x0021DCE8` was zero. The preceding probe had omitted the runtime's opt-in modeled vblank, which the existing guest ISR/DPC path needs to signal that event.
