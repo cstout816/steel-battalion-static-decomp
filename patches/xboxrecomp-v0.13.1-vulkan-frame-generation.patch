@@ -1,0 +1,108 @@
+diff --git a/src/video/fb_present.c b/src/video/fb_present.c
+index 57c432b..558ce4d 100644
+--- a/src/video/fb_present.c
++++ b/src/video/fb_present.c
+@@ -37,10 +37,13 @@ static uint32_t     *s_rgb;           /* converted copy uploaded to Vulkan */
+  * finished frame once per flip means the window never reads memory the
+  * rasteriser is writing, so what it shows cannot be half of anything.
+  *
+- * Two buffers and an index, swapped after the copy completes, so the window
+- * thread is never reading the one being filled. */
++ * Two buffers and a generation counter, swapped after the copy completes, so
++ * the window thread can detect every update even if the producer reuses the
++ * same slot before the next UI poll. */
+ static uint32_t     *s_present[2];
+ static volatile LONG s_present_idx = -1;   /* -1 until the first flip */
++static volatile LONG s_present_generation;
++static SRWLOCK      s_present_lock = SRWLOCK_INIT;
+ 
+ void xbox_FramebufferWindowSet(uint32_t fb_va, uint32_t pitch)
+ {
+@@ -66,12 +69,15 @@ void xbox_FramebufferWindowPresent(uint32_t fb_va, uint32_t pitch)
+         return;
+     if (getenv("RECOMP_FB_VA"))
+         return;                       /* pinned: leave the old path alone */
++    AcquireSRWLockExclusive(&s_present_lock);
+     next = (s_present_idx == 0) ? 1 : 0;
+     if (!s_present[next]) {
+         s_present[next] = (uint32_t *)calloc((size_t)s_fb_width * s_fb_height,
+                                              4);
+-        if (!s_present[next])
++        if (!s_present[next]) {
++            ReleaseSRWLockExclusive(&s_present_lock);
+             return;
++        }
+     }
+     bpp = pitch / s_fb_width;
+     src = (const uint8_t *)((uintptr_t)fb_va + xbox_GetMemoryOffset());
+@@ -96,6 +102,8 @@ void xbox_FramebufferWindowPresent(uint32_t fb_va, uint32_t pitch)
+     }
+     /* Published only once it is whole. */
+     InterlockedExchange(&s_present_idx, next);
++    InterlockedIncrement(&s_present_generation);
++    ReleaseSRWLockExclusive(&s_present_lock);
+ }
+ 
+ /* Which keys are down, for the pad stand-in in src/input.
+@@ -261,7 +269,7 @@ static DWORD WINAPI fb_thread(LPVOID unused)
+     HWND hwnd;
+     RECT r;
+     const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+-    LONG shown_frame = -2;
++    LONG shown_generation = -1;
+ 
+     (void)unused;
+ 
+@@ -307,15 +315,28 @@ static DWORD WINAPI fb_thread(LPVOID unused)
+         if (s_present_idx >= 0 && s_rgb) {
+             /* Copy the completed flip before uploading so the next guest
+              * frame cannot tear the image being presented. */
+-            LONG idx = s_present_idx;
+-            if (s_present[idx] && idx != shown_frame) {
+-                memcpy(s_rgb, s_present[idx],
+-                       (size_t)s_fb_width * s_fb_height * 4);
+-                if (xbox_vulkan_presenter_present(s_rgb) < 0) {
+-                    InterlockedExchange(&s_fb_running, 0);
+-                    break;
++            LONG generation = InterlockedCompareExchange(
++                &s_present_generation, 0, 0);
++            if (generation != shown_generation) {
++                LONG idx;
++                uint32_t *frame = NULL;
++                AcquireSRWLockExclusive(&s_present_lock);
++                generation = InterlockedCompareExchange(
++                    &s_present_generation, 0, 0);
++                idx = InterlockedCompareExchange(&s_present_idx, 0, 0);
++                if (idx >= 0)
++                    frame = s_present[idx];
++                if (frame)
++                    memcpy(s_rgb, frame,
++                           (size_t)s_fb_width * s_fb_height * 4);
++                ReleaseSRWLockExclusive(&s_present_lock);
++                if (frame) {
++                    if (xbox_vulkan_presenter_present(s_rgb) < 0) {
++                        InterlockedExchange(&s_fb_running, 0);
++                        break;
++                    }
++                    shown_generation = generation;
+                 }
+-                shown_frame = idx;
+             }
+         } else if (s_fb_va && s_fb_pitch && s_rgb) {
+             /* No flip yet, or pinned with RECOMP_FB_VA: read guest memory as
+@@ -327,13 +348,13 @@ static DWORD WINAPI fb_thread(LPVOID unused)
+                 InterlockedExchange(&s_fb_running, 0);
+                 break;
+             }
+-        } else if (shown_frame == -2 && s_rgb) {
++        } else if (shown_generation == -1 && s_rgb) {
+             /* Present a defined black frame before the guest flips. */
+             if (xbox_vulkan_presenter_present(s_rgb) < 0) {
+                 InterlockedExchange(&s_fb_running, 0);
+                 break;
+             }
+-            shown_frame = -1;
++            shown_generation = 0;
+         }
+         {
+             /* One dump a few seconds in, so the title has had time to render
