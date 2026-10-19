@@ -261,7 +261,7 @@ Windows graphics migration: guest draws rendered by Vulkan [--------------------
 Audio: guest DSP execution and audible output     [##########----------] 1 / 2 (50%)
 
 Original SB controller: input, mapping, lights   [--------------------] 0 / 3 (0%)
-Virtual XID path: report, guest state, title response [######--------------] 1 / 3 (33%)
+Virtual XID path: report, guest state, title response [#############-------] 2 / 3 (67%)
 Modern controller and accessibility profiles     [--------------------] 0 / 4 (0%)
 Graphics: resolution, ratios, display modes      [--------------------] 0 / 4 (0%)
 Graphics: HUD, FOV, image controls, presets      [--------------------] 0 / 4 (0%)
@@ -1945,3 +1945,13 @@ Added a temporary environment-gated trace to the statically recompiled `sub_0025
 At the 30-second watchdog, the guest had not returned and the sample showed `USER PUT=GET=0x495C`; the renderer had recorded one flip at 0.00 FPS. This is a different snapshot from earlier title runs with a queue backlog, so it does not establish a single root cause for all stalls. Restored `recomp_0018.c` byte-for-byte to baseline SHA-256 `77071AF8047D254E70A10A1E7F0A9909F1C44C0A62FAE94F5DDB5ADB1E94549B`, rebuilt Release x64, and confirmed the executable contains none of the temporary XID/OHCI trace markers. No process remains. Logs are ignored under `iso/local-analysis/logs/m3-xid-completion-trace-20261020/`.
 
 The virtual XID bar remains 1/3: report bytes, OHCI DMA mapping, and guest completion are now observed, while the game's input state and title response remain unverified. Other progress bars are unchanged. Next trace the XID buffer/state consumer downstream of `sub_0025BFA3`; keep that separate from the one-flip startup and NV2A queue wait investigation.
+
+### 2026-10-20 guest XID payload-state trace
+
+Followed the completion path downstream from `sub_0025BFA3` through its dynamically selected callback `sub_00259A31` to target `0x0025D059`. That routine reads the report length, copies the 24-byte body from context offset `+0x34` to the guest state at `+0x14` (removing the two-byte XID header), then checks the first three 16-bit button words. Its nonzero path tail-calls `sub_00193C94`; this call relationship is established from static control flow, not a separately captured runtime entry.
+
+A temporary trace sampled the post-copy guest buffer at `0x010816A5` during the scripted A press/release. The first button word changed from `0x0000` to `0x0001` while held and returned to `0x0000` after release. The aiming axes were centered (`00 80`). XboxDevWiki's Steel Battalion controller-to-Xbox table maps report byte 2 bit 0 to `RightJoyMainWeapon`, confirming the test bit's documented meaning ([Xbox Input Devices](https://xboxdevwiki.net/Xbox_Input_Devices)). This verifies report delivery into the game's guest-side input state. It does not verify that `sub_00193C94` executes dynamically, that the title prompt accepts the action, or that physical hardware is supported.
+
+The bounded 45-second sample still rendered only one flip at 0.00 FPS; the watchdog found no guest return with NV2A USER `PUT=GET=0x495C`. It did not reproduce the title prompt and is not campaign or gameplay evidence. After collecting it, all temporary traces were restored. Baseline hashes: `recomp_0017.c` `DE5C51273DA352EB863775DE2DC387C6CCFE9426A671C36BF068EBE57FEB8F15`; `recomp_0018.c` `77071AF8047D254E70A10A1E7F0A9909F1C44C0A62FAE94F5DDB5ADB1E94549B`; OHCI source `52C4E93766A84962803BD4E963FD24D79041C94F483707F8CC827172FDA257A5`. A forced Release rebuild completed and the final executable contains none of the temporary trace markers. No game process remains; captures and logs are ignored under `iso/local-analysis/logs/m3-xid-dispatch-trace-20261020/`.
+
+The virtual XID path is now 2/3: report and guest-state update are observed; title response remains unverified. The overall project remains at milestone 2/8, with Milestone 3 active. The next input check should run from the reproducible title-prompt startup and instrument only the downstream control handler to confirm whether the documented Main Weapon press reaches the title logic. Diagnose the one-flip/NV2A queue stall independently; audio, gameplay, saves, full campaign, and original controller hardware remain unverified.
