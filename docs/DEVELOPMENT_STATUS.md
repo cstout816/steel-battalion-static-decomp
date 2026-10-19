@@ -4,6 +4,24 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
+### Startup queue and event-wait comparison (2026-10-19)
+
+A 45-second run without pushbuffer execution repeated the known queue-space wait at `sub_00211E10` / `0x00211F10`; the native PC and stack identified that as the intentionally executor-disabled ring-buffer fence. The same watchdog sample showed producer 11, completion 3, and an 8-unit gap. This is a diagnostic setup limitation, not a new game blocker.
+
+A follow-up 90-second run enabled the existing pushbuffer executor, asynchronous file path, modeled vblank, title-event bridge, and synthetic AC'97 readiness. It passed the queue fence, produced 324 framebuffer flips and 326 clears, opened the title assets and `ADVANCE.BIN`, and read multiple music streams through `STRM03.WAV` (later stream paths were also opened). At timeout, the native stack ended in Windows `NtWaitForSingleObject`; guest registers show the wait on event `0x0021DCF4`, and NV2A `PUT=GET=0x73B24`. The event bridge logged creation of a host notification event. This captures a later wait after queue progress, but does not identify its missing/late producer.
+
+The window was not captured for visual inspection in this run. The title screen, audible output, input acceptance, and gameplay remain unverified; APU interrupt logs do not prove audio output. The test used opt-in diagnostic behavior and does not validate those modes as defaults. No progress bars advance; Milestone 3 remains active.
+
+Next: sample the event state and its set/reset calls in this later startup phase, then correlate the waiting guest thread with the event producer before changing event or audio behavior.
+
+### Event-state watch during later startup (2026-10-19)
+
+A clean 60-second repetition enabled a change watch on the event's signal-state dword and wrote watchdog output to a separate file. The watch first observed state `1`, then state `0` before the guest's `KeWaitForSingleObject` call (ordinal 159). The watchdog's native stack confirms the guest was inside `bridge_KeWaitForSingleObject` → `xbox_KeWaitForSingleObject` → `WaitForSingleObjectEx`; the watched value was zero at wait entry and NV2A `PUT=GET=0x72680`. Other concurrent samples observed `1→0` across bridge calls, but do not identify which guest thread wrote the value. This verifies an event reset immediately before a host wait, not the event producer or why the wait is not released. The run logged 318 flips and 321 clears; no screenshot was collected for visual inspection, and title presentation remains unverified for this particular run.
+
+A separate repeat without a dedicated watchdog log stopped updating its log while the process remained responsive at 0 FPS/draws 2. Three external memory samples read the event state as `1`; the process was stopped manually. Treat it as an unsuccessful capture attempt, superseded by the clean watchdog run above.
+
+Next: trace which guest thread sets and resets `0x0021DCF8` around ordinal 159, and correlate that with the host event handle's signaled state before changing synchronization.
+
 ### Current title-screen reproduction (2026-10-19)
 
 Repeated the prior modeled-vblank, Steel Battalion USB-profile launch on the current Release executable with a 120-second watchdog, periodic framebuffer capture, and an A pulse scheduled for 90 seconds after USB input began. The periodic captures `screen.bmp00001.bmp` through `screen.bmp00010.bmp` have identical SHA-256 `257DE5B4D13936BFF146FEA2219FE4381F52C91CDC3358C174CFEEF4304F77F4`; visual inspection confirms the Steel Battalion title art and “PRESS MAIN WEAPON BUTTON” prompt remained on screen across the capture interval. This reproduces title presentation on the current executable.
