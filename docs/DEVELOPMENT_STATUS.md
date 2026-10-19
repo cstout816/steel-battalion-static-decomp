@@ -261,7 +261,7 @@ Windows graphics migration: guest draws rendered by Vulkan [--------------------
 Audio: guest DSP execution and audible output     [##########----------] 1 / 2 (50%)
 
 Original SB controller: input, mapping, lights   [--------------------] 0 / 3 (0%)
-Virtual XID path: report delivery and title response [##########----------] 1 / 2 (50%)
+Virtual XID path: report, guest state, title response [######--------------] 1 / 3 (33%)
 Modern controller and accessibility profiles     [--------------------] 0 / 4 (0%)
 Graphics: resolution, ratios, display modes      [--------------------] 0 / 4 (0%)
 Graphics: HUD, FOV, image controls, presets      [--------------------] 0 / 4 (0%)
@@ -1811,3 +1811,11 @@ The previous no-transfer captures had `RECOMP_USB_PROFILE=steel-battalion` but o
 With the title prompt visible, appended a single 500 ms A press through the live-input hook. The report changed from neutral to byte 2 = `0x01`, then returned to neutral. XboxDevWiki's controller-to-Xbox table identifies that field as `RightJoyMainWeapon`; the upstream [Ryzee119 XID test gist](https://gist.github.com/Ryzee119/5b74e94eb765bcc54e68afde9ddc7623) independently defines the Steel Battalion report as 26 bytes. Despite the correctly shaped report and mapped bit, the title prompt did not change. This verifies virtual XID enumeration and report delivery, but not game-side input acceptance or physical controller support. The screenshot remained the title screen at 0 FPS / 29 draws. No gameplay/audio result was verified.
 
 Stopped only this bounded project run. No source was modified and no process remains. The XID diagnostic bar records one verified stage out of two: transport/report delivery is verified; title response is not. The broader original-controller bar remains 0/3 because full device support, mappings, and outputs are not established. Updated the progress bars and retained local logs under `iso/local-analysis/logs/m3-ohci-enabled-180s-20261019/`. Next trace how OHCI's completed report reaches the guest controller object and which guest-visible field the title loop reads; keep the XID descriptor/report aligned to the documented 26-byte format. Milestone 3 remains active.
+
+### 2026-10-19 guest OHCI completion path
+
+Added a capped trace to the generated guest DPC's endpoint/general-transfer handlers. In a 50-second USB-enabled windowed startup, the DPC repeatedly dispatched the 26-byte interrupt-IN completion descriptor to general TD handler `sub_0025BFA3`. Samples 42, 44, 46, and 48 used TD `0x80002E70`; its OHCI status word was `0x011406C1` (condition-code field 0), and the transfer metadata reported length `0x1A` (26) with buffer end `0x010816DC`. No endpoint-descriptor (`sub_0025C982`) samples were logged in the capped trace. Together with the host-side XID report log, this shows the input transfer reaches the guest completion handler. It still does not show the callback updating the controller state returned by `sub_00257103`, nor the title accepting the button.
+
+No title prompt or input press was attempted in this 50-second run. Stopped the bounded process, restored generated `recomp_0018.c` exactly to SHA-256 `77071AF8047D254E70A10A1E7F0A9909F1C44C0A62FAE94F5DDB5ADB1E94549B`, rebuilt Release x64, verified `[XID-DPC-TD]` and `[XID-DPC-ED]` are absent from the executable, and confirmed no game process remains. Local log is ignored under `iso/local-analysis/logs/m3-guest-xid-dpc-180s-20261019/`.
+
+Refined the virtual XID bar to separate three checks: report delivery is verified (1/3), guest-state update and title response remain unverified. The original-controller support bar remains 0/3. Next trace `sub_0025BE7D`/`sub_0025BE01` through the report callback and correlate the report buffer with the input object copied by `sub_00257103`. Milestone 3 remains active; audio, gameplay, saves, and campaign progression remain unverified.
