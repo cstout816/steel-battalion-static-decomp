@@ -1467,3 +1467,11 @@ Temporarily instrumented the generated NV2A method branch at `0x0021701E` and th
 No title prompt, input response, audio, or gameplay was verified. The watchdog did exit the process when native stack symbolization was disabled. Temporary generated/runtime trace edits were restored byte-for-byte against saved local copies and the ordinary Release executable was rebuilt; no trace marker remains in that executable. No game process remains. Logs stay ignored/local at `iso/local-analysis/logs/m3-event-producer-trace-wide-60s-20261019/`. Milestone 3 and all progress bars remain unchanged.
 
 Next: resolve why startup remains in the font path and reach a run that executes the GPU method branch; then correlate its context and event-set return with queue completion and the title wait. Preserve the user's uncommitted controller-profile patch.
+
+### Startup stall maps to the first font-load path (2026-10-19)
+
+Mapped the watchdog's guest address `0x00261918` against the original XBE section table and confirmed it is the `.rdata` string `D:\media\fonts\ari26nml.bmf`. The translated call chain shows `sub_000D70A0` calling `sub_0004F460`, which passes that filename to `sub_0004E6F0`; that routine calls `sub_0018E630` to open the resource. The watchdog stack contains return addresses `0x0004E71E` (inside that open call), `0x0004F496` (back in the font loader), and `0x000D7128` (font/resource initialization), plus a nested wait at `0x0020EC83` on event `0x0021DCE4`.
+
+This localizes the 60-second startup stall to the first normal-font resource-load path. It does not yet prove whether the file-open request reaches the host kernel bridge or whether its nested notification wait is the actual blocker: the captured runtime log contains no `ari26nml.bmf` path line, though the extracted user asset exists. It also does not explain the separate later queue-space wait on `0x0021DCF4` from the prior title capture.
+
+No source or build change was made for this static mapping. No game process remains. Next trace the guest import call from `sub_0018E630` and the DCE4 notification wait together, confirming whether the host receives the font path, the result of the open, and the signal/wait order. Milestone 3 and progress bars remain unchanged.
