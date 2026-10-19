@@ -1536,3 +1536,13 @@ The vector-3 NV2A interrupt trace repeatedly reported `line=1 result=claimed`, c
 Restored generated sources and rebuilt the ordinary Release executable; confirmed the trace markers were absent and no game process remained. Captures and logs remain local/ignored. Audio output, a confirmed title-button response, gameplay, and campaign behavior remain unverified. Progress bars remain unchanged; Milestone 3 remains active.
 
 Next: trace the guest reads of NV2A context/notification state that gate the method-dispatch condition, and compare them with the executor's writes. Do not force the guest event state or change the controller mapping based on this trace alone.
+
+### NV2A nonzero NOP notification handling (2026-10-19)
+
+A bounded 120-second profile recorded 263 nonzero payloads among the first 275 `NV097_NO_OPERATION` methods. The existing pushbuffer executor ignored this method, and the PGRAPH register handler treated interrupt status and enable registers as ordinary storage. The guest's ISR reads the PGRAPH trapped method and notification source; xemu's reference implementation models a nonzero NOP as a PGRAPH error/notification interrupt, records the trapped method/data, and waits for the guest to acknowledge it by writing the interrupt status register ([xemu PGRAPH implementation](https://github.com/xemu-project/xemu/blob/master/hw/xbox/nv2a/nv2a_pgraph.c#L2783-L2875), [xemu NOP notification method](https://github.com/xemu-project/xemu/blob/master/hw/xbox/nv2a/nv2a_pgraph.c#L3268-L3326)).
+
+Implemented that device behavior in the local runtime and saved it as the isolated dependency patch `patches/xboxrecomp-v0.13.1-nv2a-nop-notification.patch`. The Release build succeeded. In a bounded profiled launch, NV2A traces showed the PGRAPH interrupt source asserted and the guest interrupt claimed it; the title art and “PRESS MAIN WEAPON BUTTON” prompt were visible. This verifies the notification/acknowledgement path can run through startup, not that the game is playable.
+
+The same run ended at the 120-second watchdog in the separate queue-space wait on event `0x0021DCF4`, with guest `PUT=0x00080F6C` and `GET=0x0007C52C`. Audio output, a confirmed button response, gameplay, and campaign progression remain unverified. No progress bars advance; Milestone 3 remains active. No game image or generated game code was added to Git.
+
+Next: trace the queue-space producer and the executor's pending segment at the watchdog, including the completion semaphore and the event's set path, then repeat the title-start input with guest-visible controller state.

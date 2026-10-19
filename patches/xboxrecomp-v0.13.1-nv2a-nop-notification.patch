@@ -1,0 +1,146 @@
+diff --git a/src/nv2a/nv2a_state.h b/src/nv2a/nv2a_state.h
+index 05f752e..52d6ce1 100644
+--- a/src/nv2a/nv2a_state.h
++++ b/src/nv2a/nv2a_state.h
+@@ -62,6 +62,8 @@ struct PGRAPHState {
+     uint32_t pending_interrupts;
+     uint32_t enabled_interrupts;
+     uint32_t regs[0x2000];
++    QemuMutex lock;
++    QemuCond interrupt_cond;
+     /* Phase 3-4: Full PGRAPH state will go here */
+ };
+ 
+@@ -175,6 +177,8 @@ extern const NV2ABlockInfo blocktable[NV_NUM_BLOCKS];
+ void nv2a_update_irq(NV2AState *d);
+ void nv2a_set_irq_line_callback(void (*callback)(int asserted));
+ void nv2a_vblank_tick(void);
++void nv2a_pgraph_notify(uint32_t subchannel, uint32_t method,
++                        uint32_t parameter);
+ 
+ /* Register block log helpers (no-op stubs since trace is disabled) */
+ static inline
+diff --git a/src/nv2a/nv2a_core.c b/src/nv2a/nv2a_core.c
+index 9164afa..514252e 100644
+--- a/src/nv2a/nv2a_core.c
++++ b/src/nv2a/nv2a_core.c
+@@ -534,7 +534,22 @@ void pvideo_write(void *opaque, hwaddr addr, uint64_t val, unsigned int size)
+ uint64_t pgraph_read(void *opaque, hwaddr addr, unsigned int size)
+ {
+     NV2AState *d = (NV2AState *)opaque;
+-    uint64_t r = d->pgraph.regs[addr];
++    uint64_t r;
++
++    qemu_mutex_lock(&d->pgraph.lock);
++    switch (addr) {
++    case NV_PGRAPH_INTR:
++        r = d->pgraph.pending_interrupts;
++        break;
++    case NV_PGRAPH_INTR_EN:
++        r = d->pgraph.enabled_interrupts;
++        break;
++    default:
++        r = d->pgraph.regs[addr];
++        break;
++    }
++    qemu_mutex_unlock(&d->pgraph.lock);
++
+     nv2a_reg_log_read(NV_PGRAPH, addr, size, r);
+     return r;
+ }
+@@ -543,7 +558,53 @@ void pgraph_write(void *opaque, hwaddr addr, uint64_t val, unsigned int size)
+ {
+     NV2AState *d = (NV2AState *)opaque;
+     nv2a_reg_log_write(NV_PGRAPH, addr, size, val);
+-    d->pgraph.regs[addr] = val;
++
++    qemu_mutex_lock(&d->pgraph.lock);
++    switch (addr) {
++    case NV_PGRAPH_INTR:
++        d->pgraph.pending_interrupts &= ~(uint32_t)val;
++        qemu_cond_broadcast(&d->pgraph.interrupt_cond);
++        break;
++    case NV_PGRAPH_INTR_EN:
++        d->pgraph.enabled_interrupts = (uint32_t)val;
++        break;
++    default:
++        d->pgraph.regs[addr] = (uint32_t)val;
++        break;
++    }
++    qemu_mutex_unlock(&d->pgraph.lock);
++
++    if (addr == NV_PGRAPH_INTR || addr == NV_PGRAPH_INTR_EN)
++        nv2a_update_irq(d);
++}
++
++void nv2a_pgraph_notify(uint32_t subchannel, uint32_t method,
++                        uint32_t parameter)
++{
++    NV2AState *d = g_nv2a;
++    uint32_t channel_id;
++    uint32_t trapped_addr;
++
++    if (!d || parameter == 0)
++        return;
++
++    qemu_mutex_lock(&d->pgraph.lock);
++    channel_id = (d->pgraph.regs[NV_PGRAPH_CTX_USER]
++                  & NV_PGRAPH_CTX_USER_CHID) >> 24;
++    trapped_addr = ((channel_id << 20) & NV_PGRAPH_TRAPPED_ADDR_CHID)
++                 | ((subchannel << 16) & NV_PGRAPH_TRAPPED_ADDR_SUBCH)
++                 | (method & NV_PGRAPH_TRAPPED_ADDR_MTHD);
++    d->pgraph.regs[NV_PGRAPH_TRAPPED_ADDR] = trapped_addr;
++    d->pgraph.regs[NV_PGRAPH_TRAPPED_DATA_LOW] = parameter;
++    d->pgraph.regs[NV_PGRAPH_NSOURCE] = NV_PGRAPH_NSOURCE_NOTIFICATION;
++    d->pgraph.pending_interrupts |= NV_PGRAPH_INTR_ERROR;
++    nv2a_update_irq(d);
++
++    /* The NV097 NOP notification is a synchronous software method: the
++     * command processor stays here until the guest ISR acknowledges PGRAPH. */
++    while (d->pgraph.pending_interrupts & NV_PGRAPH_INTR_ERROR)
++        qemu_cond_wait(&d->pgraph.interrupt_cond, &d->pgraph.lock);
++    qemu_mutex_unlock(&d->pgraph.lock);
+ }
+ 
+ /* ============================================================
+@@ -823,6 +884,11 @@ NV2AState *nv2a_init_standalone(uint8_t *vram_ptr, uint32_t vram_size,
+     qemu_cond_init(&d->pfifo.fifo_cond);
+     qemu_cond_init(&d->pfifo.fifo_idle_cond);
+ 
++    /* PGRAPH notification methods wait for the guest ISR's write-one-to-clear
++     * acknowledgement before the command processor continues. */
++    qemu_mutex_init(&d->pgraph.lock);
++    qemu_cond_init(&d->pgraph.interrupt_cond);
++
+     g_nv2a = d;
+ 
+     fprintf(stderr, "[NV2A] Standalone GPU initialized: VRAM=%uMB RAMIN=%uKB\n",
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+index eeb4032..59b8e38 100644
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -35,6 +35,8 @@
+ #endif
+ #include "kernel.h"   /* XBOX_CONTIG_BASE / XBOX_CONTIG_SIZE */
+ #include "xbox_memory_layout.h"   /* xbox_Nv2aFrameCounterFlip */
++extern void nv2a_pgraph_notify(uint32_t subchannel, uint32_t method,
++                               uint32_t parameter);
+ /* The swizzle decoder the D3D8 layer already uses -- one implementation of
+  * Morton order, not a second one that can disagree with it. */
+ #include "../d3d/d3d8_swizzle.h"
+@@ -3435,6 +3437,15 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+                     subch, method, param);
+     }
+ 
++    /* NV097_NO_OPERATION is also the Xbox D3D software notification method.
++     * Nonzero payloads trap the method in PGRAPH and synchronously wait for
++     * the guest interrupt handler to acknowledge it. */
++    if (method == 0x0100u) { /* NV097_NO_OPERATION */
++        if (param != 0)
++            nv2a_pgraph_notify(subch, method, param);
++        return;
++    }
++
+     if (s_ftrace == 2) {
+         /* RECOMP_FRAME_TRACE_METHODS: every method of the traced frame,
+          * less the bulk (vertex data, program and constant uploads). */
