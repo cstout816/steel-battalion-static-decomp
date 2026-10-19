@@ -33,7 +33,7 @@ These bars separate file analysis and generated output from semantic coverage. I
 ```text
 XBE format, sections, libraries, and image map  [####################] 1 / 1 (100%)
 Kernel import ordinals named in analysis         [####################] 123 / 123 (100%)
-Function translation output emitted              [####################] 9,400 / 9,400 (100%)
+Function translation output emitted              [####################] 9,403 / 9,403 (100%)
 Unsupported instruction sites resolved           [--------------------] 0 / 243 (0%)
 Unresolved call targets implemented              [##############------] 251 / 351 (72%)
 Generated Windows executable builds              [####################] 1 / 1 (100%)
@@ -43,7 +43,7 @@ Title screen shown in one bounded run             [####################] 1 / 1 (
 The ordinal bar records names mapped to the kernel import table, not implementations verified against live game behavior. The build bar records a local executable build only. One bounded guest-framebuffer capture verifies title-screen presentation; other runs still stall at the Nude Maker splash. A title capture does not imply complete or correct decompilation.
 
 ```text
-Static recompilation: functions emitted       [####################] 9,400 / 9,400 (100%)
+Static recompilation: functions emitted       [####################] 9,403 / 9,403 (100%)
 Static recompilation: unsupported ops resolved [--------------------] 0 / 243 (0%)
 Static recompilation: unresolved calls resolved [##############------] 251 / 351 (72%)
 Windows target: build completes locally         [#-------------------] 1 / 1 (100%)
@@ -1133,3 +1133,9 @@ Restored recomp_0001.c to the verified untraced SHA-256 B67252979427C1CB1C6E3CB2
 Two matched 45-second startup runs used the same Release executable and `RECOMP_RASTER_THREADS` override, changing only the worker count. On this host (16 logical processors), the one-worker run recorded 10 timings for the same 512×512 textured CPU-raster draw (mean 801.43 ms, range 770.77–837.03 ms) and four framebuffer captures. The 16-worker run recorded eight timings (mean 1,279.92 ms, range 1,264.58–1,299.43 ms) and three captures. In these startup samples, 16 workers were about 60% slower for this draw. This result applies to the measured splash draw and does not establish performance for other scenes or gameplay.
 
 The worker pool currently defaults to `GetSystemInfo().dwNumberOfProcessors - 4`, which yields 12 workers on this host; `RECOMP_RASTER_THREADS` is an existing runtime override. The comparison does not justify changing the default from one narrowly sampled draw. Keep the default unchanged until a broader set of draw workloads is profiled. The runs remained in startup; no title progression, gameplay, audio, or input result was verified. Logs are local/ignored under `iso/local-analysis/logs/m3-raster-threads-{1,16}-20261018/`. Next: profile the distinct startup draw classes and determine whether time is dominated by CPU rasterization, asset loading, or guest-side work before another title progression attempt.
+
+### Recovered runtime XPP indirect-call entries (2026-10-18)
+
+The matched raster logs each contained 202 failed indirect calls to XBE VA `0x00259B4C`. Static XPP disassembly shows that the preceding recognized function ends at that address; the missing entry is a 60-byte routine (`0x00259B4C`–`0x00259B88`) whose out-of-line branch reaches a 5-byte tail-jump stub at `0x00259B88`, which jumps to `0x00193C94`. The seeded local analysis database recovered both boundaries. Their generated C bodies were added only to the ignored local generated source chunk, declarations, and sorted dispatch table; the resulting dispatch table contains 9,403 entries. No game-derived source or binary was added to Git.
+
+The Windows Release target rebuilt successfully. A 45-second bounded run with the two entries present exited at watchdog code 3 and captured 60 guest-framebuffer flips. Neither address produced an unresolved-call warning. The last capture still shows the Nude Maker splash; the watchdog sampled return address `0x000DFE75` inside the logo draw path, with NV2A USER PUT/GET `0x18D5C/0x182C4`. Startup therefore remains unresolved. This run also enabled modeled vblank/title-event behavior and per-flip capture, so timing changes cannot be attributed to the function recovery alone. The title/gameplay, controller, audio, and aggregate unresolved-call progress bars do not advance from this result. Next: investigate why the guest remains in the logo draw/fence path while preserving the recovered entries in local analysis output.
