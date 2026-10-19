@@ -1,0 +1,97 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -2459,7 +2459,14 @@ static int vulkan_logo_fade_quad(void)
+     uint32_t width, height, i, x, y, argb;
+     size_t bytes;
+     uint8_t *mem = (uint8_t *)xbox_GetMemoryOffset();
++    int rgba_cached = 0;
++    int logo_cacheable;
++    int logo_cache_hit = 0;
+     static int reported;
++    static int logo_cache_valid;
++    static uint32_t logo_cache_offset;
++    static uint8_t logo_source_cache[512u * 512u / 2u];
++    static uint8_t logo_rgba_cache[512u * 512u * 4u];
+ 
+     if (!s_logo_depth_zero_valid
+         || s_logo_depth_zero_offset != s_gpu.zeta_offset
+@@ -2504,22 +2511,46 @@ static int vulkan_logo_fade_quad(void)
+         || (size_t)t->width > SIZE_MAX / (size_t)t->height / 4)
+         return 0;
+     bytes = (size_t)t->width * t->height * 4;
+-    rgba = (uint8_t *)malloc(bytes);
++    logo_cacheable = t->color == 0x0C && t->width == 512
++                  && t->height == 512 && !t->cube;
++    if (logo_cacheable) {
++        const uint8_t *source = mem + t->offset;
++        logo_cache_hit = logo_cache_valid && logo_cache_offset == t->offset
++            && memcmp(logo_source_cache, source, sizeof(logo_source_cache)) == 0;
++        rgba = logo_rgba_cache;
++        rgba_cached = 1;
++        if (!logo_cache_hit)
++            logo_cache_valid = 0;
++    } else {
++        rgba = (uint8_t *)malloc(bytes);
++    }
+     if (!rgba)
+         return 0;
+-    for (y = 0; y < t->height; y++) {
+-        for (x = 0; x < t->width; x++) {
+-            size_t at = ((size_t)y * t->width + x) * 4;
+-            if (!sample_tex(t, 0, x, y, &argb)) {
+-                free(rgba);
+-                return 0;
++    if (!logo_cache_hit) {
++        for (y = 0; y < t->height; y++) {
++            for (x = 0; x < t->width; x++) {
++                size_t at = ((size_t)y * t->width + x) * 4;
++                if (!sample_tex(t, 0, x, y, &argb)) {
++                    if (!rgba_cached)
++                        free(rgba);
++                    return 0;
++                }
++                rgba[at + 0] = (uint8_t)(argb >> 16);
++                rgba[at + 1] = (uint8_t)(argb >> 8);
++                rgba[at + 2] = (uint8_t)argb;
++                rgba[at + 3] = (uint8_t)(argb >> 24);
+             }
+-            rgba[at + 0] = (uint8_t)(argb >> 16);
+-            rgba[at + 1] = (uint8_t)(argb >> 8);
+-            rgba[at + 2] = (uint8_t)argb;
+-            rgba[at + 3] = (uint8_t)(argb >> 24);
++        }
++        if (logo_cacheable) {
++            memcpy(logo_source_cache, mem + t->offset,
++                   sizeof(logo_source_cache));
++            logo_cache_offset = t->offset;
++            logo_cache_valid = 1;
+         }
+     }
++    if (getenv("RECOMP_TEXTURE_CACHE_TRACE"))
++        fprintf(stderr, "[TEXTURE-CACHE] logo decode %s\n",
++                logo_cache_hit ? "reused byte-verified RGBA" : "refreshed RGBA");
+     for (i = 0; i < 6; i++) {
+         uint32_t n = quad[i];
+         vtx[i][0] = s_xf[n].pos[0];
+@@ -2536,14 +2567,17 @@ static int vulkan_logo_fade_quad(void)
+             s_surface, s_gpu.pitch, width, height, s_gpu.clip_x, s_gpu.clip_y,
+             s_gpu.clip_w, s_gpu.clip_h, (const float (*)[8])vtx, 6,
+             rgba, t->width, t->height)) {
+-        free(rgba);
++        if (!rgba_cached)
++            free(rgba);
+         return 0;
+     }
+ #else
+-    free(rgba);
++    if (!rgba_cached)
++        free(rgba);
+     return 0;
+ #endif
+-    free(rgba);
++    if (!rgba_cached)
++        free(rgba);
+ 
+     /* Depth is still zero from the immediately preceding exact quad. This
+      * draw also has constant z=0 and LEQUAL, so its depth pass/write is a no-op. */
