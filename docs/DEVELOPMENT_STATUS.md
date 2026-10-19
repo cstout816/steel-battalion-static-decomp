@@ -261,6 +261,7 @@ Windows graphics migration: guest draws rendered by Vulkan [--------------------
 Audio: guest DSP execution and audible output     [##########----------] 1 / 2 (50%)
 
 Original SB controller: input, mapping, lights   [--------------------] 0 / 3 (0%)
+Virtual XID path: report delivery and title response [##########----------] 1 / 2 (50%)
 Modern controller and accessibility profiles     [--------------------] 0 / 4 (0%)
 Graphics: resolution, ratios, display modes      [--------------------] 0 / 4 (0%)
 Graphics: HUD, FOV, image controls, presets      [--------------------] 0 / 4 (0%)
@@ -1802,3 +1803,11 @@ The temporary `[BAD-REF]` probe built and ran successfully. In the 120-second ru
 Restored generated translation `recomp_0016.c` byte-for-byte to baseline SHA-256 `5F12E72D5156F5353BE2944485C76B5665904CDD9528936ECF11F9D3579134AA`. An initial incremental build reused the old object, so the restored source timestamp was advanced and the translation unit rebuilt. Release build succeeded, `[BAD-REF]` is absent from the final executable, and no game process remains. The ignored capture is under `iso/local-analysis/logs/m3-bad-ref-probe-120s-20261019/`.
 
 Next: enable the existing OHCI/XID trace on a visible title run, confirm whether USB control enumeration and periodic interrupt transfers reach `usb_gamepad_report`, then send one mapped Main Weapon input only if the report path is observed. Audio, controller response, gameplay, saving, and campaign progression remain unverified. Milestone 3 and all progress bars remain unchanged.
+
+### 2026-10-19 OHCI enabled and title-input report
+
+The previous no-transfer captures had `RECOMP_USB_PROFILE=steel-battalion` but omitted the separate `RECOMP_USB=1` opt-in. `ohci_init` returns before enabling the host controller unless `RECOMP_USB` is set, so the profile variable alone did not start USB input. Relaunched with both flags. OHCI0 became operational after 5.14 seconds, detected the virtual Steel Battalion device on port 1, and completed six XID setup/control requests: device descriptor, address, configuration descriptor, configuration, XID descriptor, and input capabilities. The game then polled 26-byte reports; no control-transfer stall was recorded.
+
+With the title prompt visible, appended a single 500 ms A press through the live-input hook. The report changed from neutral to byte 2 = `0x01`, then returned to neutral. XboxDevWiki's controller-to-Xbox table identifies that field as `RightJoyMainWeapon`; the upstream [Ryzee119 XID test gist](https://gist.github.com/Ryzee119/5b74e94eb765bcc54e68afde9ddc7623) independently defines the Steel Battalion report as 26 bytes. Despite the correctly shaped report and mapped bit, the title prompt did not change. This verifies virtual XID enumeration and report delivery, but not game-side input acceptance or physical controller support. The screenshot remained the title screen at 0 FPS / 29 draws. No gameplay/audio result was verified.
+
+Stopped only this bounded project run. No source was modified and no process remains. The XID diagnostic bar records one verified stage out of two: transport/report delivery is verified; title response is not. The broader original-controller bar remains 0/3 because full device support, mappings, and outputs are not established. Updated the progress bars and retained local logs under `iso/local-analysis/logs/m3-ohci-enabled-180s-20261019/`. Next trace how OHCI's completed report reaches the guest controller object and which guest-visible field the title loop reads; keep the XID descriptor/report aligned to the documented 26-byte format. Milestone 3 remains active.
