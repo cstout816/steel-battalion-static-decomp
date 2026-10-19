@@ -4,6 +4,16 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
+### Latest modeled-vblank title and controller probe (2026-10-19)
+
+Static inspection of the saved watchdog stack mapped guest call target `0xFE00010C` to the XBE's `KeWaitForSingleObject` import. The guest was waiting on its device event at `0x0021DCE4`; its signal-state field at `0x0021DCE8` was zero. The preceding probe had omitted the runtime's opt-in modeled vblank, which the existing guest ISR/DPC path needs to signal that event.
+
+With modeled vblank enabled, the event changed to signaled and startup advanced. A 45-second watchdog sample recorded 32 flips and 62 draw submissions. A 120-second windowed run recorded 369 flips and 763 draws, loaded `advdat00.adv`, and displayed the Steel Battalion title artwork in the framebuffer. It then waited on a separate guest event at `0x0021DCF4` (`0x0021DCF8` was zero); it did not verify that the title prompt accepted input. The capture is local and ignored at `iso/local-analysis/logs/m3-modeled-vblank-window-120s-20261018/window.bmp`.
+
+A follow-up run scheduled one virtual A-button pulse at 140 seconds. The controller script logged analog byte `0x01`; captures immediately before and after the pulse had identical SHA-256 hashes. The watchdog again found the guest waiting on `0x0021DCF4`. This run did not enable XID report-byte tracing, so it does not prove what packet reached the game, and it did not verify a game-side response. Audio output and gameplay remain unverified.
+
+All three launches exited through their explicit watchdogs; no project runtime remains. The no-vblank run's 35-second watchdog now reliably captured the guest stack and event state, while the 120- and 160-second probes captured their later state. No persistent runtime source changed. Progress bars remain unchanged and Milestone 3 stays active. Next: trace the producer and waiter for `0x0021DCF4`, then repeat the controller pulse with XID report tracing and an unambiguous title prompt before claiming game-side input.
+
 ### Latest bounded startup follow-up (2026-10-18)
 
 A follow-up launch with the APU, pushbuffer executor, virtual USB device, and framebuffer window initialized the APU and OHCI device and created the guest notification event at `0x0021DCE4`. It then stayed at DMA `PUT=GET=0x495C`, produced one framebuffer flip and zero guest draw batches, and captured a black frame. The saved log has no watchdog stack snapshot or later guest-event result, so it does not establish that the guest reached the separate event wait observed in another run. This launch does not verify title display, audible output, or game-level controller input.
