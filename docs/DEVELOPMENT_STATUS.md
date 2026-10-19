@@ -4,6 +4,14 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
+### Latest guest file and title-event trace (2026-10-19)
+
+A 180-second file-logging run resolved and read the four font files named in the prior watchdog stack: `ari26nml.bmf` (1,396,652 bytes), `ari26hir.bmf` (7,284), `ari26kat.bmf` (4,024), and `ari26kan.bmf` (3,992), all with successful read statuses. This rules out a missing font asset as the cause indicated by that stack. The other missing-file reports were probes for save slots such as `TDATA\43430002\user00.sav` through `user07.sav`.
+
+The runtime served 3,092 USB input reports and reached the guest wait on event `0x0021DCF4`; the title prompt itself was not captured. The configured 140-second A pulse did not appear in the log, so this run does not test game-side input. The watchdog snapshot showed an idle NV2A queue at `PUT=GET=0x6A8B4` and the guest waiting via `KeWaitForSingleObject`; no audio or gameplay result was established. The run exited at its configured watchdog (code 3), with no process left running.
+
+No source changes were needed. Milestone 3 and all progress bars remain unchanged. Next: capture the title prompt and schedule an input pulse earlier relative to the first USB report, while tracing the guest's controller state at the same time.
+
 ### Latest guest controller-query trace (2026-10-19)
 
 A 180-second watchdog-bounded run added temporary change-only logging to guest `sub_00257103`, which writes the queried gamepad fields into a guest result buffer. Its initial successful result was neutral (`buttons=0000`, triggers `00/00`, centered sticks). The virtual Steel Battalion endpoint reached 230 input reports before its counters stopped advancing; the scheduled 140-second A pulse never appeared in the log, so the run did not deliver the pulse after the startup stall. No title prompt or screenshot was captured. At watchdog, the NV2A pushbuffer was idle at `PUT=GET=0x610EC`; guest registers included `ESP=0x00F7FE18`, `EAX=0x00F7FE60`, and `EDI=0x00261918`. Mapping the saved return address `0x0004F496` identifies the caller as `sub_0004F460`; its stack arguments point to `D:\media\fonts\ari26nml.bmf` and buffer record `0x004CA140`, passed to the font-load helper `sub_0004E6F0`. This places the stall in that font-loading call chain, but does not yet identify the blocked file API or explain the stall.
