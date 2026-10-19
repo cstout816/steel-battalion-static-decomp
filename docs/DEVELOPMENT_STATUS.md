@@ -4,6 +4,12 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
+### Latest bounded startup follow-up (2026-10-18)
+
+A follow-up launch with the APU, pushbuffer executor, virtual USB device, and framebuffer window initialized the APU and OHCI device and created the guest notification event at `0x0021DCE4`. It then stayed at DMA `PUT=GET=0x495C`, produced one framebuffer flip and zero guest draw batches, and captured a black frame. The saved log has no watchdog stack snapshot or later guest-event result, so it does not establish that the guest reached the separate event wait observed in another run. This launch does not verify title display, audible output, or game-level controller input.
+
+The test process remained alive after the intended bounded launch window. I verified its executable path was this project's runtime and stopped that process; no project game process remains. The logs and captures are local under the ignored `iso/local-analysis/logs/m3-async-title-event-apu-usb-90s-20261019/` folder. Milestone 3 and all progress bars remain unchanged. Next, preserve a reliable watchdog/cleanup path and capture the guest call stack in the same run before drawing conclusions about the post-startup wait.
+
 ### Latest bounded title and Steel Battalion USB input probe (2026-10-18)
 
 A follow-up 180-second run kept the `RECOMP_PAD_LIVE` input file empty so no button was sent before the title prompt appeared. It stopped at the Dolby startup image and produced no new framebuffer captures after the first 44 seconds. The watchdog sampled guest stack pointer `0x00F7FE18`, registers `EAX=0x00F7FE60`, `ESI=0x80100080`, and NV2A USER `PUT=GET=0x645FC`; the process exited at its configured bound. This run neither reached the title nor tested game-side input. The stalled path is not yet explained.
