@@ -32,6 +32,14 @@ At 150 seconds, the watchdog found the guest waiting on event `0x0021DCF4`; NV2A
 
 Next: trace the producer and waiter for `0x0021DCF4` and observe whether the USB completion path updates the guest state before the title's wait resumes.
 
+### External sample of event, USB report, and XInput state (2026-10-19)
+
+A second normal Release run sampled three guest addresses through `ReadProcessMemory`: event object `0x0021DCF4`, the previously observed OHCI report buffer `0x010816C3`, and XInput result `0x004AF670`. This run remained on the Nude Maker splash and did not send input. The event signal-state dword at `0x0021DCF8` was `1` and remained `1` across four samples; the USB report buffer remained neutral (`00 1A 00 00 ...`), and the XInput packet counter stopped at `0x0000066C` with neutral controls. Thus the signaled event alone did not coincide with resumed input polling in this sample.
+
+At the 130-second watchdog, the guest stack again passed through `ESP=0x00F7FE18`, `EDI=0x00261918`; NV2A `PUT=GET=0x6BFE8`. The process exited with no input sent and no title prompt reached. These reads are observations from one run and do not identify the event producer or prove why the font-load path stopped. Progress bars stay unchanged; Milestone 3 remains active.
+
+Next: correlate changes to this event, USB report buffer, and XInput state with guest wait returns and USB DPC callbacks during a title-reaching run.
+
 ### Latest controller poll and black-frame sample (2026-10-19)
 
 A 150-second watchdog-bounded run traced changes to the guest controller result and scheduled A at 90 seconds after the first USB report. The trace showed a neutral result; the scheduled pulse did not appear in the log, and the captured window frames remained black. OHCI served 576 input reports before its counters stopped advancing. The watchdog again captured the font-load call chain (`ESP=0x00F7FE18`, `EDI=0x00261918`); this is not evidence of controller rejection or a title-screen input test.
