@@ -1700,3 +1700,13 @@ A separate 90-second kernel watch of signal word `0x0021DCE8` recorded 534 bridg
 The full `RECOMP_PB_SCAN` run was not comparable to the lower-overhead capture: it produced a large per-method log, kept the frame black, and had USER DMA `PUT=GET=0x495C` at its watchdog. Treat it as instrumentation overhead evidence only, not a valid conclusion about ordinary startup. A separate attempt with `RECOMP_WATCHDOG_NATIVE_PC=1` left its watchdog log empty after the timeout while the runtime remained active; the DbgHelp stack walk did not complete, so I stopped that diagnostic process. No source was changed by these captures; no game process remains. Logs and screenshots remain ignored under `m3-dce4-queue-samples-90s-20261019/`, `m3-native-pc-watch-90s-20261019/`, `m3-guest-stack-peek-90s-20261019/`, and `m3-dce4-state-watch-90s-20261019/`.
 
 Milestone 3 and progress bars remain unchanged. Next identify which guest path advances `0x00351F5C`/`0x00355730`, while correlating the six-entry request with DCE4 state and the last completed pushbuffer segment in one low-overhead run. Do not infer a lost event from the final wait frame alone.
+
+### 2026-10-19 guest ring producer writer
+
+A 60-second page watch on `0x00351F5C` caught 65 changes. The reported writer, `sub_0020F2C0+0x74`, is a getter: it reads `context+0x2580` and copies that value to its output pointer (`0x00351F5C`). It is not the code that advances the source counter.
+
+A follow-up watched the source counter `0x0021DD10` directly and caught 379 increments, from 0 through `0x17B`. The writer is `sub_00216BE0+0x16C`, where the guest increments `context+0x1C0` for context `0x0021DB50`. Static code shows this routine also dispatches its callback. This identifies the writer of the sequence counter and separates its progress from pushbuffer execution; it does not establish that each increment represents a completed GPU command.
+
+At the 60-second watchdog, USER DMA `PUT=GET=0x4F5C`, the window capture remained black, and the saved guest stack was in a separate path returning through `0x0018E3BB`, not the ring wait seen in the other capture. Therefore this run cannot be used as proof that the queue wait is the cause of the black frame. No title, audio output, controller response, or gameplay was verified. No source was changed and no game process remains. Logs/captures remain ignored under `m3-limit-writer-watch-60s-20261019/` and `m3-ring-producer-writer-60s-20261019/`.
+
+Milestone 3 and progress bars remain unchanged. Next correlate the callback dispatched by `sub_00216BE0` with DCE4 notification and actual USER DMA GET advancement in a low-overhead capture. Keep the sequence counter and completed pushbuffer work as separate measurements.
