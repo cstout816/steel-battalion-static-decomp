@@ -2,6 +2,16 @@
 
 This page is for people who want the detailed engineering tracker. The project is experimental. A local diagnostic run has visually reached the title screen, but this does not mean the game is playable. Progress bars describe tracked work; they do not mean that a game feature is playable.
 
+### DCE4 event trace and title-screen capture (2026-10-19)
+
+A bounded 180-second run with temporary bridge tracing logged 7,190 `KeSetEvent` calls for DCE4, all from guest caller `0x00216CAE`, plus 400 waits from helper return `0x0020EC83`; all 400 waits returned `STATUS_SUCCESS`. The title screen was visible in the final framebuffer capture, including “PRESS MAIN WEAPON BUTTON.” The watchdog ended the run because the game process remained active; it did not report a crash. These results show that DCE4 is being signaled and its observed waits are completing in this run. They do not establish that DCE4 is responsible for earlier intermittent startup delays.
+
+No title-button press was sent during this run. Input acceptance, audible output, gameplay, save behavior, and campaign progression remain unverified. The run enabled diagnostic settings and therefore does not validate them as defaults. Captures and logs are local/ignored under `iso/local-analysis/logs/m3-dce4-ring-event-trace-180s-20261019/`.
+
+Restored `kernel_bridge.c` byte-for-byte to baseline SHA-256 `2190BBD3E20DA13238802F655F198ECEE5BCC8A123CF6A774142C298F47CF232` and rebuilt the normal Release x64 target successfully. The build retains pre-existing compiler warnings. No runtime process remains; the user's XID profile patch is untouched. Progress bars remain unchanged; Milestone 3 is active.
+
+Next: test the visible title prompt with a controlled input report while sampling the guest-visible input result, and verify audible output independently.
+
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
 ### Startup queue and event-wait comparison (2026-10-19)
