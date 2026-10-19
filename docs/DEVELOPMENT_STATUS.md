@@ -1496,3 +1496,13 @@ A 60-second run with low-overhead, path-specific instrumentation in generated `s
 The candidate DCF4 setter at guest `0x0021701E` remains unobserved in the separate trace and must be correlated with this wait and the queue completion before changing event behavior. The temporary font trace was removed, the ordinary Release build succeeded, and no game process remains. Verified no temporary font/cursor/event marker strings remain in the executable. No title screen, audio, controller input, or gameplay was verified. Preserve the user's uncommitted XID profile patch. Milestone 3 and progress bars remain unchanged.
 
 Next: capture producer wait entry/return, pushbuffer GET advancement, candidate `KeSetEvent` context and result in the same minimally instrumented run. Determine the event's state/notification semantics before changing the runtime.
+
+### DCE4 event bridge correlation (2026-10-19)
+
+A 90-second instrumented launch recorded 143 waits and 143 successful returns on `0x0021DCE4`, with 1,247 `KeSetEvent` calls for that object. The event was type 0 (notification), and the bridge returned `STATUS_SUCCESS` while synchronizing its guest signal state. No `0x0021DCF4` wait or set occurred in this run. This confirms the DCE4 wait/set bridge operated in this capture; it does not resolve the separate DCF4 queue-space wait seen in earlier captures.
+
+The watchdog sample had 329,742 guest indirect calls and NV2A USER `PUT=GET=0x00033018`. The guest had attempted to read `config.sav` and `death00.sav`; both returned `STATUS_OBJECT_NAME_NOT_FOUND` / Win32 file-not-found. The available evidence does not establish whether that is the final startup blocker. The trace's `caller` field was incorrectly sourced from `g_esp` (which points to import arguments), so it is not a usable call-site address; future tracing must read the guest return address at `g_esp - 4`. The run did not verify the title screen, audio, controller input, or gameplay.
+
+Restored the kernel bridge to baseline SHA-256 `2190BBD3E20DA13238802F655F198ECEE5BCC8A123CF6A774142C298F47CF232`, rebuilt Release successfully, verified temporary event markers are absent from the executable, and confirmed no game process remains. The user's controller-profile patch is untouched. Milestone 3 and progress bars remain unchanged.
+
+Next: correct the imported-call return-address capture, then obtain a single trace spanning the DCF4 queue wait and its candidate setter. Separately map the guest path handling missing save files and determine whether those not-found results are expected fallback behavior.
