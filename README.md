@@ -55,7 +55,7 @@ When a tested release exists, players will need to provide their own legally obt
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [######--------------] 3/5 | A fresh 120-second diagnostic displayed “PRESS MAIN WEAPON BUTTON”; the guest later stopped flipping frames and USB polling stayed at zero. Input response, audio, gameplay, and reliable boot are not verified. |
+| Boot and compatibility | [######--------------] 3/5 | One run displayed “PRESS MAIN WEAPON BUTTON” and delivered a mapped 26-byte USB report, but the prompt did not respond. Other runs stall during startup. Audio, gameplay, and reliable boot are not verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
 These bars describe engineering work, not playable features or campaign completion. See the [detailed tracker](docs/DEVELOPMENT_STATUS.md) for field-by-field evidence.
