@@ -22,6 +22,16 @@ The run ended at the watchdog, not a crash. No source instrumentation was added;
 
 Next: reproduce the title-reaching run, then send a live press only after visually confirming the prompt while sampling guest input state; if startup again stalls, compare its thread, file, and event paths against the successful title capture.
 
+### Live post-prompt input attempt (2026-10-19)
+
+Repeated the lower-overhead startup with `RECOMP_PAD_LIVE` and external sampling, leaving USB report tracing and per-query input diagnostics disabled. The XInput result counter reached 1,626 and then stayed fixed; the screen stayed black and stopped updating after about 50 seconds. OHCI logged 1,455 periodic transfers and 1,331 reports, then stopped. Because the title prompt never appeared, the live input file remained empty and no press was sent.
+
+At the 240-second watchdog the guest again waited on DCE4 through return site `0x0020EC83` / wait return `0x0002DB6A`; NV2A USER `PUT=GET=0x610EC`. This matches the earlier stalled startup path and shows the title-reaching trace is not reproducible with this run configuration. The capture does not establish why the event wait remains pending or whether prior tracing changed timing. Audio, input acceptance, gameplay, saves, and campaign progression remain unverified.
+
+No source instrumentation was added, the normal Release build remains the executable, no runtime process remains, and the user's XID profile patch is untouched. Captures/logs are ignored under `iso/local-analysis/logs/m3-title-live-input-post-prompt-240s-20261019/`. Milestone 3 and progress bars remain unchanged.
+
+Next: capture the DCE4 signal-state word and shared-ring indices alongside the guest wait and file-read state in the same low-overhead run; compare those values with the title-reaching trace before changing synchronization or I/O behavior.
+
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
 ### Startup queue and event-wait comparison (2026-10-19)
