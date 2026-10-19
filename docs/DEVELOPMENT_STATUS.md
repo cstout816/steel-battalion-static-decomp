@@ -4,6 +4,12 @@ This page is for people who want the detailed engineering tracker. The project i
 
 For the plain-language overview, see the [README](../README.md) or the [player guide](PLAYER_GUIDE.md).
 
+### Latest controller poll and black-frame sample (2026-10-19)
+
+A 150-second watchdog-bounded run traced changes to the guest controller result and scheduled A at 90 seconds after the first USB report. The trace showed a neutral result; the scheduled pulse did not appear in the log, and the captured window frames remained black. OHCI served 576 input reports before its counters stopped advancing. The watchdog again captured the font-load call chain (`ESP=0x00F7FE18`, `EDI=0x00261918`); this is not evidence of controller rejection or a title-screen input test.
+
+This run stopped earlier than the separate file-logging run, which read all four font assets and reached event `0x0021DCF4`. The timing difference is not explained yet. Restored generated `recomp_0017.c` byte-for-byte, rebuilt Release x64, verified `XID_QUERY_TRACE` is absent from the executable, and confirmed no runtime remains. Milestone 3 and all progress bars remain unchanged. Next: capture a later title frame and repeat the controller-state trace with an earlier report-relative pulse, comparing the startup event sequence across runs.
+
 ### Latest guest file and title-event trace (2026-10-19)
 
 A 180-second file-logging run resolved and read the four font files named in the prior watchdog stack: `ari26nml.bmf` (1,396,652 bytes), `ari26hir.bmf` (7,284), `ari26kat.bmf` (4,024), and `ari26kan.bmf` (3,992), all with successful read statuses. This rules out a missing font asset as the cause indicated by that stack. The other missing-file reports were probes for save slots such as `TDATA\43430002\user00.sav` through `user07.sav`.
