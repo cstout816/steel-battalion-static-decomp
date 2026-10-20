@@ -56,7 +56,7 @@ When a tested release exists, players will need to provide their own legally obt
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
 | Boot and compatibility | [######--------------] 3/5 | Corrected 26-byte reports now reach the guest input state, including a Main Weapon press and release. The title has not visibly responded; prompt response, audio, gameplay, and reliable boot remain unverified. |
-| Virtual controller input | [#############-------] 2/3 | Guest input state updates are verified; title response remains unverified. |
+| Virtual controller input | [#############-------] 2/3 | The USB report reaches the guest callback, but the title's specific button-query slots remained zero in the latest bounded sample; end-to-end title response remains unverified. |
 | Guest DSP and audio | [█-------------------] 1/2 | Guest DSP instructions execute; audible output is not verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
