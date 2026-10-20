@@ -51,12 +51,12 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active; a fresh bounded run reached the title prompt, but startup and input are not reliable yet. |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active; two corrected-build diagnostics have displayed the title prompt, but another retry stalled before it and startup/input remain unreliable. |
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [######--------------] 3/5 | The game reaches a visible title prompt, and the live Main Weapon bit appears in the active USB report. The guest's downstream input state and response to the prompt remain unverified; audio, gameplay, and reliable boot remain unverified. |
-| Virtual controller input | [#############-------] 2/3 | On the visible title prompt, A changed the report's Main Weapon bit from 0 to 1 and back. The guest claimed write-done interrupts during startup, but game-side input recognition and prompt progression remain unverified. |
+| Boot and compatibility | [######--------------] 3/5 | Two bounded runs reached the visible title prompt, while a matched retry stalled at the Dolby logo. A Main Weapon pulse was generated after the prompt appeared, but no response was verified; audio, gameplay, and reliable boot remain unverified. |
+| Virtual controller input | [#############-------] 2/3 | The Steel Battalion profile generated the Main Weapon report bit, and the guest continued polling USB reports. The title stayed on its prompt as rendering stopped, so game-side input recognition remains unverified. |
 | Guest DSP and audio | [█-------------------] 1/2 | Guest DSP instructions execute; audible output is not verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
