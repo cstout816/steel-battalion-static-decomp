@@ -1,0 +1,239 @@
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -2630,6 +2630,115 @@
+  * format at texel coordinates with nearest filtering and clamp addressing.
+  * The Vulkan helper uses a separate nearest/clamp sampler, and receives
+  * normalized coordinates. Keep this state-gated; all other draws fall back. */
++static int s_linear_quad_candidate;
++
++static int vulkan_linear_nearest_quad(void)
++{
++    static const uint32_t quad[6] = {0, 1, 2, 1, 2, 3};
++    const Texture *t = &s_gpu.texs[0];
++    float vtx[6][8];
++    uint8_t *rgba = NULL;
++    uint8_t *mem = (uint8_t *)xbox_GetMemoryOffset();
++    uint32_t width, height, i, x, y, argb;
++    size_t bytes;
++
++    s_linear_quad_candidate = 0;
++    if (s_gpu.prim != NV_PRIM_TRIANGLE_STRIP || s_gpu.idx_count != 4
++        || s_gpu.color_mask != 0x01010101u || !t->valid || t->cube
++        || t->color != 0x12 || t->width != 1024 || t->height != 1024
++        || t->pitch != 4096 || t->filter != 0x04074000
++        || t->addr_u != 3 || t->addr_v != 3
++        || s_gpu.blend_enable != 1 || s_gpu.blend_sfactor != 0x0302
++        || s_gpu.blend_dfactor != 0x0303 || s_gpu.blend_equation != 0x8006
++        || s_gpu.alpha_test || s_gpu.depth_test || s_gpu.depth_mask
++        || s_gpu.zpass_enable
++        || !s_gpu.rc_seen || s_gpu.rc.control != 0x00011101
++        || s_gpu.rc.stage_program != 1
++        || s_gpu.rc.color_icw[0] != 0xC4C80000
++        || s_gpu.rc.alpha_icw[0] != 0xD4D81010
++        || s_gpu.rc.color_ocw[0] != 0x000000C0
++        || s_gpu.rc.alpha_ocw[0] != 0x000000C0
++        || s_gpu.rc.final0 != 0x200C0000
++        || s_gpu.rc.final1 != 0x00001C80
++        || surface_bpp() != 4 || s_gpu.pitch != 640u * 4u
++        || s_gpu.clip_x || s_gpu.clip_y
++        || s_gpu.clip_w != 640 || s_gpu.clip_h != 480
++        || !surface_begin_batch(mem))
++        return 0;
++
++    width = s_gpu.pitch / 4;
++    height = s_gpu.clip_y + s_gpu.clip_h;
++    for (i = 0; i < 4; i++) {
++        if (s_xf[i].pos[2] != 0.0f || s_xf[i].pos[3] != 1.0f
++            || s_xf[i].tex[0][2] != 0.0f || s_xf[i].tex[0][3] != 1.0f
++            || s_xf[i].d0[0] != 1.0f || s_xf[i].d0[1] != 1.0f
++            || s_xf[i].d0[2] != 1.0f
++            || s_xf[i].d0[3] != s_xf[0].d0[3])
++            return 0;
++    }
++    if (s_xf[0].pos[0] != 0.0f || s_xf[0].pos[1] != 0.0f
++        || s_xf[1].pos[0] != 0.0f || s_xf[1].pos[1] != 480.0f
++        || s_xf[2].pos[0] != 640.0f || s_xf[2].pos[1] != 0.0f
++        || s_xf[3].pos[0] != 640.0f || s_xf[3].pos[1] != 480.0f)
++        return 0;
++    s_linear_quad_candidate = 1;
++    if (getenv("RECOMP_FORCE_CPU_RASTER"))
++        return 0;
++
++    if ((size_t)t->width > SIZE_MAX / (size_t)t->height / 4)
++        return 0;
++    bytes = (size_t)t->width * t->height * 4;
++    rgba = (uint8_t *)malloc(bytes);
++    if (!rgba)
++        return 0;
++    for (y = 0; y < t->height; y++) {
++        for (x = 0; x < t->width; x++) {
++            size_t at = ((size_t)y * t->width + x) * 4;
++            if (!sample_tex(t, 0, x, y, &argb)) {
++                free(rgba);
++                return 0;
++            }
++            rgba[at + 0] = (uint8_t)(argb >> 16);
++            rgba[at + 1] = (uint8_t)(argb >> 8);
++            rgba[at + 2] = (uint8_t)argb;
++            rgba[at + 3] = (uint8_t)(argb >> 24);
++        }
++    }
++    for (i = 0; i < 6; i++) {
++        uint32_t n = quad[i];
++        vtx[i][0] = s_xf[n].pos[0];
++        vtx[i][1] = s_xf[n].pos[1];
++        vtx[i][2] = s_xf[n].tex[0][0] / (float)t->width;
++        vtx[i][3] = s_xf[n].tex[0][1] / (float)t->height;
++        vtx[i][4] = s_xf[n].d0[0];
++        vtx[i][5] = s_xf[n].d0[1];
++        vtx[i][6] = s_xf[n].d0[2];
++        vtx[i][7] = s_xf[n].d0[3];
++    }
++#if defined(_WIN32)
++    i = xbox_vulkan_raster_textured_triangles_nearest_clamp(
++        s_surface, s_gpu.pitch, width, height, s_gpu.clip_x, s_gpu.clip_y,
++        s_gpu.clip_w, s_gpu.clip_h, (const float (*)[8])vtx, 6,
++        rgba, t->width, t->height);
++#else
++    i = 0;
++#endif
++    free(rgba);
++    if (!i)
++        return 0;
++    s_gpu.tris_drawn += 2;
++    s_gpu.xf_drawn += 2;
++    s_gpu.xf_pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
++    s_gpu.pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
++    note_drawn();
++    return 1;
++}
++
++/* A later startup pass uses a full-screen, almost opaque black diffuse quad.
++ * Its programmed combiner result is independent of the bound texture; the
++ * texture fetch is vestigial for this exact register state. Preserve the
++ * verified zero-depth invariant and apply the guest blend equation directly
++ * to the guest surface, avoiding the general per-pixel combiner/raster path. */
+ static int nv2a_black_fade_quad(void)
+ {
+     const Texture *t = &s_gpu.texs[0];
+@@ -2897,6 +3006,15 @@
+         dump_program_draw_if_requested();
+         return;
+     }
++    if (vulkan_linear_nearest_quad()) {
++#if defined(_WIN32)
++        REPORT_BATCH_TIME("vulkan-linear-nearest");
++#endif
++        if (getenv("RECOMP_LINEAR_QUAD_CAPTURE"))
++            dump_surface_bmp();
++        dump_program_draw_if_requested();
++        return;
++    }
+     s_logo_depth_zero_valid = logo_depth_zero_survives_cpu_draw();
+     s_logo_depth_cleared = 0;
+ 
+@@ -2932,6 +3050,8 @@
+ #if defined(_WIN32)
+     REPORT_BATCH_TIME("cpu-raster");
+ #endif
++    if (s_linear_quad_candidate && getenv("RECOMP_LINEAR_QUAD_CAPTURE"))
++        dump_surface_bmp();
+     if (s_gpu.tris_drawn != tris_before)
+         dump_program_draw_if_requested();
+ #if defined(_WIN32)
+--- a/src/video/fb_vulkan_present.c
++++ b/src/video/fb_vulkan_present.c
+@@ -57,6 +57,7 @@
+     VkPipelineLayout raster_pipeline_layout;
+     VkPipeline raster_textured_pipeline;
+     VkSampler raster_sampler;
++    VkSampler raster_sampler_nearest_clamp;
+     VkDescriptorPool raster_descriptor_pool;
+     VkBuffer raster_staging;
+     VkDeviceMemory raster_staging_memory;
+@@ -865,6 +866,15 @@
+     if (result != VK_SUCCESS)
+         return vp_error("creating NV2A sampler", result);
+ 
++    sampler_info.magFilter = VK_FILTER_NEAREST;
++    sampler_info.minFilter = VK_FILTER_NEAREST;
++    sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
++    sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
++    sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
++    result = vkCreateSampler(s_vp.device, &sampler_info, NULL,
++                             &s_vp.raster_sampler_nearest_clamp);
++    if (result != VK_SUCCESS)
++        return vp_error("creating NV2A nearest/clamp sampler", result);
+ 
+     if (!vp_create_host_buffer(s_vp.staging_size,
+             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+@@ -993,7 +1003,8 @@
+     uint8_t *surface, uint32_t pitch, uint32_t width, uint32_t height,
+     uint32_t clip_x, uint32_t clip_y, uint32_t clip_w, uint32_t clip_h,
+     const float vertices[][8], uint32_t vertex_count,
+-    const uint8_t *rgba, uint32_t texture_width, uint32_t texture_height)
++    const uint8_t *rgba, uint32_t texture_width, uint32_t texture_height,
++    int nearest_clamp)
+ {
+     VkImage texture_image = VK_NULL_HANDLE;
+     VkDeviceMemory texture_memory = VK_NULL_HANDLE;
+@@ -1145,7 +1156,8 @@
+     image_info.imageView = texture_view;
+     image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+     memset(&sampler_info, 0, sizeof(sampler_info));
+-    sampler_info.sampler = s_vp.raster_sampler;
++    sampler_info.sampler = nearest_clamp ? s_vp.raster_sampler_nearest_clamp
++                                         : s_vp.raster_sampler;
+     memset(writes, 0, sizeof(writes));
+     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+     writes[0].dstSet = set;
+@@ -1341,7 +1353,24 @@
+     EnterCriticalSection(&s_vp.queue_lock);
+     result = vp_raster_textured_locked(surface, pitch, width, height,
+         clip_x, clip_y, clip_w, clip_h, vertices, vertex_count,
+-        rgba, texture_width, texture_height);
++        rgba, texture_width, texture_height, 0);
++    LeaveCriticalSection(&s_vp.queue_lock);
++    return result;
++}
++
++int xbox_vulkan_raster_textured_triangles_nearest_clamp(
++    uint8_t *surface, uint32_t pitch, uint32_t width, uint32_t height,
++    uint32_t clip_x, uint32_t clip_y, uint32_t clip_w, uint32_t clip_h,
++    const float vertices[][8], uint32_t vertex_count,
++    const uint8_t *rgba, uint32_t texture_width, uint32_t texture_height)
++{
++    int result;
++    if (!s_vp.ready || !s_vp.queue_lock_ready)
++        return 0;
++    EnterCriticalSection(&s_vp.queue_lock);
++    result = vp_raster_textured_locked(surface, pitch, width, height,
++        clip_x, clip_y, clip_w, clip_h, vertices, vertex_count,
++        rgba, texture_width, texture_height, 1);
+     LeaveCriticalSection(&s_vp.queue_lock);
+     return result;
+ }
+@@ -1548,6 +1577,9 @@
+             vkFreeMemory(s_vp.device, s_vp.raster_staging_memory, NULL);
+         if (s_vp.raster_sampler)
+             vkDestroySampler(s_vp.device, s_vp.raster_sampler, NULL);
++        if (s_vp.raster_sampler_nearest_clamp)
++            vkDestroySampler(s_vp.device,
++                             s_vp.raster_sampler_nearest_clamp, NULL);
+         if (s_vp.raster_descriptor_pool)
+             vkDestroyDescriptorPool(s_vp.device,
+                                     s_vp.raster_descriptor_pool, NULL);
+--- a/src/video/fb_vulkan_present.h
++++ b/src/video/fb_vulkan_present.h
+@@ -12,6 +12,11 @@
+     uint32_t clip_x, uint32_t clip_y, uint32_t clip_w, uint32_t clip_h,
+     const float vertices[][8], uint32_t vertex_count,
+     const uint8_t *rgba, uint32_t texture_width, uint32_t texture_height);
++int xbox_vulkan_raster_textured_triangles_nearest_clamp(
++    uint8_t *surface, uint32_t pitch, uint32_t width, uint32_t height,
++    uint32_t clip_x, uint32_t clip_y, uint32_t clip_w, uint32_t clip_h,
++    const float vertices[][8], uint32_t vertex_count,
++    const uint8_t *rgba, uint32_t texture_width, uint32_t texture_height);
+ void xbox_vulkan_presenter_stop(void);
+ #endif
+ 
