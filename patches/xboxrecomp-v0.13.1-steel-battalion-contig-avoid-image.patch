@@ -1,0 +1,81 @@
+From 4f3307f3692065ecb6ffd7b0e62bf21d97da6dcf Mon Sep 17 00:00:00 2001
+Subject: [PATCH] kernel: opt-in contiguous allocation avoidance for XBE pages
+
+Steel Battalion XPP/OHCI descriptors are allocated from the contiguous-memory
+window, then resolved through a physical address. The host runtime keeps this
+window separate from the XBE RAM mapping, so a physical page inside the loaded
+image has two possible meanings. This opt-in makes the allocator skip XBE
+pages, matching the upstream fix introduced in XboxRecomp commit 4f3307f.
+The upstream patch was authored by sp00nz and reported by ranzo312-cyber;
+the adapted code is distributed under XboxRecomp's MIT license.
+
+Apply to the xboxrecomp v0.13.1 source baseline; keep disabled by default because
+it changes guest allocation addresses. Set RECOMP_CONTIG_AVOID_IMAGE=1 to enable.
+
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -3066,6 +3066,30 @@
+  * port reset, walking a device whose parent pointer had been overwritten. */
+ static uint32_t g_contig_next = XBOX_CONTIG_BASE + 0x1000u;
+ 
++/* XPP/OHCI descriptors are resolved from physical addresses. Avoid a page
++ * collision where the host's separate contiguous window and XBE RAM assign
++ * different storage to the same physical page. */
++static int contig_avoid_image_enabled(void)
++{
++    static int on = -1;
++    if (on < 0) {
++        const char *env = getenv("RECOMP_CONTIG_AVOID_IMAGE");
++        on = env && atoi(env) != 0;
++    }
++    return on;
++}
++
++static int contig_overlaps_image(uint32_t addr, uint32_t size)
++{
++    uint64_t phys_lo, phys_hi;
++    if (!g_xbox_image_hi || addr < XBOX_CONTIG_BASE)
++        return 0;
++    phys_lo = (uint64_t)addr - XBOX_CONTIG_BASE;
++    phys_hi = phys_lo + size;
++    return phys_lo < g_xbox_image_hi && phys_hi > g_xbox_image_lo;
++}
++
++
+ /* Under RECOMP_HEAP_RECLAIM, blocks handed out in address order, so
+  * MmFreeContiguousMemory can give them back. "Allocated once" holds for
+  * framebuffers and pushbuffers but not for titles that keep textures and
+@@ -3115,6 +3139,8 @@
+             end = g_contig_blocks[i].addr + g_contig_blocks[i].size;
+             if ((uint64_t)a + size > end)
+                 continue;
++            if (contig_avoid_image_enabled() && contig_overlaps_image(a, size))
++                continue;
+             front = a - g_contig_blocks[i].addr;
+             back = end - (a + size);
+             g_contig_blocks[i].addr = a;
+@@ -3129,6 +3155,24 @@
+ 
+     if (!result) {
+         result = (g_contig_next + alignment - 1) & ~(alignment - 1);
++
++
++        /* Physical pages are the offset from XBOX_CONTIG_BASE. If this block
++         * overlaps the XBE, skip to the first aligned page after the image. */
++        if (contig_avoid_image_enabled() && contig_overlaps_image(result, size)) {
++            static int reported;
++            uint64_t after_image = (uint64_t)XBOX_CONTIG_BASE + g_xbox_image_hi;
++            if (!reported) {
++                fprintf(stderr, "  [CONTIG] image avoidance: allocation at 0x%08X overlaps XBE pages 0x%08X..0x%08X; skipping past image\n",
++                        result, g_xbox_image_lo, g_xbox_image_hi);
++                fflush(stderr);
++                reported = 1;
++            }
++            result = (uint32_t)((after_image + alignment - 1) & ~((uint64_t)alignment - 1));
++            if (reclaim && result > g_contig_next)
++                contig_insert(g_contig_block_count, g_contig_next,
++                              result - g_contig_next, 1);
++        }
+ 
+         /* Leave the top of the window for GPU instance memory. */
+         if ((uint64_t)result + size >

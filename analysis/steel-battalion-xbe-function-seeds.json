@@ -1,9 +1,33 @@
 [
   {
+    "start": "0x002169F0",
+    "observed": true,
+    "note": "Observed as the NV2A interrupt service routine in the guest KINTERRUPT during a live run; the runtime reported the vector as not callable until this missed D3D library entry was seeded."
+  },
+  {
+    "start": "0x0010D100",
+    "observed": true,
+    "note": "Observed as an unresolved indirect-call target during the post-interrupt live run; validated as a function body in the executable XBE section."
+  },
+  {
+    "start": "0x001ABA10",
+    "observed": true,
+    "note": "Observed as a PsCreateSystemThreadEx start routine during the post-interrupt live run; validated as a function body in the executable XBE section."
+  },
+  {
+    "start": "0x00017E40",
+    "observed": true,
+    "note": "Observed as a PsCreateSystemThreadEx start routine during the Steel Battalion XID boot check; validated as a function body in the executable XBE section."
+  },
+  {
     "start": "0x0025A3D7",
     "observed": true,
     "note": "Observed as an unresolved indirect-call target during the OHCI DPC trace; the XBE function boundary was validated before translation."
   },
-  { "start": "0x0025D059" },
+  {
+    "start": "0x0025D059",
+    "observed": true,
+    "note": "Observed as a repeated unresolved indirect-call target during the XID controller boot check; validated as a function body in the executable XBE section."
+  },
   { "start": "0x0025D090" }
 ]
