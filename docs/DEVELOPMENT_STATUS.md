@@ -1,5 +1,13 @@
 # Development status
 
+### 2026-10-20 — upstream runtime review and file-chain cross-check
+
+Reviewed the current upstream XboxRecomp v0.15.0 release and its source against the project's pinned v0.13.1 baseline. The newer release includes guest thread/TIB handling, working critical sections, interlocked operations, and diagnostics for lock contention and failed file opens. The local runtime already contains per-thread guest TIB state, functional critical-section shadows with owner-site tracking, and Win32 error details for failed file opens. The current upstream work therefore does not identify a specific missing fix for the present boot stall. Its broader scheduler, APU, and NV2A changes are not a safe drop-in update for this customized runtime and graphics backend; no code was copied or architecture changed. The installed Visual Studio 2022 Build Tools are already sufficient, so no extra development tools were installed.
+
+Cross-referenced the watchdog's guest register `EDI=0x00261918` with the seeded XBE analysis. That address is the string `D:\media\fonts\ari26nml.bmf`, reached from `sub_0004F460` through the generic file-open helper `sub_0004E6F0`. A separate 120-second file trace shows successful opens for `ari26nml.bmf`, `ari26hir.bmf`, `ari26kat.bmf`, and `ari26kan.bmf`; their files are present in the local game image. The same trace later sampled the guest waiting on title event `0x0021DCF4`, with no active instruction address. This narrows the file-chain hypothesis: the mapped font opens themselves succeed, and the watchdog return stack does not prove a file-open hang. It still does not identify the common stall or establish stable boot.
+
+Milestone 3 and progress bars remain unchanged: overall 2/8; boot/compatibility 3/5; virtual controller 2/3; guest DSP/audio 1/2. No temporary source instrumentation was added, no game process remains, and the user-owned XID profile patch remains untouched. Next capture a current guest execution site and its thread-specific event state at the transition where scanout stops; continue treating title-event and file behavior as separate until one run links them.
+
 This page is for people who want the detailed engineering tracker. The project is experimental. Local diagnostic runs have visually reached the title screen, but startup is intermittent and this does not mean the game is playable. Progress bars describe tracked work; they do not mean that a game feature is playable.
 
 ### 2026-10-20 — targeted DCF4 and file trace in one attempt
