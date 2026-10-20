@@ -2,6 +2,12 @@
 
 This page is for people who want the detailed engineering tracker. The project is experimental. Local diagnostic runs have visually reached the title screen, but startup is intermittent and this does not mean the game is playable. Progress bars describe tracked work; they do not mean that a game feature is playable.
 
+### 2026-10-20 — targeted DCF4 and file trace in one attempt
+
+Combined a temporary DCF4-only wait/set logger with the existing file-caller/read traces in a 420-second run, using `RECOMP_TRACE_BUDGET=0` to suppress generated-function logging. It stalled on the Dolby splash at 272 flips. The targeted logger captured no DCF4 wait or signal calls; file logging captured 151 opens and a successful 64 KiB read at offset 1,376,256. The final watchdog sampled USER PUT=`0x00063B64`, GET=`0x000630CC`, and the same guest return chain around `0x0004E71E` / `0x0004F496` / `0x000D7128`; no title prompt appeared and no input was sent. This confirms DCF4 is not part of this particular pre-title stall, while the guest remained in the resource/file initialization stack.
+
+The environment-gated DCF4 code was removed and the ordinary corrected target rebuilt successfully. No runtime change remains and no game process remains. The user-owned XID patch remains untouched. Milestone 3 and all progress bars are unchanged. Next obtain a reliable current guest instruction site at the `0x0004E6F0` / `0x0018E630` file-open/read chain and correlate it with the last successful read and DMA queue state; do not alter file/event behavior based on return addresses alone.
+
 ### 2026-10-20 — file caller and read trace follow-up
 
 Used the runtime's existing `RECOMP_FILE_CALLER_TRACE` and `RECOMP_FILE_READ_TRACE` settings in a 120-second USB/windowed run. It recorded 308 `NtCreateFile` calls and sampled 4,000 file reads. The five failed opens were `Z:\st00_0.rep` and the optional save files `T:\config.sav`, `T:\death00.sav`, `T:\sasen00.sav`, and `T:\user99.sav`; all are distinct from the game music assets. The captured `Z:\STRM01.WAV` through `Z:\STRM03.WAV` and corresponding `D:\media\bgm\...` opens returned success. Every sampled 64 KiB read returned the requested length with status success, including a read at offset 34,996,224. This run had not reached `STRM04.WAV` or the title screen at the 120-second watchdog.
