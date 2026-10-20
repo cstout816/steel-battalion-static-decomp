@@ -1,3 +1,12 @@
+### 2026-10-20 — guest XInput boundary traced
+
+Installed the open-source `XboxDev/ghidra-xbe` loader into the local Ghidra installation and analyzed the user-supplied XBE. The decompilation identifies the Steel Battalion polling path: `sub_0004A960` and `sub_0004AA80` call the game's `sub_00049DD0` helper, which opens the `g_DeviceType_SBC` XInput device and calls the XBE's own `XInputGetState` at `0x00257103`. That XBE function copies the device handle's state into the game's buffer at `0x004AF638`.
+
+A prompt-time diagnostic showed the configured USB device delivering a 26-byte Steel Battalion report. The live Main Weapon press changed its first button bit (`00 1A 00 ...` to `00 1A 01 ...`), and the OHCI/XPP transfer path had already been traced to the guest callback. The title's input query remained zero and the prompt did not advance. The guest XInput trace recorded an initial neutral state and no state-change sample for the press. This narrows the gap to the guest device-state update between the transfer callback and the XBE's XInput state copy; it does not yet identify the missing callback or prove the precise failure point.
+
+The temporary trace was removed from ignored generated code. A clean x64 Release rebuild completed, and the final executable was checked for trace markers after forcing regeneration when the build system first reused a stale object. No game process remains. Logs and captures are local/ignored under `iso/local-analysis/logs/m3-guest-xinput-trace-confirmed-20261020/` and `m3-guest-xinput-periodic-20261020/`. No copyrighted files were staged; the user's XID patch remains untouched. No audio, gameplay, save/load, or campaign progression was verified.
+
+Milestone 3 and bars remain unchanged: overall 2/8; boot/compatibility 3/5; virtual controller 2/3; DSP/audio 1/2. Next trace the device handle's internal state and the XID open/callback path around `XInputGetState`, comparing guest device data before and after the exact Main Weapon report. Do not alter the controller mapping or claim title input acceptance until that boundary is shown.
 # Development status
 
 ### 2026-10-20 — upstream multi-object event handling backport
