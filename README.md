@@ -55,8 +55,8 @@ When a tested release exists, players will need to provide their own legally obt
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [######--------------] 3/5 | Corrected 26-byte reports now reach the guest input state, including a Main Weapon press and release. The title has not visibly responded; prompt response, audio, gameplay, and reliable boot remain unverified. |
-| Virtual controller input | [#############-------] 2/3 | The USB report reaches the guest callback, but the title's specific button-query slots remained zero in the latest bounded sample; end-to-end title response remains unverified. |
+| Boot and compatibility | [######--------------] 3/5 | The game reaches a visible title prompt, and the live Main Weapon bit appears in the active USB report. Delivery through the guest input state and response to the prompt remain unverified; audio, gameplay, and reliable boot remain unverified. |
+| Virtual controller input | [#############-------] 2/3 | On the visible title prompt, the live A input changed the Steel Battalion report's Main Weapon bit from 0 to 1 and back. Guest title handling and prompt progression remain unverified. |
 | Guest DSP and audio | [█-------------------] 1/2 | Guest DSP instructions execute; audible output is not verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
