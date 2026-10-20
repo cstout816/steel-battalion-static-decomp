@@ -2,6 +2,14 @@
 
 This page is for people who want the detailed engineering tracker. The project is experimental. A local diagnostic run has visually reached the title screen, but this does not mean the game is playable. Progress bars describe tracked work; they do not mean that a game feature is playable.
 
+### 2026-10-20 — upstream rasterizer research follow-up
+
+Checked current XboxRecomp performance work against the local v0.13.1 renderer. Upstream PR [#228](https://github.com/sp00nznet/xboxrecomp/pull/228) has merged a worker-pool change that queues all triangles in one batch before dispatching rows to workers. The local `nv2a_pb_exec.c` already parallelizes each individual triangle, but it does not queue a batch's triangles together. Upstream reported a 5.5→about 15 FPS improvement on Fallout: Brotherhood of Steel; its test covers overlap order, which must remain stable for correct pixels. This is a relevant candidate for later gameplay rendering, not a verified Steel Battalion improvement.
+
+Upstream PR [#231](https://github.com/sp00nznet/xboxrecomp/pull/231) proposes pipelining raster jobs behind pushbuffer decoding. It remains open and requires per-job copies of render state plus explicit drain points before synchronization and surface operations. The reported test was also Fallout: Brotherhood of Steel, with about 15.5→17.4 FPS; the author notes it had not been run on several other titles. It is not a safe drop-in change for the current Steel Battalion bring-up.
+
+These two changes do not directly explain the measured 512×512 splash cost: that draw is only a pair of large triangles, so batching triangles would reduce worker handoffs but would not remove per-pixel combiner, blend, texture, and depth work. Do not import the open pipeline patch or claim either upstream result for Steel Battalion. Next, profile the current windowed build with the established boot flags and identify which exact splash fast-path gate or per-pixel operation accounts for the time; preserve the NV2A reference path for parity. No source was changed in this research check, no progress bar moved, and no title-screen/audio/gameplay status is revised.
+
 ### 2026-10-20 guest DSP build and bounded audio-path check
 
 The first DSP-enabled build used the default generated-code folder, which does not contain guest function `0x0020D960`; its repeated unresolved-call trace made that launch invalid as an audio check. Reconfigured a separate x64 Release build to use the existing `xboxrecomp-generated-guestlock-s50` translation set, where that function is present. The pinned MIT DSP56300 FFI and game target then built successfully with the DSP option enabled. A Cargo-generated header change was restored, and the pinned dependency checkout was clean after the build.
