@@ -177,6 +177,27 @@ The follow-up
 preserves the guest image's aspect ratio in the swapchain and clears the
 letterbox bars. Apply it after the presenter patch.
 
+## NV2A D3D fence and interrupt references
+
+The XboxRecomp maintainer's merged [pushbuffer executor PR #162](https://github.com/sp00nznet/xboxrecomp/pull/162)
+documents two separate D3D completion paths: the semaphore release at method
+`0x1D70`, and XDK D3D's software notification/fence methods. It notes that the
+optional DMA-style walk can stall on a software-method interrupt that the
+runtime does not yet deliver. Steel Battalion's local startup trace confirms
+that vector 3's guest ISR is called and claims modeled NV2A interrupts in the
+complete XPP-seeded build. The trace did not observe method `0x0310` on
+subchannel 5, so its PGRAPH `0x400B10` fence latch remains an unverified
+compatibility candidate in
+[`patches/xboxrecomp-v0.13.1-pattern-fence-latch.patch`](../patches/xboxrecomp-v0.13.1-pattern-fence-latch.patch).
+
+The separate [Project Clanker](https://github.com/megabitt01/project-clanker)
+repository is MIT licensed and describes an original-Xbox Battlefront II
+recompilation with a dedicated GPU pusher and interrupt worker. It is useful
+as an architectural reference for independent guest ISR delivery. Its C++
+runtime is not integrated here, and no code was copied. A shallow checkout at
+`565532df3854ddc861373bb037acbe3da511844a` is ignored under `local-tools/`
+for local research; it is not part of this repository.
+
 ## Steel Battalion runtime integration candidates
 
 [`patches/steel-battalion-frame-counter-registration.patch`](../patches/steel-battalion-frame-counter-registration.patch)

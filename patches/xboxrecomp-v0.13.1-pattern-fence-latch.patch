@@ -1,0 +1,42 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -37,2 +37,3 @@
+ #include "xbox_memory_layout.h"   /* xbox_Nv2aFrameCounterFlip */
++#include "../nv2a/nv2a_state.h"   /* NV2A PGRAPH register access */
+ extern void nv2a_pgraph_notify(uint32_t subchannel, uint32_t method,
+@@ -3484,1 +3484,19 @@
++    /* XDK D3D's fence wait polls PGRAPH_PATT_COLOR0. KickOff writes its
++     * progress marker through SET_DITHER_ENABLE (0x0310) on subchannel 5's
++     * pattern object; this is not the Kelvin dither method on subchannel 0. */
++    if (subch == 5u && method == 0x0310u) {
++        NV2AState *gpu = nv2a_get_state();
++        if (gpu)
++            pgraph_write(gpu, NV_PGRAPH_PATT_COLOR0, param, 4);
++        if (getenv("RECOMP_PB_FENCE_TRACE")) {
++            static unsigned shown;
++            if (shown++ < 32u) {
++                fprintf(stderr, "[PB-FENCE] method 5:0310 -> PGRAPH 0x400B10 = %08X\n",
++                        param);
++                fflush(stderr);
++            }
++        }
++        return;
++    }
++
+     if (s_ftrace == 2) {
+diff --git a/src/nv2a/nv2a_core.c b/src/nv2a/nv2a_core.c
+--- a/src/nv2a/nv2a_core.c
++++ b/src/nv2a/nv2a_core.c
+@@ -553,3 +553,11 @@
+     nv2a_reg_log_read(NV_PGRAPH, addr, size, r);
++    if (addr == NV_PGRAPH_PATT_COLOR0 && getenv("RECOMP_PB_FENCE_TRACE")) {
++        static unsigned shown;
++        if (shown++ < 32u) {
++            fprintf(stderr, "[PB-FENCE] read PGRAPH 0x400B10 = %08X\n",
++                    (uint32_t)r);
++            fflush(stderr);
++        }
++    }
+     return r;
+ }

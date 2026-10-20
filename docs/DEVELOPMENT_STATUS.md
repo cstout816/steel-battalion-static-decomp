@@ -1,5 +1,15 @@
 # Development status
 
+### 2026-10-20 — interrupt dispatch verified; audio-list crash isolated
+
+Used GitHub research to compare the remaining D3D/NV2A work against XboxRecomp's merged [pushbuffer executor PR #162](https://github.com/sp00nznet/xboxrecomp/pull/162) and the MIT-licensed [Project Clanker](https://github.com/megabitt01/project-clanker). Project Clanker separates its GPU pusher from the guest interrupt worker; this project keeps its XboxRecomp architecture and uses that as a behavior reference only. A clean clone of the pinned DSP56300 dependency was placed under ignored `local-tools/` after the cached dependency checkout failed CMake's clean-tree check. No system dependency was installed and no game files were added to Git.
+
+The complete XPP-seeded Windows x64 target built successfully. In a 42-second bounded run, the title connected its vector-3 ISR at `0x002169F0`, the runtime invoked it, and it returned “claimed.” This confirms the modeled NV2A interrupt reaches the translated guest ISR in this build. A separate initial run used an incomplete generated-code set and reported the same ISR as not callable; discard that run as an invalid test configuration.
+
+The valid run did not reach the title screen. It crashed in `sub_0021ED29` while traversing an audio notification list: the list supplied node value `0x0000000C`, so the game's `node - 20` calculation produced invalid pointer `0xFFFFFFEC`. This is a guest audio-object/list integrity problem, not evidence that the GPU fence marker was reached. The opt-in trace observed no `0x0310` method on subchannel 5. A small isolated candidate patch now models that XDK D3D method as a write to `PGRAPH_PATT_COLOR0` (`0x400B10`) and traces matching reads/writes behind `RECOMP_PB_FENCE_TRACE`; it compiled in the Windows runtime but was not exercised by this run.
+
+The crash confirms the immediate next investigation: capture the audio list owner, head, and neighboring node fields at `sub_0021FE7C` before the destructor walk, then identify which preceding audio initialization supplied the invalid node. Do not signal the D3D completion event by address or treat the fence patch as a boot fix. No title prompt, audible audio, accepted controller input, gameplay, save/load, or campaign progression was verified. No game process remains. Milestone 3 and progress bars remain unchanged (overall 2/8; boot/compatibility 3/5; virtual controller 2/3; DSP/audio 1/2).
+
 ### 2026-10-20 — D3D frame-counter registration and follow-up stall
 
 Used the native-PC watchdog and seeded static C to trace the startup wait to `sub_0002DB50` → `sub_0020F2C0`. The guest reads the device counter at `0x0021AFE0 + 0x2580`; before registration it stayed at `1` while the Vulkan presenter stopped at 3 flips. The pinned runtime already had an NV2A frame-counter service, but no caller registered a counter. Added the Steel Battalion device/counter pair to the local Windows host entry point and preserved it as `patches/steel-battalion-frame-counter-registration.patch`.
