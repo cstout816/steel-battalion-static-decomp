@@ -10,6 +10,8 @@ A 120-second watchdog run used that corrected executable with no `RECOMP_APU_DSP
 
 This narrows the audio gap: actual GP DSP execution is locally verified, while full DMA/FIFO and mixbin behavior, correct EP processing, game audio output, and title arrival are still unverified. No milestone or progress bar advances. Logs and the separate build are local/ignored under `iso/local-analysis/logs/m3-audio-dsp-enabled-guestlock-120s-20261020/` and `local-tools/steel-battalion-game/build/m3-audio-dsp56300-x64/`. Next trace the GP wait/peripheral state and follow a guest command through completed output DMA before attempting to verify audible output.
 
+The same watchdog captured the game thread in the known asynchronous renderer poll path (stack return sites `0x0019186F`, `0x000C84D9`, and `0x000DFECC`), with NV2A USER PUT=GET=`0x495C`. This is separate from the DSP work and does not identify why the guest completion flag remains pending. Trace the producer/consumer for `0x0066A9DC` alongside, rather than attributing the missing title to audio.
+
 ### 2026-10-20 follow-up: narrowed the startup stall
 
 The temporary guest trace confirms the first wait in `sub_00216010` exits after one iteration when USER DMA GET reaches `0x4000`. It then records USER DMA PUT/GET advancing to `0x495C`. This corrects the earlier same-day note that treated the initial GET wait as still active: that wait is past; it is not the current blocker.
