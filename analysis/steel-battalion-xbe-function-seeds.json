@@ -1,5 +1,9 @@
 [
-  { "start": "0x0025A3D7" },
+  {
+    "start": "0x0025A3D7",
+    "observed": true,
+    "note": "Observed as an unresolved indirect-call target during the OHCI DPC trace; the XBE function boundary was validated before translation."
+  },
   { "start": "0x0025D059" },
   { "start": "0x0025D090" }
 ]
