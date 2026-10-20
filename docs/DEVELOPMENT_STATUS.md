@@ -1,6 +1,14 @@
 # Development status
 
-This page is for people who want the detailed engineering tracker. The project is experimental. A local diagnostic run has visually reached the title screen, but this does not mean the game is playable. Progress bars describe tracked work; they do not mean that a game feature is playable.
+This page is for people who want the detailed engineering tracker. The project is experimental. Local diagnostic runs have visually reached the title screen, but startup is intermittent and this does not mean the game is playable. Progress bars describe tracked work; they do not mean that a game feature is playable.
+
+### 2026-10-20 — focused DCF4 trace and file-open stall
+
+Added a temporary environment-gated trace for waits and signals on guest event `0x0021DCF4`, built the correct seeded `RelWithDebInfo` target, and ran a 420-second USB/windowed diagnostic with function trace output suppressed. This attempt stopped at the Dolby splash after 214 flips, with 889 OHCI periodic transfers / 772 reports. The DCF4-specific logger recorded no wait or signal calls. The watchdog stack returned through guest sites `0x0004E71E`, `0x0004F496`, and `0x000D7128`, which map to the file-open wrapper/resource-initialization call chain; the watchdog does not include the active guest EIP, so this is a stack correlation rather than proof that a file call caused the stall. NV2A USER PUT=GET=`0x00052CF8` at the bound.
+
+The same log contains repeated `STATUS_OBJECT_NAME_NOT_FOUND` results while probing `STRM04.WAV`. A copy of that asset exists under the local user-supplied game files at `Media\Bgm\STRM04.WAV`, and the trace also records a CD-ROM path attempt; because the current failure line omits the translated host path and multiple guest threads can interleave logs, this does not establish a missing required asset or a bad mapping. Next correlate the failed-open status with the exact thread-local host path and guest caller, then compare the output argument/result from `sub_0018E630`. Do not change file fallback behavior until that pairing confirms a real miss.
+
+The temporary event trace was removed and the ordinary corrected `RelWithDebInfo` target rebuilt successfully. No runtime change remains. The user-edited XID patch remains untouched. Milestone 3 and all progress bars are unchanged.
 
 ### 2026-10-20 — seeded build and title-input retries
 

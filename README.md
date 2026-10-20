@@ -51,7 +51,7 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active; two corrected-build diagnostics have displayed the title prompt, but another retry stalled before it and startup/input remain unreliable. |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active; two corrected-build diagnostics displayed the title prompt, while several retries stalled earlier and startup/input remain unreliable. |
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
