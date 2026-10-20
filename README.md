@@ -10,7 +10,7 @@
 
 </div>
 
-> **For players:** there is no game to download yet. A local diagnostic run has visually reached the title screen, but it is very dark and controller response, audio, and gameplay are not verified. There is no installer or launcher. Please do not download unofficial builds or send game files.
+> **For players:** there is no game to download yet. A local diagnostic run reached the title screen with real DSP execution and no fake DSP acknowledgement. The image is very dark; controller response, audible output, and gameplay are not verified. There is no installer or launcher. Please do not download unofficial builds or send game files.
 
 ## The game and its controller
 
@@ -33,7 +33,7 @@ These externally hosted images show the original hardware and game. They are not
 
 The goal is to translate the original Xbox version of *Steel Battalion* (2002) ahead of time into a Windows application and recreate the Xbox services it needs. This is called **static recompilation**. The project is not an emulator packaged under another name.
 
-The project is still experimental. The translated Windows program builds, and a local diagnostic run has displayed the title screen. The captured screen is very dark and shows a “PRESS MAIN WEAPON BUTTON” prompt; response to that input is still being checked. Audio, gameplay, saving, and campaign play are not verified. The tracker records observed engineering work separately from features players can use.
+The project is still experimental. The translated Windows program builds, and a local run has displayed the “PRESS MAIN WEAPON BUTTON” title prompt with real DSP execution and no fake DSP acknowledgement. The capture is very dark, and the prompt response is still unverified. Audio, gameplay, saving, and campaign play are not verified. The tracker records observed engineering work separately from features players can use.
 
 ## Controller compatibility
 
@@ -57,6 +57,7 @@ When a tested release exists, players will need to provide their own legally obt
 | Windows build | [#-------------------] 100% | A local build completes. |
 | Boot and compatibility | [######--------------] 3/5 | Corrected 26-byte reports now reach the guest input state, including a Main Weapon press and release. The title has not visibly responded; prompt response, audio, gameplay, and reliable boot remain unverified. |
 | Virtual controller input | [#############-------] 2/3 | Guest input state updates are verified; title response remains unverified. |
+| Guest DSP and audio | [█-------------------] 1/2 | Guest DSP instructions execute; audible output is not verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
 These bars describe engineering work, not playable features or campaign completion. See the [detailed tracker](docs/DEVELOPMENT_STATUS.md) for field-by-field evidence.
