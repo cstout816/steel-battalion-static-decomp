@@ -14,6 +14,10 @@ Upstream XboxRecomp documentation recommends iterative function-level analysis a
 
 Milestone 3 and all progress bars remain unchanged. Next: trace and reduce the measured software-raster cost or determine whether the current Vulkan path can execute these title draws on the GPU without changing rendered results. After startup is responsive, repeat the controlled Main Weapon press and verify the prompt changes. Input acceptance, real audio, gameplay, saves, and campaign progression remain unverified.
 
+### 2026-10-20 boot reproduction check
+
+Restored a clean Release build after removing temporary call-site diagnostics. Re-ran with the prior boot probes and added the runtime's modeled vblank clock. The kernel delivered vblank IRQs and reported them claimed, but the guest stayed in repeated polls on object `0x0021B790` with state pointer `0xFD800000`, state `0`, and expected value `0x80004000`. Pushbuffer `PUT` and `GET` remained at `0x495C`, with one initial flip and no pixel writes; the splash draw path was not reached. The test process was stopped after 50 seconds. This does not reproduce the earlier Nude Maker logo run and does not evaluate the Vulkan fast path. No runtime source change remains. Milestone 3 and progress bars are unchanged. Next: trace which guest-side wait condition should update that object/state, then reproduce the last known logo-reaching setup before changing graphics code.
+
 ### Independent XBE analysis and upstream research (2026-10-19)
 
 Reviewed the maintained [xboxrecomp toolkit](https://github.com/sp00nznet/xboxrecomp), its [v0.13.1 release](https://github.com/sp00nznet/xboxrecomp/releases/tag/v0.13.1), the [Ghidra XBE loader](https://github.com/XboxDev/ghidra-xbe), and [xemu's Steel Battalion compatibility record](https://xemu.app/titles/43430002/). The local toolkit is already at v0.13.1 and Visual Studio is installed, so neither a toolkit upgrade nor a new system-wide compiler was needed. The upstream XBE-to-C pipeline includes Ghidra headless scripts; a local Ghidra 12.1.4 + JDK 21 install was used for an independent pass. All tool files and game-derived analysis remain local/ignored.
