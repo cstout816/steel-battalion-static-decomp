@@ -1,0 +1,20 @@
+diff --git a/src/main.c b/src/main.c
+--- a/src/main.c
++++ b/src/main.c
+@@ -440,4 +440,16 @@
+     g_xbox_mem_offset = xbox_GetMemoryOffset();
+     printf("Xbox memory mapped. Offset: 0x%llX\n", (unsigned long long)g_xbox_mem_offset);
++
++    /* Steel Battalion polls this XDK D3D device's completed-frame counter
++     * before it can submit the next splash/title frame. The guest stores the
++     * device pointer at 0x0021AFE0 and reads its counter at +0x2580. Register
++     * that observed layout with the runtime's existing frame counter: real
++     * NV2A flips advance it, and the runtime's bounded idle fallback keeps a
++     * stopped presenter from deadlocking the game forever. The registration
++     * is harmless before device creation; the runtime follows the pointer
++     * until the guest initializes it.
++     */
++    if (xbox_Nv2aFrameCounter(0x0021AFE0u, 0x2580u) != 0)
++        fprintf(stderr, "[BOOT] Failed to register Steel Battalion D3D frame counter\n");
+ 
+     /* The memory-layout helper initially reserves the NV2A range as zeroed

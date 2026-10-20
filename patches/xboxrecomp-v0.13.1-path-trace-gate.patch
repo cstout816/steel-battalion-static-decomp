@@ -1,0 +1,56 @@
+diff --git a/src/kernel/kernel_path.c b/src/kernel/kernel_path.c
+index caf6390..abcf4b9 100644
+--- a/src/kernel/kernel_path.c
++++ b/src/kernel/kernel_path.c
+@@ -14,6 +14,7 @@
+ 
+ #include "kernel.h"
+ #include <stdio.h>
++#include <stdlib.h>
+ #include <string.h>
+ #include <ctype.h>
+ 
+@@ -169,6 +170,17 @@ const wchar_t *xbox_LastHostPath(void)
+ }
+ 
+ #if defined(_WIN32)
++
++/* Path logging is useful during bring-up, but every file request can arrive
++ * from several guest threads. Keep the default runtime quiet so competing
++ * fprintf calls do not serialize ordinary file I/O on stderr. */
++static int xbox_path_trace_enabled(void)
++{
++    static int enabled = -1;
++    if (enabled < 0)
++        enabled = getenv("RECOMP_TRACE_PATHS") != NULL;
++    return enabled;
++}
+ /* ======================================================================== */
+ 
+ #include <shlobj.h>
+@@ -414,8 +426,10 @@ BOOL xbox_translate_path(const char* xbox_path, xbox_host_char* host_path_buf, D
+     }
+ 
+     if (xbox_partition_device_path(xbox_path, host_path_buf, buf_size)) {
+-        fprintf(stderr, "  [PATH] %s -> partition image\n", xbox_path);
+-        fflush(stderr);
++        if (xbox_path_trace_enabled()) {
++            fprintf(stderr, "  [PATH] %s -> partition image\n", xbox_path);
++            fflush(stderr);
++        }
+         return TRUE;
+     }
+ 
+@@ -436,8 +450,10 @@ BOOL xbox_translate_path(const char* xbox_path, xbox_host_char* host_path_buf, D
+ translate:
+     if (g_xbox_path_hook)
+         g_xbox_path_hook(xbox_path);
+-    fprintf(stderr, "  [PATH] %s\n", xbox_path);
+-    fflush(stderr);
++    if (xbox_path_trace_enabled()) {
++        fprintf(stderr, "  [PATH] %s\n", xbox_path);
++        fflush(stderr);
++    }
+     {
+         WCHAR remainder_wide[MAX_PATH];
+         MultiByteToWideChar(CP_ACP, 0, remainder, -1, remainder_wide, MAX_PATH);

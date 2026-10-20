@@ -176,3 +176,19 @@ The follow-up
 [`patches/xboxrecomp-v0.13.1-vulkan-aspect-fit.patch`](../patches/xboxrecomp-v0.13.1-vulkan-aspect-fit.patch)
 preserves the guest image's aspect ratio in the swapchain and clears the
 letterbox bars. Apply it after the presenter patch.
+
+## Steel Battalion runtime integration candidates
+
+[`patches/steel-battalion-frame-counter-registration.patch`](../patches/steel-battalion-frame-counter-registration.patch)
+registers the title's statically identified D3D device counter (`0x0021AFE0`,
+offset `0x2580`) with xboxrecomp's existing NV2A flip/idle counter service.
+The corrected Windows build succeeded, and bounded runs showed the counter
+advancing where it had remained at `1`. Those runs still stalled before the
+title prompt, so this is a diagnostic compatibility candidate rather than a
+verified boot fix. It relies on this XBE's device layout and must not be applied
+to other games without analyzing their binaries.
+
+[`patches/xboxrecomp-v0.13.1-path-trace-gate.patch`](../patches/xboxrecomp-v0.13.1-path-trace-gate.patch)
+makes verbose guest path traces opt-in through `RECOMP_TRACE_PATHS`; normal
+file opens no longer contend on repeated path messages. This changes logging
+only, not path translation or file semantics.
