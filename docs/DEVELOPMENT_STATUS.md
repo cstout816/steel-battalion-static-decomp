@@ -2,6 +2,14 @@
 
 This page is for people who want the detailed engineering tracker. The project is experimental. A local diagnostic run has visually reached the title screen, but this does not mean the game is playable. Progress bars describe tracked work; they do not mean that a game feature is playable.
 
+### 2026-10-20 guest DSP build and bounded audio-path check
+
+The first DSP-enabled build used the default generated-code folder, which does not contain guest function `0x0020D960`; its repeated unresolved-call trace made that launch invalid as an audio check. Reconfigured a separate x64 Release build to use the existing `xboxrecomp-generated-guestlock-s50` translation set, where that function is present. The pinned MIT DSP56300 FFI and game target then built successfully with the DSP option enabled. A Cargo-generated header change was restored, and the pinned dependency checkout was clean after the build.
+
+A 120-second watchdog run used that corrected executable with no `RECOMP_APU_DSP_ACK`. The guest loaded the GP and EP programs from its scratch tables; the GP executed a nonzero program (initial slice 4,120 cycles, followed by bounded slices) and DSP DMA control actions were observed without logged transfer errors. The EP's initial scratch payload sample was all zeroes, so its behavior is not established by the cycle count alone. XAudio2 initialized and the guest opened the title `.sgt` and `.wav` banks, but no DSP-produced output sample, completed title-command response, or audible game audio was verified. The display remained at one flip and the watchdog expired before the title screen. The synthetic `RECOMP_AC97_READY` value was still used to pass the separate codec-ready startup gate.
+
+This narrows the audio gap: actual GP DSP execution is locally verified, while full DMA/FIFO and mixbin behavior, correct EP processing, game audio output, and title arrival are still unverified. No milestone or progress bar advances. Logs and the separate build are local/ignored under `iso/local-analysis/logs/m3-audio-dsp-enabled-guestlock-120s-20261020/` and `local-tools/steel-battalion-game/build/m3-audio-dsp56300-x64/`. Next trace the GP wait/peripheral state and follow a guest command through completed output DMA before attempting to verify audible output.
+
 ### 2026-10-20 follow-up: narrowed the startup stall
 
 The temporary guest trace confirms the first wait in `sub_00216010` exits after one iteration when USER DMA GET reaches `0x4000`. It then records USER DMA PUT/GET advancing to `0x495C`. This corrects the earlier same-day note that treated the initial GET wait as still active: that wait is past; it is not the current blocker.
