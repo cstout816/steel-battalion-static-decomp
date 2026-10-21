@@ -72,9 +72,9 @@ index a9ee8cc..cece7c4 100644
 - * few cores for the title and the host.
 - * ponytail: s_gpu.pixels/pixel_max in put_pixel are unsynchronised stats and
 - * may undercount; nothing depends on them. */
-+ * RECOMP_RASTER_THREADS=<n> sets the count (1 = off). One thread is the
-+ * default because it is faster on the measured 640x480 Steel Battalion
-+ * splash passes; larger workloads still need campaign-level measurement.
++ * RECOMP_RASTER_THREADS=<n> sets the total thread count (1 = off). Four is
++ * the default after a 512x512 Steel Battalion startup sample cut median CPU
++ * raster time from 45.89 ms to 15.74 ms; broader gameplay still needs testing.
 + * The XF worker path accumulates pixel totals and maxima per worker, then
 + * merges them once per triangle. Legacy single-thread raster paths keep their
 + * direct counters. */
@@ -90,7 +90,7 @@ index a9ee8cc..cece7c4 100644
          init = 1;
 -        GetSystemInfo(&si);
 -        n = e ? atoi(e) : (int)si.dwNumberOfProcessors - 4;
-+        n = e ? atoi(e) : 1;
++        n = e ? atoi(e) : 4;
          if (n < 1) n = 1;
          if (n > NV_RASTER_MAX_THREADS) n = NV_RASTER_MAX_THREADS;
          s_pool.n = n;
