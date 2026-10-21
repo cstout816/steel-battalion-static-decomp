@@ -31,6 +31,14 @@ The Windows x64 Release target rebuilt successfully. A 90-second run still reach
 
 The guest-lock trace maps `0x0023FE18` contention through the game's audio routines; the reported waiter acquired the lock, so this capture does not prove a persistent deadlock or tie the lock to the title UI stall. Next investigate the remaining high-frequency unhandled NV097 methods, especially `0x0394/0x0398` and `0x1E74/0x1E78`, before implementing semantics. Milestone 3 and progress bars remain unchanged; boot reliability, input acceptance, audio output, gameplay, saves, and campaign completion remain unverified.
 
+### 2026-10-20 — upstream NV2A method and reuse review
+
+Reviewed xemu's current public NV2A source at commit `bf817de2b0354b7afe5e70efcd4f9c53bc7d4c67` in an ignored, sparse local checkout. Its dispatcher records `0x0394` and `0x0398` into Z clip registers, and maps `0x1E74` / `0x1E78` into shader-control bits. These are GPU state writes, not queue commands; the title capture alone does not show that they cause the guest wait. The relevant names and addresses are in [xemu's NV2A register header](https://github.com/xemu-project/xemu/blob/master/hw/xbox/nv2a/nv2a_regs.h#L1030-L1037) and the method handlers in [xemu's PGRAPH source](https://github.com/xemu-project/xemu/blob/master/hw/xbox/nv2a/pgraph/pgraph.c#L1604-L1610).
+
+The complete xemu PGRAPH/Vulkan backend is not a drop-in renderer for this static-recomp runtime: its dispatcher and renderer rely on QEMU device state, guest-memory integration, locks, and events. The checkout is research-only and ignored; no xemu code was copied. Its file headers show a mix of LGPL and GPL licensing, so any future direct reuse needs a separate component and license audit.
+
+A fresh 25-second timing-enabled Windows run did not reproduce the title capture: it reached one framebuffer flip, left NV2A DMA PUT/GET at `0x495C`, and stopped before any timed draw records. This is an early-startup sample and cannot be compared as a title performance result. The bounded run ended at its 25-second limit, and no game process remains. The last title-screen evidence remains the separate 90-second capture above; intermittent startup is still a problem.
+
 ### 2026-10-20 — Steel Battalion USB DMA alias handoff
 
 A prompt-time A/B capture isolated the Main Weapon input gap. Without a low/high memory-view mirror, the virtual controller emitted `00 1A 01` and OHCI copied it to `0x810816C3`, but the XID buffer at its low guest address stayed neutral; `XInputGetState`'s sampled button word and the title action query remained zero. The title prompt was visible in this run.
