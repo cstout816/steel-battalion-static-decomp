@@ -1,0 +1,60 @@
+# Diagnostic update for the Steel Battalion runtime fork.
+# Makes per-file stderr output opt-in and records bounded wait returns.
+diff --git a/src/kernel/kernel_bridge.c b/src/kernel/kernel_bridge.c
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -1661,6 +1661,28 @@ static void bridge_KeWaitForSingleObject(void)
+             g_eax = (uint32_t)xbox_KeWaitForSingleObject(
+                 ge, wait_reason, wait_mode,
+                 (BOOLEAN)alertable, XBOX_TO_NATIVE(timeout_ptr));
++            {
++                static unsigned returned;
++                const char *trace_path = getenv("RECOMP_WAIT_TRACE_LOG");
++                if (trace_path && *trace_path
++                        && bridge_wait_trace_matches(object)
++                        && returned < 64) {
++                    FILE *trace_file = fopen(trace_path, "a");
++                    if (trace_file) {
++                        DWORD state = WaitForSingleObject(ge, 0);
++                        fprintf(trace_file,
++                                "return[%u] tick=%lu tid=%lu caller=%08X "
++                                "guest_object=%08X status=%08X signal=%08X "
++                                "host_state=%08lX\n",
++                                ++returned, (unsigned long)GetTickCount(),
++                                (unsigned long)GetCurrentThreadId(),
++                                g_xbox_kernel_caller, object, g_eax,
++                                BRIDGE_MEM32(object + 4),
++                                (unsigned long)state);
++                        fclose(trace_file);
++                    }
++                }
++            }
+             if (g_eax == 0 && type == 1)               /* synchronization: consumed */
+                 BRIDGE_MEM32(object + 4) = 0;
+             return;
+@@ -3288,18 +3310,19 @@ static void bridge_NtCreateFile(void)
+-    /* Paired with the [PATH] line the translation just printed: that says what
+-     * was asked for, this says whether it opened. A failed open is not itself
+-     * a bug -- a title probing the cache partition before the disc expects one
+-     * -- so the status is what separates a probe from a real miss. */
+-    {
++    /* Per-call status is useful while investigating file resolution, but it
++     * runs from the guest thread scheduler. Always taking the CRT stderr lock
++     * here lets one guest thread yield while holding that lock and deadlock a
++     * second guest thread that also reports file I/O. Keep this high-volume
++     * trace opt-in so normal execution does not depend on stdio scheduling. */
++    if (getenv("RECOMP_FILE_TRACE")) {
+         extern uint32_t xbox_LastFileError(void);
+         uint32_t _e = g_eax ? xbox_LastFileError() : 0u;
+         if (g_eax)
+             fprintf(stderr, "  [FILE] -> 0x%08X FAILED (win32 err=%u%s)\n",
+                     g_eax, _e,
+                     _e == 32u ? " ERROR_SHARING_VIOLATION"
+                   : _e ==  2u ? " ERROR_FILE_NOT_FOUND"
+                   : _e ==  3u ? " ERROR_PATH_NOT_FOUND" : "");
+         else
+             fprintf(stderr, "  [FILE] -> 0x%08X\n", g_eax);
++        fflush(stderr);
+     }
+-    fflush(stderr);
+ }
