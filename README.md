@@ -33,7 +33,7 @@ These externally hosted images show the original hardware and game. They are not
 
 The goal is to translate the original Xbox version of *Steel Battalion* (2002) ahead of time into a Windows application and recreate the Xbox services it needs. This is called **static recompilation**. The project is not an emulator packaged under another name.
 
-The project is still experimental. The translated Windows program builds, and an earlier local run displayed the “PRESS MAIN WEAPON BUTTON” title prompt with real DSP execution and no fake DSP acknowledgement. A newer bounded run stopped at the dim CAPCOM splash, so title-screen startup is not reliable. The prompt response, audible output, gameplay, saving, and campaign play are not verified. The tracker records observed engineering work separately from features players can use.
+The project is still experimental. The translated Windows program builds, and a 180-second local Release run displayed the “PRESS MAIN WEAPON BUTTON” title prompt with guest DSP execution. That image was very dim and the run advanced at roughly 0.4–1.8 frames per second. Another attempt stopped on a black framebuffer, and an earlier retry crashed during DirectSound object cleanup. Startup is not reliable. The prompt response, audible output, gameplay, saving, and campaign play are not verified. The tracker records observed engineering work separately from features players can use.
 
 ## Controller compatibility
 
@@ -51,13 +51,13 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active. A state-gated startup-render optimization passed 2.3 million per-fragment comparisons and cut one measured fallback draw from about 1.55 seconds to about 32 milliseconds. The bounded run did not verify the title screen. |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active. A state-gated startup-render optimization passed 2.3 million per-fragment comparisons. A later Release run reached the title prompt, but its presentation remained very slow and a repeat stalled before the title. |
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [######--------------] 3/5 | Clear-rectangle methods are handled by an isolated patch. The guest DCF4 event signals correctly, and exact-state CPU combiner shortcuts passed 2.17 million reference comparisons with zero mismatches while retaining coverage, depth, texture sampling, and blending. The latest bounded release run remained at the dim CAPCOM splash; reliable boot, title response, audio, and gameplay remain unverified. |
-| Startup rendering performance | [##########----------] 2/4 | Exact-state combiner shortcuts passed per-fragment comparison. Earlier profiling measured a 640×480 CPU fallback at about 0.74 seconds per draw; the latest release run did not exercise the targeted CPU-raster states, so an end-to-end speedup from these new shortcuts is not yet established. |
+| Boot and compatibility | [######--------------] 3/5 | Clear-rectangle methods are handled by an isolated patch. The guest DCF4 event signals correctly, and exact-state CPU combiner shortcuts passed 2.17 million reference comparisons with zero mismatches while retaining coverage, depth, texture sampling, and blending. One 180-second Release run reached the title prompt; repeatable startup, prompt response, audible output, and gameplay remain unverified. |
+| Startup rendering performance | [##########----------] 2/4 | In the title-reaching Release run, 46 targeted 512×512 format-0x0E draws used the new paths: diffuse passthrough median 14.27 ms and diffuse-times-texture median 48.77 ms, compared with earlier generic fallback draws over 1.2 seconds. The full run still presented at about 0.4–1.8 FPS; other formats and title-scene work remain bottlenecks. |
 | Virtual controller input | [#############-------] 2/3 | A synchronized diagnostic confirmed the Main Weapon report reaches guest XInput state. The title action and prompt response remain unverified; full input support is not implemented. |
 | Guest DSP and audio | [█-------------------] 1/2 | Guest DSP instructions execute; audible output is not verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
