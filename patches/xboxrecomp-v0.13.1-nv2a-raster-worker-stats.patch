@@ -1,0 +1,108 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+index a9ee8cc..cece7c4 100644
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -52,6 +52,7 @@ extern void nv2a_pgraph_notify(uint32_t subchannel, uint32_t method,
+ #else
+ #define NV_TLS __thread
+ #endif
++static NV_TLS int s_xf_raster_active;
+ 
+ extern ptrdiff_t xbox_GetMemoryOffset(void);
+ extern void xbox_FramebufferWindowSet(uint32_t fb_va, uint32_t pitch);
+@@ -1329,9 +1330,11 @@ static void put_pixel(uint8_t *mem, uint32_t bpp, int x, int y, uint32_t argb)
+         return;
+     if (y < (int)s_gpu.clip_y || y >= (int)(s_gpu.clip_y + s_gpu.clip_h))
+         return;
+-    s_gpu.pixels++;
+-    if ((argb & 0x00FFFFFFu) > (s_gpu.pixel_max & 0x00FFFFFFu))
+-        s_gpu.pixel_max = argb;
++    if (!s_xf_raster_active) {
++        s_gpu.pixels++;
++        if ((argb & 0x00FFFFFFu) > (s_gpu.pixel_max & 0x00FFFFFFu))
++            s_gpu.pixel_max = argb;
++    }
+     row = s_surface + (size_t)y * s_gpu.pitch;
+ 
+     /* Blending, with the GL factor set and equations the NV2A takes.
+@@ -1970,6 +1973,7 @@ typedef struct {
+ 
+ typedef struct {
+     uint64_t depth_fail, pixels, black_checked, black_mismatches;
++    uint32_t pixel_max;
+     uint32_t zpass;
+ } XfCount;
+ 
+@@ -1979,6 +1983,8 @@ static void xf_count_add(XfCount *dst, const XfCount *src)
+     dst->pixels += src->pixels;
+     dst->black_checked += src->black_checked;
+     dst->black_mismatches += src->black_mismatches;
++    if ((src->pixel_max & 0x00FFFFFFu) > (dst->pixel_max & 0x00FFFFFFu))
++        dst->pixel_max = src->pixel_max;
+     dst->zpass += src->zpass;
+ }
+ 
+@@ -2055,6 +2061,8 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+     const float *a = T->a, *b = T->b, *c = T->c;
+     const Nv2aVshOutput *va = T->va, *vb = T->vb, *vc = T->vc;
+     int x, y, k;
++    int was_xf_raster_active = s_xf_raster_active;
++    s_xf_raster_active = 1;
+ 
+     for (y = y0; y < T->maxy; y += step) {
+         for (x = T->minx; x < T->maxx; x++) {
+@@ -2161,9 +2169,12 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+                     continue;              /* colour writes off: depth only */
+                 cnt->pixels++;
+             }
++            if ((argb & 0x00FFFFFFu) > (cnt->pixel_max & 0x00FFFFFFu))
++                cnt->pixel_max = argb;
+             put_pixel(T->mem, T->bpp, x, y, argb);
+         }
+     }
++    s_xf_raster_active = was_xf_raster_active;
+ }
+ 
+ /* Worker threads for big triangles.
+@@ -2174,10 +2185,12 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+  * split cleanly by row: every pixel reads only its own depth and colour, so
+  * interleaved rows on N threads need no locking. Small triangles stay on the
+  * executor thread, where waking workers would cost more than it saves.
+- * RECOMP_RASTER_THREADS=<n> sets the count (1 = off); the default leaves a
+- * few cores for the title and the host.
+- * ponytail: s_gpu.pixels/pixel_max in put_pixel are unsynchronised stats and
+- * may undercount; nothing depends on them. */
++ * RECOMP_RASTER_THREADS=<n> sets the count (1 = off). One thread is the
++ * default because it is faster on the measured 640x480 Steel Battalion
++ * splash passes; larger workloads still need campaign-level measurement.
++ * The XF worker path accumulates pixel totals and maxima per worker, then
++ * merges them once per triangle. Legacy single-thread raster paths keep their
++ * direct counters. */
+ #define NV_RASTER_MAX_THREADS 16
+ #define NV_RASTER_MT_MIN_PIXELS 8192
+ 
+@@ -2208,11 +2221,9 @@ static int raster_pool_size(void)
+     static int init;
+     if (!init) {
+         const char *e = getenv("RECOMP_RASTER_THREADS");
+-        SYSTEM_INFO si;
+         int n, k;
+         init = 1;
+-        GetSystemInfo(&si);
+-        n = e ? atoi(e) : (int)si.dwNumberOfProcessors - 4;
++        n = e ? atoi(e) : 1;
+         if (n < 1) n = 1;
+         if (n > NV_RASTER_MAX_THREADS) n = NV_RASTER_MAX_THREADS;
+         s_pool.n = n;
+@@ -2354,8 +2365,9 @@ static void raster_xf_triangle(const Nv2aVshOutput *va, const Nv2aVshOutput *vb,
+                 (unsigned long long)cnt.pixels,
+                 (unsigned long long)cnt.black_checked,
+                 (unsigned long long)cnt.black_mismatches);
+-    if (T.depth_only)
+-        s_gpu.pixels += cnt.pixels;
++    s_gpu.pixels += cnt.pixels;
++    if ((cnt.pixel_max & 0x00FFFFFFu) > (s_gpu.pixel_max & 0x00FFFFFFu))
++        s_gpu.pixel_max = cnt.pixel_max;
+     s_gpu.xf_depth_fail += cnt.depth_fail;
+     s_gpu.xf_pixels += cnt.pixels;
+     s_gpu.zpass_count += cnt.zpass;
