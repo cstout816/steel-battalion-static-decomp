@@ -10,7 +10,7 @@
 
 </div>
 
-> **For players:** there is no game to download yet. With the optional codec-ready signal enabled, a recent diagnostic reached the title prompt at 197 flips. A 500 ms Main Weapon pulse was parsed, but later captures went black and no reliable transition followed. Audible output, stable boot, controller response, and gameplay are not verified. There is no installer or launcher. Please do not download unofficial builds or send game files.
+> **For players:** there is no game to download yet. With the optional codec-ready signal enabled, a synchronized diagnostic reached the title prompt, accepted a Main Weapon action, and displayed the menu with **CAMPAIGN** selected. Presentation remained very slow and the menu was dim. Audible output, reliable startup, full controller support, and gameplay are not verified. There is no installer or launcher. Please do not download unofficial builds or send game files.
 
 ## The game and its controller
 
@@ -33,7 +33,7 @@ These externally hosted images show the original hardware and game. They are not
 
 The goal is to translate the original Xbox version of *Steel Battalion* (2002) ahead of time into a Windows application and recreate the Xbox services it needs. This is called **static recompilation**. The project is not an emulator packaged under another name.
 
-The project is still experimental. The translated Windows program builds, and a recent Release run displayed the “PRESS MAIN WEAPON BUTTON” title prompt with guest DSP execution. The dim image advanced at about 1.3–2.2 FPS before later captures went black. A run without codec readiness returned `DSERR_NODRIVER` and crashed during DirectSound cleanup; with the optional codec-ready setting, DirectSound initialized and title audio assets opened. Startup is not reliable. The pulse did not produce a verified title transition; audible output, gameplay, saving, and campaign play are not verified. The tracker records observed engineering work separately from features players can use.
+The project is still experimental. The translated Windows program builds, and a recent Release run displayed the “PRESS MAIN WEAPON BUTTON” prompt, accepted a Main Weapon action, and displayed the title menu with **CAMPAIGN** selected. Presentation ranged from about 0.6–2.3 FPS and the menu image was dim. A diagnostic run without codec readiness returned `DSERR_NODRIVER`; with the optional codec-ready setting, DirectSound initialized and title audio assets opened. Startup is not reliable. Audible output, full controller support, gameplay, saving, and campaign play are not verified. The tracker records observed engineering work separately from features players can use.
 
 ## Controller compatibility
 
@@ -51,14 +51,14 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active. A state-gated startup-render optimization passed 2.3 million per-fragment comparisons. A recent Release run reached the title prompt with the optional APU-ready setting, but the Main Weapon pulse was not followed by a reliable transition and presentation later went black. |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active. A state-gated startup-render optimization passed 2.3 million per-fragment comparisons. A synchronized Release capture reached the title menu after the Main Weapon query returned success; presentation was still very slow. |
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [######--------------] 3/5 | Clear-rectangle methods are handled by an isolated patch. The guest DCF4 event signals correctly, and exact-state CPU combiner shortcuts passed 2.17 million reference comparisons with zero mismatches while retaining coverage, depth, texture sampling, and blending. Recent runs reached the title prompt with the optional codec-ready setting, but scanout later stopped; repeatable startup, prompt response, audible output, and gameplay remain unverified. |
+| Boot and compatibility | [########------------] 4/5 | Clear-rectangle methods are handled by an isolated patch. The guest DCF4 event signals correctly, and exact-state CPU combiner shortcuts passed 2.17 million reference comparisons with zero mismatches while retaining coverage, depth, texture sampling, and blending. A synchronized Main Weapon query returned success and the title menu appeared. Startup stability, audio output, and gameplay remain unverified. |
 | Startup rendering performance | [##########----------] 2/4 | In the title-reaching Release run, 46 targeted 512×512 format-0x0E draws used the new paths: diffuse passthrough median 14.27 ms and diffuse-times-texture median 48.77 ms, compared with earlier generic fallback draws over 1.2 seconds. The full run still presented at about 0.4–1.8 FPS; other formats and title-scene work remain bottlenecks. |
-| Virtual controller input | [#############-------] 2/3 | A synchronized diagnostic confirmed the Main Weapon report and guest action-state change. No title transition or complete input support is verified. |
+| Virtual controller input | [#############-------] 2/3 | A synchronized Main Weapon pulse reached the guest query, which returned success and opened the title menu. The full original controller mapping and outputs remain unverified. |
 | Guest DSP and audio | [█-------------------] 1/2 | Guest DSP instructions execute in a title-reaching run. Codec readiness is supplied synthetically for the diagnostic path; the title audio banks open, but audible output is not verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
