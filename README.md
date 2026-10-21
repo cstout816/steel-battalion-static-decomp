@@ -51,12 +51,13 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active. A clean 120-second real-DSP run reached 188 flips; later profiling found CPU-rendered fallback draws taking about 1.3–1.5 seconds each. Those profiling runs did not verify the title screen. |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active. A state-gated startup-render optimization passed 2.3 million per-fragment comparisons and cut one measured fallback draw from about 1.55 seconds to about 32 milliseconds. The bounded run did not verify the title screen. |
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [######--------------] 3/5 | Clear-rectangle methods are handled by an isolated patch. The guest DCF4 event signals correctly, but targeted profiling found very slow CPU-raster fallback draws. The clean run reached 188 flips and completed the splash-logo fade; reliable boot, title response, audio, and gameplay remain unverified. |
+| Boot and compatibility | [######--------------] 3/5 | Clear-rectangle methods are handled by an isolated patch. The guest DCF4 event signals correctly, and one exact CPU-raster fallback state now bypasses redundant combiner work while keeping reference coverage and depth testing. A 180-second diagnostic reached 165 flips; reliable boot, title response, audio, and gameplay remain unverified. |
+| Startup rendering performance | [##########----------] 2/4 | Bottleneck measured and a narrowly gated shader bypass validated against 2.3 million reference fragments. Stable title rendering and sustained in-game frame pacing remain unverified. |
 | Virtual controller input | [#############-------] 2/3 | A synchronized diagnostic confirmed the Main Weapon report reaches guest XInput state. The title action and prompt response remain unverified; full input support is not implemented. |
 | Guest DSP and audio | [█-------------------] 1/2 | Guest DSP instructions execute; audible output is not verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |

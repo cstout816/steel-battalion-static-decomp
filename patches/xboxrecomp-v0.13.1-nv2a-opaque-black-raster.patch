@@ -1,0 +1,164 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+index e035949..267e01c 100644
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -1965,9 +1965,80 @@ typedef struct {
+     float iw[3], uv[3][2], stc[3][4][4], vfog[3], fogc[4], inv_area;
+     float *zb;
+     int minx, maxx, miny, maxy, use_rc, textured, depth_only;
++    int opaque_black, validate_opaque_black;
+ } XfTri;
+ 
+-typedef struct { uint64_t depth_fail, pixels; uint32_t zpass; } XfCount;
++typedef struct {
++    uint64_t depth_fail, pixels, black_checked, black_mismatches;
++    uint32_t zpass;
++} XfCount;
++
++/* Runtime modes for the exact Steel Battalion startup format-0x12 pass. */
++static int xf_opaque_black_mode(void)
++{
++    static int mode = -1;
++    if (mode < 0) {
++        if (getenv("RECOMP_VALIDATE_OPAQUE_BLACK_RASTER")) mode = 1;
++        else if (getenv("RECOMP_DISABLE_OPAQUE_BLACK_RASTER")) mode = 0;
++        else mode = 2;
++    }
++    return mode;
++}
++
++static int xf_opaque_black_gate(const XfTri *T)
++{
++    const Nv2aVshOutput *v[3] = {T->va, T->vb, T->vc};
++    float tex[4][4] = {{0}}, fog[4] = {0}, out[4];
++    uint32_t i, j;
++
++    if (!xf_opaque_black_mode() || !T->use_rc || !T->textured
++        || (s_gpu.xf_mode & 3) != 2 || !s_gpu.texs[0].valid
++        || s_gpu.texs[0].color != 0x12
++        || s_gpu.texs[0].width != 1024 || s_gpu.texs[0].height != 1024
++        || s_gpu.blend_enable || s_gpu.alpha_test || s_gpu.fog_enable
++        || !s_gpu.depth_test || s_gpu.depth_func != 0x203 || s_gpu.depth_mask
++        || s_gpu.zpass_enable || s_gpu.color_mask != 0x01010101u
++        || s_gpu.texs[0].filter != 0x02022000
++        || !s_gpu.rc_seen || s_gpu.rc.control != 0x00011101
++        || s_gpu.rc.stage_program != 0
++        || s_gpu.rc.color_icw[0] != 0xC4200000
++        || s_gpu.rc.alpha_icw[0] != 0xD4301010
++        || s_gpu.rc.color_ocw[0] != 0x000000C0
++        || s_gpu.rc.alpha_ocw[0] != 0x000000C0
++        || s_gpu.rc.final0 != 0x200C0000
++        || s_gpu.rc.final1 != 0x00001C80
++        || surface_bpp() != 4 || s_gpu.pitch != 640u * 4u
++        || s_gpu.clip_x != 0 || s_gpu.clip_y != 0
++        || s_gpu.clip_w != 640 || s_gpu.clip_h != 480)
++        return 0;
++
++    for (i = 0; i < 3; i++) {
++        if ((v[i]->pos[0] != 0.0f && v[i]->pos[0] != 640.0f)
++            || (v[i]->pos[1] != 0.0f && v[i]->pos[1] != 480.0f)
++            || v[i]->pos[2] != 0.0f || v[i]->pos[3] != 1.0f
++            || v[i]->d0[0] != 0.0f || v[i]->d0[1] != 0.0f
++            || v[i]->d0[2] != 0.0f || v[i]->d0[3] != 1.0f)
++            return 0;
++        for (j = 0; j < 4; j++)
++            if (v[i]->d1[j] != T->va->d1[j])
++                return 0;
++        if (v[i]->tex[0][0] != 0.0f || v[i]->tex[0][1] != 0.0f
++            || v[i]->tex[0][2] != 0.0f || v[i]->tex[0][3] != 1.0f)
++            return 0;
++    }
++
++    /* Verify both texture extremes with the actual interpolated constants.
++     * Validation mode also compares every covered reference fragment. */
++    tex[0][3] = 1.0f;
++    nv2a_rc_eval(&s_gpu.rc, T->va->d0, T->va->d1, fog,
++                 (const float (*)[4])tex, out);
++    if (pack_color(out) != 0xFF000000u)
++        return 0;
++    tex[0][0] = tex[0][1] = tex[0][2] = tex[0][3] = 1.0f;
++    nv2a_rc_eval(&s_gpu.rc, T->va->d0, T->va->d1, fog,
++                 (const float (*)[4])tex, out);
++    return pack_color(out) == 0xFF000000u;
++}
+ 
+ /* Rows y0, y0+step, ... < maxy of triangle T. */
+ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+@@ -2010,7 +2081,9 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+                     continue;
+                 }
+                 argb = 0;
+-                if (shade) {
++                if (shade && T->opaque_black && !T->validate_opaque_black) {
++                    argb = 0xFF000000u;
++                } else if (shade) {
+                     for (k = 0; k < 4; k++)
+                         col[k] = l0 * va->d0[k] + l1 * vb->d0[k] + l2 * vc->d0[k];
+                     pw = l0 * T->iw[0] + l1 * T->iw[1] + l2 * T->iw[2];
+@@ -2063,6 +2136,11 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+                             continue;
+                     }
+                 }
++                if (T->opaque_black && T->validate_opaque_black) {
++                    cnt->black_checked++;
++                    if (argb != 0xFF000000u)
++                        cnt->black_mismatches++;
++                }
+                 if (zp && s_gpu.depth_mask)
+                     *zp = z;
+                 if (s_gpu.zpass_enable)
+@@ -2152,16 +2230,20 @@ static void xf_rows_parallel(const XfTri *T, XfCount *total)
+     for (k = 0; k < n - 1; k++)
+         SetEvent(s_pool.start[k]);
+     {
+-        XfCount mine = {0, 0, 0};
++        XfCount mine = {0, 0, 0, 0, 0};
+         xf_rows(T, T->miny + (n - 1), n, &mine);
+         WaitForSingleObject(s_pool.done, INFINITE);
+         total->depth_fail += mine.depth_fail;
+         total->pixels += mine.pixels;
++        total->black_checked += mine.black_checked;
++        total->black_mismatches += mine.black_mismatches;
+         total->zpass += mine.zpass;
+     }
+     for (k = 0; k < n - 1; k++) {
+         total->depth_fail += s_pool.cnt[k].depth_fail;
+         total->pixels += s_pool.cnt[k].pixels;
++        total->black_checked += s_pool.cnt[k].black_checked;
++        total->black_mismatches += s_pool.cnt[k].black_mismatches;
+         total->zpass += s_pool.cnt[k].zpass;
+     }
+ }
+@@ -2176,7 +2258,7 @@ static void raster_xf_triangle(const Nv2aVshOutput *va, const Nv2aVshOutput *vb,
+                                const Nv2aVshOutput *vc)
+ {
+     XfTri T;
+-    XfCount cnt = {0, 0, 0};
++    XfCount cnt = {0, 0, 0, 0, 0};
+     const Nv2aVshOutput *v[3];
+     const float *a, *b, *c;
+     float area, su = 1.0f, sv = 1.0f;
+@@ -2239,6 +2321,9 @@ static void raster_xf_triangle(const Nv2aVshOutput *va, const Nv2aVshOutput *vb,
+         nv2a_rc_unpack(s_gpu.fog_color, T.fogc);
+         { float r = T.fogc[2]; T.fogc[2] = T.fogc[0]; T.fogc[0] = r; }
+     }
++    T.opaque_black = xf_opaque_black_gate(&T);
++    T.validate_opaque_black = T.opaque_black
++                            && xf_opaque_black_mode() == 1;
+ 
+     T.minx = (int)floorf(fminf(a[0], fminf(b[0], c[0])));
+     T.maxx = (int)ceilf (fmaxf(a[0], fmaxf(b[0], c[0])));
+@@ -2259,6 +2344,13 @@ static void raster_xf_triangle(const Nv2aVshOutput *va, const Nv2aVshOutput *vb,
+     T.inv_area = 1.0f / area;
+ 
+     xf_rows_parallel(&T, &cnt);
++    if (T.opaque_black)
++        fprintf(stderr,
++                "[OPAQUE-BLACK] mode=%s pixels=%llu checked=%llu mismatches=%llu\n",
++                T.validate_opaque_black ? "validate" : "fast",
++                (unsigned long long)cnt.pixels,
++                (unsigned long long)cnt.black_checked,
++                (unsigned long long)cnt.black_mismatches);
+     if (T.depth_only)
+         s_gpu.pixels += cnt.pixels;
+     s_gpu.xf_depth_fail += cnt.depth_fail;
