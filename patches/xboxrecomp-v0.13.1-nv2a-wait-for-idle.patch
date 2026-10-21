@@ -1,0 +1,23 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+index 4afc2db..12a355a 100644
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -302,6 +302,7 @@ static int surface_write_refused(uint32_t base, uint32_t bytes, const char *what
+ #define NV097_SET_FLIP_MODULO             0x0128
+ #define NV097_FLIP_INCREMENT_WRITE        0x012C
+ #define NV097_FLIP_STALL                  0x0130
++#define NV097_WAIT_FOR_IDLE               0x0110
+ #define NV097_ARRAY_ELEMENT16             0x1800
+ /* Draw a run of vertices straight out of the arrays, with no index list:
+  * bits 0..23 are the first vertex, bits 24..31 the count minus one. It may
+@@ -2930,5 +2931,10 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+         if (s_ftrace == 2)
+             fprintf(stderr, "[FTRACE] color offset -> %08X%c", param, 10);
+         s_gpu.color_offset = param;
+         break;
++    case NV097_WAIT_FOR_IDLE:
++        /* Pushbuffer draws complete before the executor returns: CPU raster
++         * writes are immediate and the Vulkan draw helpers wait for the queue.
++         * There is no outstanding host work to block on here. */
++        break;
+     case NV097_SET_COLOR_CLEAR_VALUE:
