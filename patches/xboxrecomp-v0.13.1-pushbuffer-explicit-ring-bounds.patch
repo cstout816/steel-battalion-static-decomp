@@ -1,0 +1,124 @@
+diff --git a/src/kernel/xbox_memory_layout.c b/src/kernel/xbox_memory_layout.c
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -999,45 +999,90 @@ static DWORD WINAPI nv2a_ack_thread(LPVOID param)
+                      * OR-ing its base is the documented round trip, not a
+                      * guess. */
+                     /* The pushbuffer is a ring, so PUT coming back below
+-                     * where it was is a wrap, not a rewind. Scanning only
+-                     * forward segments dropped everything written across
+-                     * the seam -- one whole submission each time round.
+-                     *
+-                     * The ring's bounds are not published anywhere this
+-                     * code can read, so they are learned: the lowest and
+-                     * highest PUT seen bracket it. That is approximate on
+-                     * the first lap and exact afterwards, and scanning a
+-                     * little short of the true end costs the same commands
+-                     * that were being lost anyway. */
++                     * where it was is a wrap, not a rewind. When a title's
++                     * D3D device exposes validated bounds, callers can give
++                     * this survey the physical PUT range via
++                     * RECOMP_PB_RING_START/END. Keep the learned-bound path
++                     * for titles without a verified layout. */
+                     static uint32_t put_lo, put_hi;
++                    static uint32_t configured_ring_lo, configured_ring_hi;
++                    static int ring_config_checked;
+                     static int pb_timing = -1;
+                     static unsigned pb_timing_records;
+                     DWORD64 pb_scan_start_ms;
+                     uint32_t previous_put = last_put;
++                    int ring_configured;
++
++                    if (!ring_config_checked) {
++                        const char *lo = getenv("RECOMP_PB_RING_START");
++                        const char *hi = getenv("RECOMP_PB_RING_END");
++                        if (lo && hi) {
++                            configured_ring_lo = (uint32_t)strtoul(lo, NULL, 0);
++                            configured_ring_hi = (uint32_t)strtoul(hi, NULL, 0);
++                        }
++                        ring_config_checked = 1;
++                    }
++                    ring_configured = configured_ring_lo >= 0x1000u &&
++                                      configured_ring_hi > configured_ring_lo &&
++                                      configured_ring_hi <= 0x10000000u;
+                     if (pb_timing < 0)
+                         pb_timing = getenv("RECOMP_PB_TIMING") != NULL;
+                     pb_scan_start_ms = GetTickCount64();
+-                    if (!put_lo || put < put_lo) put_lo = put;
+-                    if (put > put_hi) put_hi = put;
+-                    if (last_put && put > last_put) {
+-                        nv2a_pb_scan(XBOX_CONTIG_BASE | (last_put & 0x0FFFFFFFu),
+-                                     XBOX_CONTIG_BASE | (put      & 0x0FFFFFFFu));
+-                    } else if (last_put && put < last_put) {
+-                        if (put_hi > last_put)
+-                            nv2a_pb_scan(
+-                                XBOX_CONTIG_BASE | (last_put & 0x0FFFFFFFu),
+-                                XBOX_CONTIG_BASE | (put_hi   & 0x0FFFFFFFu));
+-                        if (put > put_lo)
+-                            nv2a_pb_scan(
+-                                XBOX_CONTIG_BASE | (put_lo & 0x0FFFFFFFu),
+-                                XBOX_CONTIG_BASE | (put    & 0x0FFFFFFFu));
+-                        if (getenv("RECOMP_PB_WRAP_TRACE")) {
+-                            static unsigned wraps;
+-                            if (wraps++ < 8)
+-                                fprintf(stderr, "  [NV2A] pushbuffer wrapped "
+-                                        "(0x%08X -> 0x%08X)\n", last_put, put);
++                    if (ring_configured) {
++                        put_lo = configured_ring_lo;
++                        put_hi = configured_ring_hi;
++                        if (put >= put_lo && put < put_hi) {
++                            if (last_put >= put_lo && last_put < put_hi) {
++                                if (put > last_put) {
++                                    nv2a_pb_scan(
++                                        XBOX_CONTIG_BASE | (last_put & 0x0FFFFFFFu),
++                                        XBOX_CONTIG_BASE | (put & 0x0FFFFFFFu));
++                                } else if (put < last_put) {
++                                    nv2a_pb_scan(
++                                        XBOX_CONTIG_BASE | (last_put & 0x0FFFFFFFu),
++                                        XBOX_CONTIG_BASE | (put_hi & 0x0FFFFFFFu));
++                                    if (put > put_lo)
++                                        nv2a_pb_scan(
++                                            XBOX_CONTIG_BASE | (put_lo & 0x0FFFFFFFu),
++                                            XBOX_CONTIG_BASE | (put & 0x0FFFFFFFu));
++                                    if (getenv("RECOMP_PB_WRAP_TRACE")) {
++                                        static unsigned wraps;
++                                        if (wraps++ < 8)
++                                            fprintf(stderr, "  [NV2A] pushbuffer wrapped "
++                                                    "(0x%08X -> 0x%08X)\n",
++                                                    last_put, put);
++                                    }
++                                }
++                            } else if (put > put_lo) {
++                                nv2a_pb_scan(
++                                    XBOX_CONTIG_BASE | (put_lo & 0x0FFFFFFFu),
++                                    XBOX_CONTIG_BASE | (put & 0x0FFFFFFFu));
++                            }
+                         }
+-                    }                    if (pb_timing) {
++                    } else {
++                        if (!put_lo || put < put_lo) put_lo = put;
++                        if (put > put_hi) put_hi = put;
++                        if (last_put && put > last_put) {
++                            nv2a_pb_scan(XBOX_CONTIG_BASE | (last_put & 0x0FFFFFFFu),
++                                         XBOX_CONTIG_BASE | (put      & 0x0FFFFFFFu));
++                        } else if (last_put && put < last_put) {
++                            if (put_hi > last_put)
++                                nv2a_pb_scan(
++                                    XBOX_CONTIG_BASE | (last_put & 0x0FFFFFFFu),
++                                    XBOX_CONTIG_BASE | (put_hi   & 0x0FFFFFFFu));
++                            if (put > put_lo)
++                                nv2a_pb_scan(
++                                    XBOX_CONTIG_BASE | (put_lo & 0x0FFFFFFFu),
++                                    XBOX_CONTIG_BASE | (put    & 0x0FFFFFFFu));
++                            if (getenv("RECOMP_PB_WRAP_TRACE")) {
++                                static unsigned wraps;
++                                if (wraps++ < 8)
++                                    fprintf(stderr, "  [NV2A] pushbuffer wrapped "
++                                            "(0x%08X -> 0x%08X)\n", last_put, put);
++                            }
++                        }
++                    }
++                    if (pb_timing) {
+                         DWORD64 elapsed_ms = GetTickCount64() - pb_scan_start_ms;
+                         if (pb_timing_records < 64 || elapsed_ms >= 20) {
+                             fprintf(stderr,
