@@ -2859,3 +2859,9 @@ The XboxRecomp guest write watcher on `0x004AFBC0` trapped the whole guest memor
 - DMA PUT and GET matched in several late-run snapshots while reported speed was about 0.17 FPS. That narrows the next investigation to remaining CPU raster work at those samples; it does not prove the GPU queue is never a cause.
 - Milestone 3 remains active; progress bars unchanged. Next capture and classify the remaining format-0x0E/0x2D states and evaluate a texture- and depth-correct GPU path or a reference-raster optimization. Title-screen, audio, accepted input, gameplay, save/load, and campaign completion remain unverified.
 
+### 2026-10-20 — far-depth eligibility check rejected for remaining logo draws
+
+- Tested a bounded extension of the existing textured format-0x0E Vulkan path for surfaces whose CPU depth shadow was uniformly far. The gate required z=0, LEQUAL, and depth writes disabled; it would have preserved the far values and left later depth-writing draws to the reference path.
+- In the 180-second diagnostic, this broader condition did not match any draw. One 0x0E draw used the existing known-zero-depth path at 54 ms; 38 other 0x0E draws remained CPU-rasterized at roughly 1.5 seconds each. The uniformly-far probe was removed as it did not improve the captured workload. The standard Release target rebuilt successfully after removal.
+- The run reached 167 flips and did not verify the title screen. This narrows the remaining bottleneck: those CPU fallback surfaces already have non-far or otherwise unproven depth contents, so skipping depth cannot be justified. Next investigate a texture-sampling path that carries the actual depth buffer or optimize the CPU reference work while retaining per-fragment depth tests.
+
