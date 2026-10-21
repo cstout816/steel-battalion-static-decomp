@@ -1,0 +1,24 @@
+diff --git a/src/usb/ohci.c b/src/usb/ohci.c
+--- a/src/usb/ohci.c
++++ b/src/usb/ohci.c
+@@ -626,7 +626,18 @@ static uint32_t ohci_do_td(OhciController *hc, uint32_t ed0, uint32_t td)
+             s_n_report++;
+             int n = usb_gamepad_report(pad, rep, (int)sizeof rep);
+             if (n > len) n = len;
+-            if (n > 0 && guest_ptr(cbp, (uint32_t)n))
+-                memcpy(guest_ptr(cbp, (uint32_t)n), rep, (size_t)n);
++            if (n > 0 && guest_ptr(cbp, (uint32_t)n)) {
++                uint32_t dma_va = bus_resolve(cbp);
++                uint8_t *dst = guest_ptr(cbp, (uint32_t)n);
++                memcpy(dst, rep, (size_t)n);
++                /* OHCI receives a physical address. The runtime maps
++                 * contiguous physical pages through the high 0x80000000
++                 * window, while XID's completion callback reads this same
++                 * buffer through its low guest VA. Keep both views coherent
++                 * for DMA writes into the main RAM range. */
++                if (dma_va != cbp && guest_ok(cbp, (uint32_t)n))
++                    memcpy((uint8_t *)xbox_GetMemoryOffset() + cbp,
++                           rep, (size_t)n);
++            }
+             moved = n;
+         }

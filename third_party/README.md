@@ -150,6 +150,17 @@ public [Xbox-side XID test](https://gist.github.com/Ryzee119/5b74e94eb765bcc54e6
 The corrected layout and synthetic report transport were observed locally;
 guest-side acceptance and gameplay behavior are not yet verified.
 
+A title-prompt trace found that OHCI routed a Steel Battalion report into the
+runtime's high contiguous-memory view while the guest input path read the low
+guest view. The isolated
+[`patches/xboxrecomp-v0.13.1-ohci-dma-alias-coherency.patch`](../patches/xboxrecomp-v0.13.1-ohci-dma-alias-coherency.patch)
+mirrors the USB DMA write so the guest-visible buffer stays coherent. In a
+bounded Main Weapon test, the guest XInput bit and title action query changed
+to pressed and returned to neutral on release. The title image remained at
+the prompt, so this does not verify menu progression or general USB DMA
+correctness. The patch applies to pinned XboxRecomp v0.13.1 and is a local
+compatibility change; no upstream code was copied into the repository.
+
 ## Pinned Vulkan presentation dependencies
 
 The Windows Vulkan framebuffer presenter fetches two pinned dependencies

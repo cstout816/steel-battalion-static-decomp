@@ -15,6 +15,16 @@ The temporary trace was removed from ignored generated code. A clean x64 Release
 Milestone 3 and bars remain unchanged: overall 2/8; boot/compatibility 3/5; virtual controller 2/3; DSP/audio 1/2. Next trace the device handle's internal state and the XID open/callback path around `XInputGetState`, comparing guest device data before and after the exact Main Weapon report. Do not alter the controller mapping or claim title input acceptance until that boundary is shown.
 # Development status
 
+### 2026-10-20 — Steel Battalion USB DMA alias handoff
+
+A prompt-time A/B capture isolated the Main Weapon input gap. Without a low/high memory-view mirror, the virtual controller emitted `00 1A 01` and OHCI copied it to `0x810816C3`, but the XID buffer at its low guest address stayed neutral; `XInputGetState`'s sampled button word and the title action query remained zero. The title prompt was visible in this run.
+
+Added a narrow OHCI DMA coherency change in the local XboxRecomp checkout and preserved it as `patches/xboxrecomp-v0.13.1-ohci-dma-alias-coherency.patch`. During the matching title-prompt hold, the low guest buffer then showed payload bit 1 (`0x010816C4 = 0x0000011A`), the sampled XInput button word became 1, action byte `0x004AFBC3` became `0xFF`, and `sub_00048B80(1,6,9)` returned 1. On release, XInput and the action byte returned to zero and the query returned zero. The patch applies cleanly to the pinned XboxRecomp v0.13.1 source; the Windows x64 Release target built successfully with it. Temporary generated-code and post-copy trace hooks were removed before the final build. The user’s separate XID profile patch remains untouched.
+
+This verifies the Main Weapon report reaches the guest input path and satisfies the title action query. The visible title prompt did not transition in this capture, so the next state/UI step and boot reliability remain unverified. Audio, gameplay, saves, and campaign progression remain unverified. No game data or generated game code was staged. Capture: `iso/local-analysis/logs/m3-xid-alias-coherence-test-20261020/`.
+
+Milestone 3 and progress bars remain unchanged: overall 2/8; boot/compatibility 3/5; virtual controller 2/3; DSP/audio 1/2. Next trace the caller/state transition after `sub_000C8050` returns success, while separately addressing the slow and unstable frame progression. Keep graphical enhancements out of scope until boot and gameplay are reliable.
+
 ### 2026-10-20 — OHCI post-copy and XInput sample
 
 Added a temporary, local-only diagnostic immediately after the OHCI interrupt-report `memcpy`, rebuilt the existing x64 Release target with Visual Studio 2022 Build Tools, and ran a bounded input capture. While the host generated Main Weapon report `00 1A 01`, OHCI read back those same three bytes from the guest buffer at `0x010816C3`; a later guest-memory peek showed `0x010816C5 = 1` and the XInput output word at `0x004AF63C = 1`. This confirms this run copied the report into guest memory and that the game polling path observed the raw button bit. It resolves the apparent zero-buffer discrepancy in the prior lower-frequency peek: those periodic peeks did not align with the report's guest-memory write in that run, so they were not evidence of a persistent failed DMA copy.
