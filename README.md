@@ -10,7 +10,7 @@
 
 </div>
 
-> **For players:** there is no game to download yet. With the optional codec-ready signal enabled, a synchronized diagnostic reached the title prompt, accepted a Main Weapon action, and displayed the menu with **CAMPAIGN** selected. Presentation remained very slow and the menu was dim. Audible output, reliable startup, full controller support, and gameplay are not verified. There is no installer or launcher. Please do not download unofficial builds or send game files.
+> **For players:** there is no game to download yet. With the optional codec-ready signal enabled, synchronized live-input runs have reached the title prompt, Campaign menu, and pilot-name editor; one verified pulse entered the character A. A later replay consumed a Campaign selection pulse but did not advance beyond the dim menu. Presentation is slow and inconsistent. Audible output, reliable startup, saving, full controller support, and gameplay are not verified. There is no installer or launcher. Please do not download unofficial builds or send game files.
 
 ## The game and its controller
 
