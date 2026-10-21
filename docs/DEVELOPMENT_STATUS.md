@@ -1,4 +1,10 @@
-### 2026-10-20 — guest XInput boundary traced
+### 2026-10-20 — correction: pressed state reaches guest XInput
+
+The earlier conclusion below that the Main Weapon press remained neutral inside the guest is superseded by a better synchronized trace. During a title-screen press, the OHCI interrupt delivered the 26-byte report, the XID callback at `sub_0025D059` copied button bit `01` from device context `0x01081691 + 0x34` into its state at `+0x14`, and a later call to the XBE's `XInputGetState` (`sub_00257103`) read raw state `01 00 00 00`. This verifies report-to-guest-handle delivery and XInput raw-state visibility. It still does not verify the game's action query or prompt transition: the screenshot remains on the title, and the `sub_00048B80(1,6,9)` title action predicate has not yet been captured with its return value during the same press. The current blocker is downstream of USB/XID delivery.
+
+Public references were used for behavior checks (XboxRecomp's existing static-analysis/runtime sources, nxdk's XID report example, and the Steel Battalion controller guide); no public code was copied. Ghidra XBE analysis, the local XboxRecomp translator, Visual Studio 2022 Build Tools, and CMake are already installed, so no additional installation was needed. See the later “XID/XInput follow-up” log and local ignored capture at `iso/local-analysis/logs/m3-xid-xinput-callback-correlate-20261020/`.
+
+### 2026-10-20 — earlier XInput trace (superseded below)
 
 Installed the open-source `XboxDev/ghidra-xbe` loader into the local Ghidra installation and analyzed the user-supplied XBE. The decompilation identifies the Steel Battalion polling path: `sub_0004A960` and `sub_0004AA80` call the game's `sub_00049DD0` helper, which opens the `g_DeviceType_SBC` XInput device and calls the XBE's own `XInputGetState` at `0x00257103`. That XBE function copies the device handle's state into the game's buffer at `0x004AF638`.
 
