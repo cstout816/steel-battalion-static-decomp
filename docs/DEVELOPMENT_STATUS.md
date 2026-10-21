@@ -2852,3 +2852,10 @@ The XboxRecomp guest write watcher on `0x004AFBC0` trapped the whole guest memor
 - The Release x64 target rebuilt successfully. A 180-second default-mode run activated the exact-state fast branch at about 36–37 ms per target draw and reached 165 flips before the watchdog; it did not verify the title screen. The overall run remained slow, so this fixes one measured fallback without claiming boot reliability or 60 FPS.
 - Milestone 3 remains active. Bars remain overall 2/8, boot/compatibility 3/5, controller 2/3, DSP/audio 1/2. Next continue tracing frame progress after the optimized draw and obtain a non-black title-screen capture; audio, input acceptance, gameplay, saves, and campaign progression remain unverified.
 
+### 2026-10-20 — remaining CPU fallback states profiled
+
+- The default-mode 180-second capture activated the new fast path for the 1024×1024 format-0x12 draw, which measured about 36–37 ms in this run. The startup as a whole still reached only 165 flips and did not verify the title screen.
+- The same capture recorded 77 CPU-raster draws: 38 format-0x0E draws with a 1,530 ms median, four format-0x0C draws with a 1,559 ms median, seven format-0x2D draws with a 1,530 ms median, plus smaller counts in other states. These results show the opaque-black specialization addresses only one of several expensive cases. The format-0x0E trace uses an active texture stage, so it cannot use the texture-independent black shortcut; any acceleration must preserve texture sampling and the observed LEQUAL depth behavior.
+- DMA PUT and GET matched in several late-run snapshots while reported speed was about 0.17 FPS. That narrows the next investigation to remaining CPU raster work at those samples; it does not prove the GPU queue is never a cause.
+- Milestone 3 remains active; progress bars unchanged. Next capture and classify the remaining format-0x0E/0x2D states and evaluate a texture- and depth-correct GPU path or a reference-raster optimization. Title-screen, audio, accepted input, gameplay, save/load, and campaign completion remain unverified.
+
