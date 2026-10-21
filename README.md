@@ -37,7 +37,7 @@ The project is still experimental. The translated Windows program builds, and a 
 
 ## Controller compatibility
 
-The original 40-button Steel Battalion controller and pedals are central compatibility targets, alongside keyboard, mouse, gamepad, HOTAS, and custom controller profiles. These are planned capabilities and have not yet been implemented or verified.
+The original 40-button Steel Battalion controller and pedals are central compatibility targets, alongside keyboard, mouse, gamepad, HOTAS, and custom controller profiles. A narrow virtual-device test has verified the 26-byte Main Weapon report and a corresponding guest action-state change; no complete control scheme or in-game response is verified.
 
 ## What you can do here
 
@@ -58,7 +58,7 @@ When a tested release exists, players will need to provide their own legally obt
 | Windows build | [#-------------------] 100% | A local build completes. |
 | Boot and compatibility | [######--------------] 3/5 | Clear-rectangle methods are handled by an isolated patch. The guest DCF4 event signals correctly, and exact-state CPU combiner shortcuts passed 2.17 million reference comparisons with zero mismatches while retaining coverage, depth, texture sampling, and blending. One 180-second Release run reached the title prompt; repeatable startup, prompt response, audible output, and gameplay remain unverified. |
 | Startup rendering performance | [##########----------] 2/4 | In the title-reaching Release run, 46 targeted 512×512 format-0x0E draws used the new paths: diffuse passthrough median 14.27 ms and diffuse-times-texture median 48.77 ms, compared with earlier generic fallback draws over 1.2 seconds. The full run still presented at about 0.4–1.8 FPS; other formats and title-scene work remain bottlenecks. |
-| Virtual controller input | [#############-------] 2/3 | A synchronized diagnostic confirmed the Main Weapon report reaches guest XInput state. The title action and prompt response remain unverified; full input support is not implemented. |
+| Virtual controller input | [#############-------] 2/3 | A synchronized diagnostic confirmed the Main Weapon report and guest action-state change. No title transition or complete input support is verified. |
 | Guest DSP and audio | [█-------------------] 1/2 | Guest DSP instructions execute; audible output is not verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
