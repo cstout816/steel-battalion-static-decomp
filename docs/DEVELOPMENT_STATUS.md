@@ -15,6 +15,14 @@ The temporary trace was removed from ignored generated code. A clean x64 Release
 Milestone 3 and bars remain unchanged: overall 2/8; boot/compatibility 3/5; virtual controller 2/3; DSP/audio 1/2. Next trace the device handle's internal state and the XID open/callback path around `XInputGetState`, comparing guest device data before and after the exact Main Weapon report. Do not alter the controller mapping or claim title input acceptance until that boundary is shown.
 # Development status
 
+### 2026-10-20 — title UI handler reachability check
+
+Followed the action predicate statically: `sub_000C8050` checks the Main Weapon action, and its true return is consumed in `sub_000D06B0`; that handler is dispatched from the UI event loop at guest address `0x000E2575`. Added a temporary caller-site trace to the generated code and ran a bounded title-screen capture with a sustained Main Weapon report. The title prompt remained visible, but the game never called `sub_000C8050` from its expected return site `0x000D077B`; the prior standalone predicate probe therefore did not prove that the running UI handler accepted the action.
+
+The run reached the title artwork at 166 flips, then presented at roughly 0.16 FPS. Runtime logs reported 4,369 unhandled NV2A methods across 155 distinct methods, no pushbuffer calls followed, and multiple threads contending on guest lock `0x0023FE18`. This identifies the stalled guest update/lock path as the current blocker, but does not establish the lock's root cause or whether each report reached the guest during this capture. The temporary trace was removed and the ordinary Windows x64 Release target rebuilt successfully; no game process remains. Capture is local/ignored at `iso/local-analysis/logs/m3-ui-action-consume-20261020/`.
+
+Milestone 3 remains in progress; progress bars are unchanged: overall 2/8, boot/compatibility 3/5, virtual controller 2/3, DSP/audio 1/2. Next trace the guest-lock owner and wait sites for `0x0023FE18` alongside the unhandled NV2A methods, then repeat the action test only after the UI loop is advancing. Audio, gameplay, saves, campaign progression, reliable boot, and full input acceptance remain unverified.
+
 ### 2026-10-20 — Steel Battalion USB DMA alias handoff
 
 A prompt-time A/B capture isolated the Main Weapon input gap. Without a low/high memory-view mirror, the virtual controller emitted `00 1A 01` and OHCI copied it to `0x810816C3`, but the XID buffer at its low guest address stayed neutral; `XInputGetState`'s sampled button word and the title action query remained zero. The title prompt was visible in this run.
