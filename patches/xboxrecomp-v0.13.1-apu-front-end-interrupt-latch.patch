@@ -1,0 +1,21 @@
+diff --git a/src/apu/apu_core.c b/src/apu/apu_core.c
+index 258048c..0000000 100644
+--- a/src/apu/apu_core.c
++++ b/src/apu/apu_core.c
+@@ -91,7 +91,4 @@ static void update_irq(MCPXAPUState *d)
+ {
+-    if (d->regs[NV_PAPU_FECTL] & NV_PAPU_FECTL_FEMETHMODE_TRAPPED) {
+-        qatomic_or(&d->regs[NV_PAPU_ISTS], NV_PAPU_ISTS_FETINTSTS);
+-    }
+     if ((d->regs[NV_PAPU_IEN] & NV_PAPU_ISTS_GINTSTS) &&
+         ((d->regs[NV_PAPU_ISTS] & ~NV_PAPU_ISTS_GINTSTS) &
+          d->regs[NV_PAPU_IEN])) {
+diff --git a/src/apu/apu_vp.c b/src/apu/apu_vp.c
+index f45b42b..1626e2f 100644
+--- a/src/apu/apu_vp.c
++++ b/src/apu/apu_vp.c
+@@ -492,3 +492,4 @@ static void fe_method(MCPXAPUState *d, uint32_t method, uint32_t argument)
+             d->regs[NV_PAPU_FECTL] |= NV_PAPU_FECTL_FETRAPREASON_REQUESTED;
++            qatomic_or(&d->regs[NV_PAPU_ISTS], NV_PAPU_ISTS_FETINTSTS);
+             d->set_irq = true;
+         }
