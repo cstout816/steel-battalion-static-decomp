@@ -37,7 +37,7 @@ The project is still experimental. The translated Windows program builds, and a 
 
 ## Controller compatibility
 
-The original 40-button Steel Battalion controller and pedals are central compatibility targets, alongside keyboard, mouse, gamepad, HOTAS, and custom controller profiles. A narrow virtual-device test has verified the 26-byte Main Weapon report and a corresponding guest action-state change; no complete control scheme or in-game response is verified.
+The original 40-button Steel Battalion controller and pedals are central compatibility targets, alongside keyboard, mouse, gamepad, HOTAS, and custom controller profiles. A virtual-device test verified the 26-byte Main Weapon report and a corresponding guest action-state change. In the pilot-name editor, a scripted left-stick input visibly moved the selected letter from A to B; the direction mapping still needs a matched up/down check. No complete control scheme or in-game response is verified.
 
 ## What you can do here
 
