@@ -86,6 +86,15 @@ guards and method coverage still need validation against Steel Battalion's
 full command stream. The observed clear/flip is partial command execution, not
 a rendered title-screen frame.
 
+The separate patch
+[`patches/xboxrecomp-v0.13.1-nv2a-clear-rectangle.patch`](../patches/xboxrecomp-v0.13.1-nv2a-clear-rectangle.patch)
+adds handling for NV097 clear-rectangle bounds `0x1D98` and `0x1D9C`, using
+the register names in [xemu's public definitions](https://github.com/xemu-project/xemu/blob/master/hw/xbox/nv2a/nv2a_regs.h#L1244-L1275)
+as a reference. The title capture reported bounds covering its full 640×480
+surface. The patch builds and removes those two methods from the partial
+executor's unhandled list, but the bounded run remained at about 0.12 FPS;
+this did not solve the title stall. No xemu implementation code was copied.
+
 There is also a separate `src/nv2a/nv2a_pgraph_d3d11.c` translator for a limited
 subset of NV097 methods. It is dispatched by the toolkit's `pgraph_method()`
 path and by its pushbuffer replay harness. That path should not be confused

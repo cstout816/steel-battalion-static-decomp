@@ -51,12 +51,12 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active. The latest capture showed title artwork at 166 flips, then stalled at about 0.16 FPS before the UI action handler ran. |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active. Latest capture: dark title screen, 159 flips and about 0.12 FPS; the UI action handler was not reached. |
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [######--------------] 3/5 | A bounded run reached title artwork at 166 flips, then dropped to about 0.16 FPS. The UI action handler was not reached; audio, gameplay, and reliable boot remain unverified. |
+| Boot and compatibility | [######--------------] 3/5 | Clear-rectangle methods are now handled by an isolated patch; a bounded run still showed the dark title screen at 159 flips and about 0.12 FPS. The UI action handler was not reached; audio, gameplay, and reliable boot remain unverified. |
 | Virtual controller input | [#############-------] 2/3 | A synchronized diagnostic confirmed the Main Weapon report reaches guest XInput/action state. In the latest run, the UI handler never ran, so title response and full input support remain unverified. |
 | Guest DSP and audio | [█-------------------] 1/2 | Guest DSP instructions execute; audible output is not verified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |

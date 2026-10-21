@@ -23,6 +23,14 @@ The run reached the title artwork at 166 flips, then presented at roughly 0.16 F
 
 Milestone 3 remains in progress; progress bars are unchanged: overall 2/8, boot/compatibility 3/5, virtual controller 2/3, DSP/audio 1/2. Next trace the guest-lock owner and wait sites for `0x0023FE18` alongside the unhandled NV2A methods, then repeat the action test only after the UI loop is advancing. Audio, gameplay, saves, campaign progression, reliable boot, and full input acceptance remain unverified.
 
+### 2026-10-20 — NV2A clear-rectangle handling
+
+The full pushbuffer inventory recorded 341 distinct subchannel/method pairs and no unrecognized packet words. The partial renderer still counted 155 NV097 method IDs as unhandled. Cross-referencing the public [xemu NV2A register definitions](https://github.com/xemu-project/xemu/blob/master/hw/xbox/nv2a/nv2a_regs.h#L1244-L1275) identified `0x1D98` and `0x1D9C` as the clear-rectangle bounds; the earlier capture carried full-surface bounds `0..639` and `0..479` for the 640×480 target. I added isolated patch `patches/xboxrecomp-v0.13.1-nv2a-clear-rectangle.patch`, which clips color clears to those bounds intersected with the active surface clip. It applies cleanly to the pinned v0.13.1 source.
+
+The Windows x64 Release target rebuilt successfully. A 90-second run still reached the dark title screen, with 159 flips at the final sample and about 0.12 FPS. The renderer no longer counts those two clear-rectangle methods as unhandled (155 to 153 distinct); the full scene is still incomplete and no input was sent in this capture. The before/after screenshots show the same title composition because the observed clear rectangle spans the full surface. This fixes method coverage but does not resolve the frame stall or title action handling. Logs are local/ignored at `iso/local-analysis/logs/m3-title-nv2a-full-inventory-20261020/` and `iso/local-analysis/logs/m3-clear-rect-verify-20261020/`.
+
+The guest-lock trace maps `0x0023FE18` contention through the game's audio routines; the reported waiter acquired the lock, so this capture does not prove a persistent deadlock or tie the lock to the title UI stall. Next investigate the remaining high-frequency unhandled NV097 methods, especially `0x0394/0x0398` and `0x1E74/0x1E78`, before implementing semantics. Milestone 3 and progress bars remain unchanged; boot reliability, input acceptance, audio output, gameplay, saves, and campaign completion remain unverified.
+
 ### 2026-10-20 — Steel Battalion USB DMA alias handoff
 
 A prompt-time A/B capture isolated the Main Weapon input gap. Without a low/high memory-view mirror, the virtual controller emitted `00 1A 01` and OHCI copied it to `0x810816C3`, but the XID buffer at its low guest address stayed neutral; `XInputGetState`'s sampled button word and the title action query remained zero. The title prompt was visible in this run.
