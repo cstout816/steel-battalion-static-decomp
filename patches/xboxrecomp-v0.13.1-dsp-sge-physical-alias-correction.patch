@@ -1,0 +1,37 @@
+# Follow-on correction for xboxrecomp v0.13.1; apply after dsp-sge-physical-alias.patch.
+# Restore physical-page ownership resolution for DSP SGE targets.
+diff --git a/src/apu/apu_dsp.c b/src/apu/apu_dsp.c
+--- a/src/apu/apu_dsp.c
++++ b/src/apu/apu_dsp.c
+@@ -41,22 +41,14 @@
+ static uint8_t *apu_dsp_resolve_physical(uint64_t address, size_t size)
+ {
+     size_t mapped_size = xbox_GetMappedSize();
+-    size_t contiguous_size = xbox_ContiguousAllocatedBytes();
+-    uint32_t physical_address = (uint32_t)address & 0x0FFFFFFFu;
+-    uint64_t contiguous_alias = 0x80000000ull + physical_address;
+     if (!g_apu_ram_ptr || address > mapped_size ||
+         size > mapped_size - (size_t)address) {
+         return NULL;
+     }
+-    /* DSP scratch DMA addresses are physical, while the guest writes the
+-     * SGE table and its payload through the separate contiguous alias. Prefer
+-     * that alias even when the same numeric physical address overlaps the
+-     * loaded XBE's low-memory range. */
+-    if ((size_t)physical_address < contiguous_size &&
+-        size <= contiguous_size - (size_t)physical_address &&
+-        contiguous_alias <= SIZE_MAX - size) {
+-        return g_apu_ram_ptr + contiguous_alias;
+-    }
++    /* Physical addresses must honor per-page ownership. A numeric physical
++     * page can be named by low guest RAM and can also overlap the separate
++     * contiguous arena's high-water range; only mcpx_apu_phys knows which
++     * alias owns that page in this runtime. */
+     return mcpx_apu_phys(address);
+ }
+ 
+@@ -601,4 +593,3 @@ void mcpx_apu_dsp_frame(MCPXAPUState *d,
+     }
+ 
+ }
+-
