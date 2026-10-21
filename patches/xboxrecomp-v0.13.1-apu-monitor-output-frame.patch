@@ -1,0 +1,76 @@
+diff --git a/src/apu/apu_core.c b/src/apu/apu_core.c
+index 258048c..0000000 100644
+--- a/src/apu/apu_core.c
++++ b/src/apu/apu_core.c
+@@ -298,7 +298,7 @@ static struct {
+ 
+ /* Ring of waveOut buffers for double-buffering */
+ #define WAVEOUT_NUM_BUFS 4
+-#define WAVEOUT_BUF_SAMPLES 2048  /* ~42.7ms at 48kHz, matches 8-frame delivery rate */
++#define WAVEOUT_BUF_SAMPLES 256   /* One 8 x 32-sample APU monitor block at 48kHz */
+ #define MIXER_FRAME_SAMPLES 256  /* Internal mixing frame size (matches frame_buf) */
+ 
+ typedef struct {
+@@ -386,13 +386,14 @@ void mcpx_apu_monitor_frame(MCPXAPUState *d)
+     /* XAudio2 path: render and submit a buffer */
+     if (xa2_is_active()) {
+         int buf_size = xa2_get_buffer_size();
+-        int16_t xa2_tmp[1024][2];  /* matches XA2_BUF_SAMPLES max */
++        int16_t xa2_tmp[MIXER_FRAME_SAMPLES][2];
+         int remaining = buf_size;
+         int out_offset = 0;
+ 
+         while (remaining > 0) {
+             int chunk = (remaining < MIXER_FRAME_SAMPLES) ? remaining : MIXER_FRAME_SAMPLES;
+-            memset(d->monitor.frame_buf, 0, sizeof(d->monitor.frame_buf));
++            if (g_audio_muted)
++                memset(d->monitor.frame_buf, 0, sizeof(d->monitor.frame_buf));
+ 
+             if (g_test_tone.active && !g_audio_muted) {
+                 for (int i = 0; i < chunk; i++) {
+@@ -414,6 +415,7 @@ void mcpx_apu_monitor_frame(MCPXAPUState *d)
+         }
+ 
+         xa2_submit_samples((const int16_t *)xa2_tmp, buf_size);
++        memset(d->monitor.frame_buf, 0, sizeof(d->monitor.frame_buf));
+         return;
+     }
+ 
+@@ -431,7 +433,7 @@ void mcpx_apu_monitor_frame(MCPXAPUState *d)
+         if (++wait_loops > 50) break;
+     }
+ 
+-    /* Fill the large waveOut buffer by rendering multiple 256-sample frames */
++    /* Fill one 256-sample APU delivery block. */
+     int16_t *out = (int16_t *)g_waveout.bufs[idx];
+     int remaining = WAVEOUT_BUF_SAMPLES;
+     int out_offset = 0;
+@@ -439,7 +441,8 @@ void mcpx_apu_monitor_frame(MCPXAPUState *d)
+     while (remaining > 0) {
+         int chunk = (remaining < MIXER_FRAME_SAMPLES) ? remaining : MIXER_FRAME_SAMPLES;
+ 
+-        memset(d->monitor.frame_buf, 0, sizeof(d->monitor.frame_buf));
++        if (g_audio_muted)
++            memset(d->monitor.frame_buf, 0, sizeof(d->monitor.frame_buf));
+ 
+         /* Test tone (skip if muted) */
+         if (g_test_tone.active && !g_audio_muted) {
+@@ -466,6 +469,7 @@ void mcpx_apu_monitor_frame(MCPXAPUState *d)
+     /* Submit to waveOut */
+     hdr->dwFlags &= ~WHDR_DONE;
+     waveOutWrite(g_waveout.hwo, hdr, sizeof(WAVEHDR));
++    memset(d->monitor.frame_buf, 0, sizeof(d->monitor.frame_buf));
+ 
+     g_waveout.next_buf = (idx + 1) % WAVEOUT_NUM_BUFS;
+     g_waveout.frames_written++;
+diff --git a/src/apu/apu_xaudio2.c b/src/apu/apu_xaudio2.c
+index cd69e57..0000000 100644
+--- a/src/apu/apu_xaudio2.c
++++ b/src/apu/apu_xaudio2.c
+@@ -24,5 +24,5 @@
+ 
+ #define XA2_SAMPLE_RATE   48000
+ #define XA2_CHANNELS      2
+-#define XA2_BUF_SAMPLES   1024   /* ~21ms per submission */
++#define XA2_BUF_SAMPLES   256    /* One 8 x 32-sample APU monitor block */
+ #define XA2_NUM_BUFS      3

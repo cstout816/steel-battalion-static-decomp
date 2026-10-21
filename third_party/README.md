@@ -233,3 +233,13 @@ to other games without analyzing their binaries.
 makes verbose guest path traces opt-in through `RECOMP_TRACE_PATHS`; normal
 file opens no longer contend on repeated path messages. This changes logging
 only, not path translation or file semantics.
+
+## APU monitor output block
+
+[`patches/xboxrecomp-v0.13.1-apu-monitor-output-frame.patch`](../patches/xboxrecomp-v0.13.1-apu-monitor-output-frame.patch)
+fixes the host monitor path clearing the accumulated 256-sample APU DSP block
+before submission and aligns XAudio2 and waveOut submissions to the guest APU
+block cadence. It is isolated against the pinned XboxRecomp checkout and builds
+with the Windows x64 target. A bounded startup retest still measured zero
+samples and stopped at the Dolby logo, so this is not evidence of audible game
+audio. It changes no game data and should remain a separate dependency patch.
