@@ -1,0 +1,158 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -1973,6 +1973,8 @@
+ 
+ typedef struct {
+     uint64_t depth_fail, pixels, black_checked, black_mismatches;
++    uint64_t mul_rc_checked, mul_rc_mismatches;
++    uint64_t passthrough_checked, passthrough_mismatches;
+     uint32_t pixel_max;
+     uint32_t zpass;
+ } XfCount;
+@@ -1983,6 +1985,10 @@
+     dst->pixels += src->pixels;
+     dst->black_checked += src->black_checked;
+     dst->black_mismatches += src->black_mismatches;
++    dst->mul_rc_checked += src->mul_rc_checked;
++    dst->mul_rc_mismatches += src->mul_rc_mismatches;
++    dst->passthrough_checked += src->passthrough_checked;
++    dst->passthrough_mismatches += src->passthrough_mismatches;
+     if ((src->pixel_max & 0x00FFFFFFu) > (dst->pixel_max & 0x00FFFFFFu))
+         dst->pixel_max = src->pixel_max;
+     dst->zpass += src->zpass;
+@@ -2055,12 +2061,57 @@
+     return pack_color(out) == 0xFF000000u;
+ }
+ 
++/* This exact one-stage program computes interpolated diffuse * texture.
++ * Keep texture sampling, triangle coverage, depth, alpha, and framebuffer
++ * writes in the reference path; specialize only the combiner arithmetic. */
++static int xf_diffuse_texture_mul_gate(const XfTri *T)
++{
++    const Nv2aCombiner *rc = &s_gpu.rc;
++    return T->use_rc && !s_gpu.alpha_test && rc->control == 0x00011101
++        && rc->stage_program == 0x00000001
++        && rc->color_icw[0] == 0xC4C80000
++        && rc->alpha_icw[0] == 0xD4D81010
++        && rc->color_ocw[0] == 0x000000C0
++        && rc->alpha_ocw[0] == 0x000000C0
++        && rc->final0 == 0x200C0000
++        && rc->final1 == 0x00001C80;
++}
++
++/* The measured format-0x0E fade configures no texture stage and this exact
++ * combiner returns interpolated diffuse color unchanged. Preserve per-pixel
++ * coverage, depth, and blending while skipping the generic combiner program. */
++static int xf_diffuse_passthrough_gate(const XfTri *T)
++{
++    const Nv2aCombiner *rc = &s_gpu.rc;
++    const Texture *tex = &s_gpu.texs[0];
++    return T->use_rc && T->textured && tex->valid && tex->color == 0x0E
++        && tex->width == 512 && tex->height == 512
++        && tex->filter == 0x02022000 && tex->addr_u == 1 && tex->addr_v == 1
++        && !s_gpu.alpha_test && s_gpu.blend_enable
++        && s_gpu.blend_sfactor == 0x0302 && s_gpu.blend_dfactor == 0x0303
++        && s_gpu.blend_equation == 0x8006 && s_gpu.depth_test
++        && s_gpu.depth_func == 0x203 && !s_gpu.depth_mask
++        && !s_gpu.zpass_enable && s_gpu.color_mask == 0x01010101u
++        && rc->control == 0x00011101 && rc->stage_program == 0
++        && rc->color_icw[0] == 0xC4200000
++        && rc->alpha_icw[0] == 0xD4301010
++        && rc->color_ocw[0] == 0x000000C0
++        && rc->alpha_ocw[0] == 0x000000C0
++        && rc->final0 == 0x200C0000 && rc->final1 == 0x00001C80;
++}
++
+ /* Rows y0, y0+step, ... < maxy of triangle T. */
+ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+ {
+     const float *a = T->a, *b = T->b, *c = T->c;
+     const Nv2aVshOutput *va = T->va, *vb = T->vb, *vc = T->vc;
+     int x, y, k;
++    int diffuse_texture_mul = xf_diffuse_texture_mul_gate(T);
++    int diffuse_passthrough = xf_diffuse_passthrough_gate(T);
++    int validate_mul = diffuse_texture_mul
++                     && getenv("RECOMP_VALIDATE_DIFFUSE_TEXTURE_MUL") != NULL;
++    int validate_passthrough = diffuse_passthrough
++                             && getenv("RECOMP_VALIDATE_DIFFUSE_PASSTHROUGH") != NULL;
+     int was_xf_raster_active = s_xf_raster_active;
+     s_xf_raster_active = 1;
+ 
+@@ -2107,7 +2158,56 @@
+                     for (k = 0; k < 4; k++)
+                         col[k] = l0 * va->d0[k] + l1 * vb->d0[k] + l2 * vc->d0[k];
+                     pw = l0 * T->iw[0] + l1 * T->iw[1] + l2 * T->iw[2];
+-                    if (T->use_rc) {                    } else if (T->use_rc) {
++                    if (T->use_rc && diffuse_texture_mul) {
++                        float tc[4], texel[4], out[4], reference[4];
++                        float d1[4] = {0}, fog[4] = {0};
++                        float stage_tex[4][4] = {{0}};
++                        int j;
++                        for (j = 0; j < 4; j++)
++                            tc[j] = (l0 * T->stc[0][0][j]
++                                   + l1 * T->stc[1][0][j]
++                                   + l2 * T->stc[2][0][j]) / pw;
++                        if (!rc_stage_fetch(0, tc, texel))
++                            continue;
++                        for (j = 0; j < 4; j++) {
++                            float product = col[j] * texel[j];
++                            out[j] = product < 0.0f ? 0.0f
++                                   : product > 1.0f ? 1.0f : product;
++                            stage_tex[0][j] = texel[j];
++                        }
++                        stage_tex[1][3] = stage_tex[2][3] = stage_tex[3][3] = 1.0f;
++                        argb = pack_color(out);
++                        if (validate_mul) {
++                            uint32_t reference_argb;
++                            nv2a_rc_eval(&s_gpu.rc, col, d1, fog,
++                                         (const float (*)[4])stage_tex,
++                                         reference);
++                            reference_argb = pack_color(reference);
++                            cnt->mul_rc_checked++;
++                            if (argb != reference_argb) {
++                                cnt->mul_rc_mismatches++;
++                                argb = reference_argb;
++                            }
++                        }
++                    } else if (T->use_rc && diffuse_passthrough) {
++                        float d1[4] = {0}, fog[4] = {0};
++                        float stage_tex[4][4] = {{0}}, reference[4];
++                        stage_tex[0][3] = stage_tex[1][3]
++                            = stage_tex[2][3] = stage_tex[3][3] = 1.0f;
++                        argb = pack_color(col);
++                        if (validate_passthrough) {
++                            uint32_t reference_argb;
++                            nv2a_rc_eval(&s_gpu.rc, col, d1, fog,
++                                         (const float (*)[4])stage_tex,
++                                         reference);
++                            reference_argb = pack_color(reference);
++                            cnt->passthrough_checked++;
++                            if (argb != reference_argb) {
++                                cnt->passthrough_mismatches++;
++                                argb = reference_argb;
++                            }
++                        }
++                    } else if (T->use_rc) {
+                         float d1[4], fog[4], t[4][4], out[4], tc[4];
+                         int st, j, keep = 1;
+                         for (k = 0; k < 4; k++)
+@@ -2365,6 +2465,18 @@
+                 (unsigned long long)cnt.pixels,
+                 (unsigned long long)cnt.black_checked,
+                 (unsigned long long)cnt.black_mismatches);
++    if (getenv("RECOMP_VALIDATE_DIFFUSE_TEXTURE_MUL")
++        && cnt.mul_rc_checked)
++        fprintf(stderr,
++                "[DIFFUSE-TEXTURE-MUL] pixels=%llu mismatches=%llu\n",
++                (unsigned long long)cnt.mul_rc_checked,
++                (unsigned long long)cnt.mul_rc_mismatches);
++    if (getenv("RECOMP_VALIDATE_DIFFUSE_PASSTHROUGH")
++        && cnt.passthrough_checked)
++        fprintf(stderr,
++                "[DIFFUSE-PASSTHROUGH] pixels=%llu mismatches=%llu\n",
++                (unsigned long long)cnt.passthrough_checked,
++                (unsigned long long)cnt.passthrough_mismatches);
+     s_gpu.pixels += cnt.pixels;
+     if ((cnt.pixel_max & 0x00FFFFFFu) > (s_gpu.pixel_max & 0x00FFFFFFu))
+         s_gpu.pixel_max = cnt.pixel_max;
