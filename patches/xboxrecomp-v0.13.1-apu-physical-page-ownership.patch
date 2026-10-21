@@ -1,0 +1,122 @@
+diff --git a/src/apu/apu_core.c b/src/apu/apu_core.c
+--- a/src/apu/apu_core.c
++++ b/src/apu/apu_core.c
+@@ -74,2 +74,4 @@ extern uint32_t g_xbox_image_lo, g_xbox_image_hi;
+ extern uint32_t xbox_ContiguousAllocatedBytes(void);
++extern size_t g_xbox_total_ram;
++extern size_t g_xbox_map_size;
+ 
+@@ -78,2 +80,14 @@ uint8_t *mcpx_apu_phys(uint64_t addr)
+     uint32_t a = (uint32_t)addr & 0x0FFFFFFFu;
++    uint32_t mapped_ram = (uint32_t)(g_xbox_map_size ?
++                                      g_xbox_map_size : g_xbox_total_ram);
++    /* The contiguous window is separate host storage. Its pages can overlap
++     * XBE image addresses; resolve title-named RAM first, then pages actually
++     * allocated from that window, before falling back to the image range. */
++    if (a >= (64u << 20))
++        return a < mapped_ram ? g_apu_ram_ptr + a
++                              : g_apu_ram_ptr + (a & 0x03FFFFFFu);
++    if (xbox_PhysRamNameMap()[a >> 12])
++        return g_apu_ram_ptr + a;
++    if (xbox_ContiguousPageMap()[a >> 12])
++        return g_apu_ram_ptr + 0x80000000u + a;
+     if (a >= g_xbox_image_lo && a < g_xbox_image_hi)
+diff --git a/src/kernel/kernel_memory.c b/src/kernel/kernel_memory.c
+--- a/src/kernel/kernel_memory.c
++++ b/src/kernel/kernel_memory.c
+@@ -181,5 +181,9 @@ ULONG_PTR __stdcall xbox_MmGetPhysicalAddress(PVOID BaseAddress)
+     uint32_t va = (uint32_t)(uintptr_t)BaseAddress;
+-    return (ULONG_PTR)((va >= XBOX_CONTIG_BASE &&
++    ULONG_PTR physical = (ULONG_PTR)((va >= XBOX_CONTIG_BASE &&
+                         (uint64_t)va < (uint64_t)XBOX_CONTIG_BASE + XBOX_CONTIG_SIZE)
+                      ? va - XBOX_CONTIG_BASE : va);
++    if (va < XBOX_CONTIG_BASE ||
++            (uint64_t)va >= (uint64_t)XBOX_CONTIG_BASE + XBOX_CONTIG_SIZE)
++        xbox_PhysRamName((uint32_t)physical);
++    return physical;
+ }
+diff --git a/src/kernel/xbox_memory_layout.c b/src/kernel/xbox_memory_layout.c
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -87,2 +90,45 @@ static void *g_contig_memory = NULL;
+ 
++/* A physical number can name either ordinary guest RAM or a separately
++ * mapped page from the contiguous window. Bus masters need page-level
++ * ownership to resolve overlapping addresses without guessing from the
++ * allocator's high-water mark. */
++#define XBOX_PHYS_PAGE_SIZE 4096u
++#define XBOX_PHYS_PAGE_COUNT (XBOX_CONTIG_SIZE / XBOX_PHYS_PAGE_SIZE)
++static uint16_t g_contig_page_refs[XBOX_PHYS_PAGE_COUNT];
++static uint8_t g_contig_page_map[XBOX_PHYS_PAGE_COUNT];
++static uint8_t g_phys_ram_name_map[XBOX_PHYS_PAGE_COUNT];
++
++uint8_t *xbox_ContiguousPageMap(void) { return g_contig_page_map; }
++uint8_t *xbox_PhysRamNameMap(void) { return g_phys_ram_name_map; }
++
++void xbox_PhysRamName(uint32_t physical_address)
++{
++    if (physical_address < XBOX_CONTIG_SIZE)
++        g_phys_ram_name_map[physical_address / XBOX_PHYS_PAGE_SIZE] = 1;
++}
++
++static void contig_mark_pages(uint32_t addr, uint32_t size, int allocate)
++{
++    uint32_t lo, hi, page;
++    if (!size || addr < XBOX_CONTIG_BASE)
++        return;
++    lo = addr - XBOX_CONTIG_BASE;
++    if (lo >= XBOX_CONTIG_SIZE)
++        return;
++    hi = (uint32_t)(((uint64_t)lo + size - 1) / XBOX_PHYS_PAGE_SIZE);
++    if (hi >= XBOX_PHYS_PAGE_COUNT)
++        hi = XBOX_PHYS_PAGE_COUNT - 1;
++    lo /= XBOX_PHYS_PAGE_SIZE;
++    for (page = lo; page <= hi; page++) {
++        if (allocate) {
++            if (g_contig_page_refs[page] != UINT16_MAX)
++                g_contig_page_refs[page]++;
++            g_contig_page_map[page] = 1;
++        } else if (g_contig_page_refs[page]) {
++            if (--g_contig_page_refs[page] == 0)
++                g_contig_page_map[page] = 0;
++        }
++    }
++}
++
+ /* NV2A GPU register aperture (see MemoryLayoutInit). Backed as plain RAM so
+@@ -3155,2 +3468,6 @@ uint32_t xbox_ContiguousAlloc(uint32_t size, uint32_t alignment)
+ 
++    AcquireSRWLockExclusive(&g_contig_lock);
++    contig_mark_pages(result, size, 1);
++    ReleaseSRWLockExclusive(&g_contig_lock);
++
+     memset((void *)((uintptr_t)result + g_memory_offset), 0, size);
+@@ -3164,2 +3481,3 @@ int xbox_ContiguousFree(uint32_t addr)
+     int i, found = 0;
++    uint32_t freed_size = 0;
+ 
+@@ -3171,2 +3489,3 @@ int xbox_ContiguousFree(uint32_t addr)
+             continue;
++        freed_size = g_contig_blocks[i].size;
+         g_contig_blocks[i].free = 1;
+@@ -3190,2 +3509,7 @@ int xbox_ContiguousFree(uint32_t addr)
+     ReleaseSRWLockExclusive(&g_contig_lock);
++    if (found) {
++        AcquireSRWLockExclusive(&g_contig_lock);
++        contig_mark_pages(addr, freed_size, 0);
++        ReleaseSRWLockExclusive(&g_contig_lock);
++    }
+     return found;
+diff --git a/src/kernel/xbox_memory_layout.h b/src/kernel/xbox_memory_layout.h
+--- a/src/kernel/xbox_memory_layout.h
++++ b/src/kernel/xbox_memory_layout.h
+@@ -189,5 +189,9 @@
+ uint32_t xbox_ContiguousAlloc(uint32_t size, uint32_t alignment);
+ uint32_t xbox_ContiguousAllocatedBytes(void);
++/* Page ownership for bus masters resolving Xbox physical addresses. */
++uint8_t *xbox_ContiguousPageMap(void);
++uint8_t *xbox_PhysRamNameMap(void);
++void xbox_PhysRamName(uint32_t physical_address);
+ 
+ int xbox_Nv2aMirrorFence(uint32_t device_ptr_va,
+                          uint32_t put_off, uint32_t get_ptr_off);
