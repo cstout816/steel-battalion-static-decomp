@@ -4462,3 +4462,12 @@ Two additional traced clean-source launches ran for 25 and 35 seconds before the
 
 Milestone 3 remains active; progress bars are unchanged. Next capture the failing callback's call arguments and object state if it recurs, and continue longer clean-source input replays to verify pilot creation and mission loading. Do not treat title-screen reachability as campaign compatibility.
 
+
+## 2026-10-22 — upstream APU locking candidate did not resolve startup
+
+- Reviewed the upstream [XboxRecomp v0.16.0 release](https://github.com/sp00nznet/xboxrecomp/releases/tag/v0.16.0) and its per-voice APU lock change. The change is relevant to the DirectSound voice functions seen in the prior guest stack, so it was tested locally as a focused hypothesis.
+- The experimental runtime built successfully with Visual Studio 2022. A matched 180-second launch used the established USB profile, APU/DSP readiness, Vulkan runtime, DMA execution, title events, dispatch gate and isolated save location. It remained at a black frame with 0.00 FPS, one flip, zero draws, and NV2A DMA PUT/GET fixed at `0x495C`. The watchdog found the guest in the same DirectSound voice path (`0x00223D70`, `0x0021E7F8`, `0x0021EA8E`, `0x0021FB3D`), and the title did not exit before the watchdog.
+- This falsifies the per-voice-lock change as a sufficient fix for this hang. It does not rule out other APU/DSP issues. The experiment files were restored and the baseline Release target rebuilt successfully; no runtime patch was retained.
+- Logs and captures remain local/ignored at `iso/local-analysis/logs/m3-apu-per-voice-lock-180s-20261022/`. Original ISO and normal saves were not modified. No game process remains. The user's XID patch remains the only modified tracked file and is not staged.
+- Milestone 3 remains active. Progress bars remain overall 2/8; XBE/decompilation 2/4; boot/compatibility 4/5; startup rendering 2/4; controller 2/3; DSP/audio 1/2. Mission entry, audible output, save/load, physical Steel Battalion controller operation, and campaign completion remain unverified.
+- Next: use the Ghidra stack and watchdog state to trace the exact DirectSound/APU wait predicate and producer, then compare the guest condition against XboxRecomp's compatible implementation before changing runtime behavior.
