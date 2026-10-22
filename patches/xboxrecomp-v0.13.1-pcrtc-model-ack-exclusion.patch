@@ -1,0 +1,24 @@
+diff --git a/src/kernel/xbox_memory_layout.c b/src/kernel/xbox_memory_layout.c
+index 72d5131..0000000 100644
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -184,16 +184,16 @@ static const struct { uint32_t offset; uint32_t busy_mask; } NV2A_ACK[] = {
+     /* Interrupt status registers. These are write-1-to-clear on hardware, so
+      * an ISR "clearing" one writes the pending bit back -- against plain RAM
+      * that sets it instead, the interrupt stays pending forever, and the
+      * service routine re-enters until the stack is gone. Halo dies exactly
+      * that way: CMiniport::ServiceGrInterrupt writes 0x1000 to PGRAPH_INTR to
+      * acknowledge, reads it back still pending, and recurses into a native
+      * stack overflow.
+      *
+-     * Holding them at zero is correct rather than convenient: nothing here
+-     * ever raises a GPU interrupt, so "none pending" is the truth. */
++     * The modeled PCRTC raises vblank and its DPC acknowledges that W1C bit.
++     * Keep PCRTC out of this generic shim: it would repeatedly write zero to
++     * the active MMIO model, which cannot clear a W1C status bit. */
+     { 0x000100, 0xFFFFFFFFu },  /* PMC_INTR_0    */
+     { 0x001100, 0xFFFFFFFFu },  /* PBUS_INTR_0   */
+     { 0x002100, 0xFFFFFFFFu },  /* PFIFO_INTR_0  */
+     { 0x400100, 0xFFFFFFFFu },  /* PGRAPH_INTR   */
+-    { 0x600100, 0xFFFFFFFFu },  /* PCRTC_INTR_0  */
+ };
