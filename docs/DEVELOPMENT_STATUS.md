@@ -1,3 +1,13 @@
+### 2026-10-21 — Ghidra isolates the D3D fence wait; completion still unresolved
+
+Used the local Ghidra XBE analysis and the public XboxRecomp/xemu implementation references to follow the repeated stall past generic event instrumentation. Ghidra identifies guest routine `0x00211E10` as `D3D_BlockOnTime`: after submitting a completion marker it clears the device event's guest SignalState and loops on `KeWaitForSingleObject(device + 0x2564)`. The XBE's D3D callback routine `0x00216EA0` signals that event for callback code 5. This establishes that DCF4 (`0x0021DCF4`) is the D3D completion event in this wait path.
+
+A rebuilt, instrumented x64 run reached the pilot-selection screen and stayed there through its 120-second watchdog. At shutdown the game was blocked in `D3D_BlockOnTime` waiting on DCF4; the matching callback had not signaled after the last wait sample. The NV2A USER queue still held about 21 KiB (`PUT=0x3EC94`, `GET=0x39F18`); the written completion semaphore was `0x1A3F` while the device counter was `0x1A43`. DCE4 was signaled repeatedly during the same run, so the earlier DCE4 sampling did not explain the final DCF4 wait. The presented framebuffer remained at “List as New.”
+
+This narrows the stop to completion progress through the submitted NV2A work, but does not identify a particular unhandled command or prove a renderer defect. No event was force-released and no guest/runtime behavior was changed. The local x64 Release build succeeded; the bounded run exited at watchdog. No mission, pilot creation, audible output, or campaign play was verified. The original ISO is unchanged and the user's XID patch remains unstaged. Logs and captures are ignored under `iso/local-analysis/logs/m3-dce4-sampled-wait-trace-20261021/`.
+
+Next trace NV2A GET and semaphore progress through the queue immediately around a DCF4 wait, and correlate the first command where completion stops with the public xemu method handling and this build's NV2A dispatch. Keep the existing static recompilation architecture. Milestone 3 and all progress bars remain unchanged.
+
 ### 2026-10-21 — reproduced guest list corruption; campaign setup reaches pilot-name editor
 
 Added opt-in logs at XBE DirectSound list insertion (`0x002200A2`) and unlink (`0x0021E700`), plus an opt-in native stack walk for the page watch. The x64 XPP-seeded Release target built successfully. These edits are confined to ignored generated XBE code and the ignored local XboxRecomp checkout.
