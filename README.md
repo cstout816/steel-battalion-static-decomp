@@ -10,7 +10,7 @@
 
 </div>
 
-> **For players:** there is no game to download yet. A long Windows run rendered the title flow slowly, then crashed on an internal sound-system fault. A separate focused replay completed its D3D waits but did not reproduce the crash's cause. No pilot, mission, audio, or gameplay is verified. This remains experimental work, not a playable build; there is no installer or launcher. Please do not download unofficial builds or send game files.
+> **For players:** there is no game to download yet. A clean local Windows build reached the title, created a pilot with live virtual Steel Battalion controller input, and displayed the difficulty screen. A fresh bounded replay stopped at the Dolby intro with no further framebuffer progress, so startup remains intermittent. Mission gameplay, audio, saves, and campaign progression are not verified. There is no installer or launcher. Please do not send game files.
 
 ## The game and its controller
 
@@ -51,7 +51,7 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, remains active. A live virtual Steel Battalion USB profile run reached pilot setup and the HAI SHI DAO 2080 difficulty screen. A fresh replay still hit the intermittent black startup route. Mission loading, audio, and gameplay remain unverified. |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, remains active. A live virtual Steel Battalion USB profile run reached pilot setup and the HAI SHI DAO 2080 difficulty screen. A fresh 600-second bounded replay reached the Dolby intro, then stopped advancing framebuffer progress and presented a black window. Mission loading, audio, and gameplay remain unverified. |
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
