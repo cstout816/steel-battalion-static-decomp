@@ -3943,3 +3943,11 @@ The v0.15 focused run intentionally did not sweep all `.text`, so 21 DSOUND func
 
 Next inspect the callers and list-field writes around the shared constructor/unlink/traversal routines, then target the runtime watch to a reproducing list mutation. Keep v0.13.1-based runtime pinned until a relevant, independently verified upstream fix or discovery delta is found. Milestone 3 and progress bars remain unchanged; mission, audible audio, and campaign completion remain unverified.
 
+
+### 2026-10-22 — XboxRecomp v0.16.0 function-discovery comparison
+
+Fetched the public XboxRecomp v0.16.0 tag (`f0f8a461496a4f23d9b0aeaa284b8d70ba7ab82b`) into the isolated upstream-tool cache and ran its exact disassembler version on the same four XDK sections (D3D, XGRPH, DSOUND, XPP). The pass completed in about 10 seconds: 78,847 instruction records, 1,206 functions, 10,110 cross references, and 668 DSOUND functions. Against v0.15.0, 1,174 function starts are shared; v0.16.0 adds 32 and drops 6, with the changed entries in the graphics-range disassembly. The DirectSound lifecycle boundaries and DSOUND function count are unchanged. Thus the newest function-discovery work did not uncover another DirectSound writer or explain the invalid voice-list link.
+
+The v0.16.0 release notes describe four small tool/lifter fixes, including additional discovery after padding and through proven indirect tails; this is static-analysis tooling only and does not change runtime or interrupt behavior. The v0.16.0 cache is separate from the local v0.13.1-derived runtime. No runtime code, game behavior, or architecture changed; no build or game test was run. The user XID patch remains unstaged. Temporary analysis output is ignored and no game-derived artifacts were committed.
+
+Next investigate the runtime's DirectSound/APU callback and synchronization interaction with a native writer stack captured on an actual corrupting mutation. Keep the current architecture pinned until a specific relevant fault is demonstrated. Milestone 3 and progress bars remain unchanged; no title-screen, audible audio, mission, or campaign result was verified here.
