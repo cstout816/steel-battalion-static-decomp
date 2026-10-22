@@ -10,7 +10,7 @@
 
 </div>
 
-> **For players:** there is no game to download yet. The corrected local launch now executes the initial graphics command ring and accepts virtual Steel Battalion controller input through pilot setup. A 420-second run reached “NOW LOADING,” but not a mission; its final trace still showed a backlog at the guest graphics fence. The earlier DirectSound invalid-pointer crash did not recur in that run, but audio output and the cleanup path remain unverified. There is no installer or launcher. Please do not send game files.
+> **For players:** there is no game to download yet. The corrected local launch now executes the initial graphics command ring and accepts virtual Steel Battalion controller input through pilot setup. A 420-second run reached “NOW LOADING,” but not a mission; its final trace still showed a backlog at the guest graphics fence. That route did not reach the same audio-cleanup path; a separate bounded capture reproduced an intermittent invalid release pointer during audio callback processing. Audio output and cleanup remain unverified. There is no installer or launcher. Please do not send game files.
 
 ## The game and its controller
 
@@ -59,7 +59,7 @@ When a tested release exists, players will need to provide their own legally obt
 | Boot and compatibility | [########------------] 4/5 | Correctly enabling pushbuffer execution clears the initial zero-frame spin; the virtual Steel Battalion profile reaches pilot setup and loading. Mission entry remains unverified. The latest 420-second trace ended in `D3DDevice_Swap` with DCF4 signaled, the semaphore four counts behind its target, and queued DMA work. |
 | Startup rendering performance | [##########----------] 2/4 | Earlier lower-overhead presentation fell to about 1.1 FPS. An instrumented windowed run reached 86 flips and reported 8.12 FPS; two 65-second windowed runs reached 765–767 flips and reported 7.83–7.84 FPS. The latest full trace reported 0.68 FPS in its final measurement interval, 1,843 flips, 136,283 draws, 801,587 vertices, and 155 distinct unhandled graphics methods. These are startup/loading measurements, not a stable gameplay benchmark. Stable frame pacing and gameplay performance are unverified. |
 | Virtual controller input | [#############-------] 2/3 | Guest input queries accepted Main Weapon and camera-hat actions through the virtual Steel Battalion USB profile during pilot creation. Physical adapter compatibility and full original controller mapping/outputs remain unverified. |
-| Guest DSP and audio | [█-------------------] 1/2 | Nonzero packets reach the DirectSound stream processor, XMO returns success, and the deferred callback reaches XBE routine `0x00227F9C`. The earlier invalid release argument did not recur in the corrected loading run, but the same cleanup path was not reached and audible output remains unverified. |
+| Guest DSP and audio | [█-------------------] 1/2 | Nonzero packets reach the DirectSound stream processor, XMO returns success, and the deferred callback reaches XBE routine `0x00227F9C`. A separate capture reproduced the invalid release argument in an audio callback while draining a DPC-managed list. The corrected loading run did not reach that same cleanup path, and audible output remains unverified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
 These bars describe engineering work, not playable features or campaign completion. See the [detailed tracker](docs/DEVELOPMENT_STATUS.md) for field-by-field evidence.
