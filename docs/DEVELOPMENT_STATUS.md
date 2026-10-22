@@ -4456,3 +4456,9 @@ Artifacts remain local/ignored under `iso/local-analysis/logs/m3-clean-source-*`
 
 Milestone 3 remains active. Overall progress: 2/8; XBE/decompilation: 2/4; boot/compatibility: 4/5; rendering: 2/4; controller: 2/3; DSP/audio: 1/2. Verified: clean-source runtime libraries and game executable build; the title screen can render in the clean-source executable; the traced route can survive three minutes and process audio DPCs. Unverified: repeatable startup, mission entry, audible output, save/load, physical Steel Battalion controller behavior, and full campaign progression. Next capture a longer DPC trace from process start on repeated launches, correlate the rare `0x002212F4` path with its DirectSound object/vtable state, and only then make a narrowly scoped runtime change. Keep the chosen Vulkan rendering path unchanged.
 
+### 2026-10-22 — repeat startup traces
+
+Two additional traced clean-source launches ran for 25 and 35 seconds before their own test processes were stopped. Both entered the normal audio DPC path (`0x00226CB7`) and logged a valid DirectSound object (`0x01081004`); neither emitted a crash marker. Combined with the earlier three-minute run, this adds three successful short/medium replays after the one early access violation. The fault remains intermittent and unresolved because the failing path (`0x002212F4`) has not recurred with the added tracing. No active test process remains.
+
+Milestone 3 remains active; progress bars are unchanged. Next capture the failing callback's call arguments and object state if it recurs, and continue longer clean-source input replays to verify pilot creation and mission loading. Do not treat title-screen reachability as campaign compatibility.
+
