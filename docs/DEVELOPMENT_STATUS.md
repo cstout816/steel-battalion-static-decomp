@@ -4501,3 +4501,11 @@ Milestone 3 remains active; progress bars are unchanged. Next capture the failin
 - Restored `apu_vp.c` to baseline `return 0x80` behavior and rebuilt the Release executable successfully. No experimental runtime source change remains. Captures and traces are ignored under `iso/local-analysis/logs/m3-piofree-interactive-20261022/`; no game process remains. The original ISO and normal saves are untouched, and the XID patch remains unstaged.
 - Milestone 3 stays active; progress bars unchanged (overall 2/8; XBE/decompilation 2/4; boot/compatibility 4/5; rendering 2/4; controller 2/3; DSP/audio 1/2). Mission entry/gameplay, reliable input past pilot-name entry, audible audio, save/load, physical Steel Battalion controller behavior, and campaign completion remain unverified.
 - Next: isolate the guest critical-section owner and blocking call site around the DirectSound worker, then repeat the same menu route against baseline and one narrow candidate change. Do not retain a PIO override based on this run.
+
+## 2026-10-22 — single-lock diagnostic worsens startup
+
+- Ran the baseline executable with the runtime's opt-in `RECOMP_CS_MODE=single` diagnostic and the same isolated-save/render-capture setup. After about 90 seconds it remained on one black framebuffer, with zero draws and repeated finite waits on two guest objects. Stopped the process; no title or menu input was reached.
+- This diagnostic does not establish the cause of the pilot-name stall. Collapsing all guest critical sections into one lock blocks earlier during startup, so it is not a viable compatibility fix and must remain off.
+- No source change was made; the ordinary baseline executable remains built. Logs are ignored at `iso/local-analysis/logs/m3-cs-single-isolation-20261022/`; no process remains. User XID patch remains unstaged.
+- M3 stays active; bars unchanged (overall 2/8; XBE/decompilation 2/4; boot/compatibility 4/5; rendering 2/4; controller 2/3; DSP/audio 1/2). Mission entry/gameplay, dependable input beyond pilot creation, audio, save/load, physical controller support, and full-campaign progression remain unverified.
+- Next: trace the distinct lock objects and thread call stacks from the normal per-object-lock route; do not use single-lock mode in further boot attempts.
