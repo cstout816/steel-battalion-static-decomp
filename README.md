@@ -10,7 +10,7 @@
 
 </div>
 
-> **For players:** there is no game to download yet. Bounded Windows runs have reached the title and pilot-selection screens, but rendering is incomplete and extremely slow. Recent profiling found expensive CPU-based drawing; another diagnostic run stopped while waiting for D3D completion, and their relationship is not yet confirmed. Pilot creation, mission loading, audible output, full controller support, and gameplay remain unverified. This is experimental progress, not a playable build. There is no installer or launcher. Please do not download unofficial builds or send game files.
+> **For players:** there is no game to download yet. A long Windows run rendered the title flow slowly, then crashed on an internal sound-system fault. A separate focused replay completed its D3D waits but did not reproduce the crash's cause. No pilot, mission, audio, or gameplay is verified. This remains experimental work, not a playable build; there is no installer or launcher. Please do not download unofficial builds or send game files.
 
 ## The game and its controller
 

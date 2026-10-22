@@ -1,3 +1,13 @@
+### 2026-10-21 — unlocked D3D completion progresses; DirectSound list corruption reproduces
+
+A 120-second run without the diagnostic guest lock recorded 614 DCF4 waits and 614 matching signals. Its sampled USER DMA reports repeatedly showed `PUT=GET`; the final wait was followed by its event signal. The run rendered 932 flips at 6.38 FPS before an access violation in `sub_0021ED29+0x77` while reading guest address `0xFFFFFFF4`.
+
+The crash snapshot showed voice-list node `0x8038C098` with `next=0xFF000000`; its enclosing object fields also contained `0xFF000000`. This reproduces the earlier intermittent DirectSound list fault and shows that a persistent DCF4 deadlock is not required for it. A focused 120-second write-watch run on the node's owner field (`0x8038C08C`) captured its normal initialization from zero to device pointer `0x01081004`, with the native writer in `sub_0022005D` and the voice constructors. It did not reproduce the corruption before watchdog expiry. No cause or fix is established.
+
+The same-page dual-watch attempt was discarded because the second vectored handler masked the first; the corrected single-watch run is the valid comparison. No guest/runtime behavior changed. The original ISO is untouched, user XID patch remains unstaged, and no game process remains. Logs are ignored under `iso/local-analysis/logs/m3-unlocked-dcf4-queue-correlation-20261021/` and `iso/local-analysis/logs/m3-unlocked-voice-owner-single-watch-20261021/`.
+
+Next capture the first invalid write during a run that reproduces the fault, correlating the node link, owner word, allocator/free path, and deferred-settings walk. The writer remains intermittent under page-watch timing. Milestone 3 and all progress bars remain unchanged; no pilot, mission, audible output, or campaign play was verified.
+
 ### 2026-10-21 — Ghidra isolates the D3D wait; queue profiling exposes a software-render bottleneck
 
 Used the local Ghidra XBE analysis and the public XboxRecomp/xemu implementation references to follow the repeated stall past generic event instrumentation. Ghidra identifies guest routine `0x00211E10` as `D3D_BlockOnTime`: after submitting a completion marker it clears the device event's guest SignalState and loops on `KeWaitForSingleObject(device + 0x2564)`. The XBE's D3D callback routine `0x00216EA0` signals that event for callback code 5. This establishes that DCF4 (`0x0021DCF4`) is the D3D completion event in this wait path.
