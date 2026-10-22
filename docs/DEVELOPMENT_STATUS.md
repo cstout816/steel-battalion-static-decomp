@@ -4082,3 +4082,13 @@ Grouped the latest bounded capture (`m3-pcrtc-writer-site-20261022`). One host t
 Do not change NV2A interrupt behavior based on this trace. Next capture the guest return address/caller of the `0x00216BE0` helper for thread 60816, then correlate the exact guest block with DPC progress and DCF4 around a reproduced stall. Logs are local/ignored; ISO and normal saves untouched; the pre-existing user XID patch remains the only tracked working-tree change. No new function, title/menu progress, audio output, mission, save/load, or campaign compatibility was verified.
 
 Progress remains: overall 2/8; XBE/decompilation 2/4; boot/compatibility 4/5; rendering 2/4; controller 2/3; DSP/audio 1/2. Milestone 3 remains incomplete.
+
+## 2026-10-22 — PCRTC guest caller trace does not reproduce the stall
+
+Added a temporary, environment-gated trace at guest helper `0x00216BE0` to record its caller return address and thread ID. The x64 Release target built successfully; a 45-second replay used the established async-I/O, vblank, pushbuffer, title-event, AC'97, Steel Battalion USB, and framebuffer-window settings. All 44 sampled helper entries came from thread 68780 with guest return address `0x00217403`, the expected return site after the DPC's call to `0x00216BE0`. The visible framebuffer showed the Steel Battalion title prompt.
+
+This replay did not capture a second caller or reproduce the previous drained-queue stall. At watchdog, USER PUT/GET were `0x2CED0`/`0x28498` (work remained queued) and DCF4 was reset while the guest waited; that is an in-flight wait, not the previously reproduced empty-queue/past-target state. The callsite trace therefore verifies one DPC call path and provides no evidence about the earlier second-thread zero writes. No interrupt behavior was changed.
+
+Removed the temporary trace and rebuilt the ordinary Release executable successfully. Confirmed no game process and no temporary trace markers remain. ISO and normal saves untouched; user XID patch remains unstaged; capture/logs are local and ignored. The title prompt was rendered in this run, but input acceptance, sound, mission entry, save/load, and campaign progression remain unverified. Milestone 3 and progress bars remain unchanged (overall 2/8; decompilation 2/4; boot/compatibility 4/5; rendering 2/4; controller 2/3; DSP/audio 1/2).
+
+Next, capture the MMIO write thread/value and guest source address together during an exact drained-queue stall. Do not infer the zero-write source or change interrupt semantics from this non-reproducing trace.
