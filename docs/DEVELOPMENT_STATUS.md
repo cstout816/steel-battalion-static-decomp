@@ -1,3 +1,11 @@
+### 2026-10-21 — XMO callback resolved; service replay stalled before packet processing
+
+Resolved the XMO's indirect target `0xFE000194`: this is the synthetic thunk for Xbox kernel ordinal 175, `MmLockUnlockBufferPages`, and the bridge is present in the local compatibility runtime. The prior description of this target as unresolved was incorrect. The XBE's XMO routine uses it while processing the queued packet; it is not a missing XMO dispatch implementation.
+
+Added an ignored diagnostic at the XBE's deferred DirectSound service callback and rebuilt the active x64 Release target successfully. A bounded replay with the established boot settings still stalled at one flip before `Stream_Process` ran, so it produced no callback sample and cannot localize the remaining audio loss. It did show repeated guest `CDirectSound_DoWork` calls and silent XAudio2 blocks, but those do not prove that a queued audio packet reached the deferred voice path. No guest/runtime behavior was changed. No game process remains; the original ISO is unchanged. Logs are ignored under `iso/local-analysis/logs/m3-dsound-service-callback-trace-20261021b/`.
+
+Next repeat the callback trace only alongside a run that reaches the previously verified packet-processing path; capture the XMO queue node, its deferred callback target, and the resulting APU writes at the same time. Keep the old four-silence-voice result as a separate run, and do not infer that DirectSound stream failure is the cause from the one-flip replay. Milestone 3 and progress bars remain unchanged.
+
 ### 2026-10-21 — active DirectSound stream and XAudio2 traces
 
 Built the correct XPP-seeded generated-code directory with Visual Studio 2022 Build Tools and ran a bounded diagnostic. The trace recorded at least 24 DirectSound stream creations, 17 `Stream_Process` calls, and five buffer-play calls. It also confirmed that the first four looping buffer plays point at the already inspected zero-filled XBE silence buffers. XAudio2 initialized and submitted 47 sampled blocks; each had zero peak and zero nonzero samples. The run's title-action queries remained zero, so it did not verify a title transition or audible game audio. Logs are ignored under `iso/local-analysis/logs/m3-dsound-active-codegen-20261021b/`.
