@@ -3933,3 +3933,13 @@ The XBE-side crash remains localized to an invalid DirectSound intrusive-list li
 
 Next, once those runs are finished, use the already available v0.15.0 parser/disassembler on the user-supplied XBE as a separate analysis output, then compare its function boundaries and call targets around DSOUND/D3D against the current Ghidra/exported analysis. Keep the runtime pinned until that diff identifies a relevant missing or misidentified function. No milestone or progress bar changes; no mission, audio, or campaign behavior verified.
 
+### 2026-10-22 — XboxRecomp v0.15 XDK-section analysis of the DirectSound path
+
+Parsed the user-supplied `default.xbe` with the already available upstream XboxRecomp v0.15.0 parser. It identifies a retail North American XBE built 2002-10-01, Title ID `0x43430002`, entry point `0x00192C47`, XDK library version `1.0.4627`, and 123 kernel imports. The executable statically contains D3D, XGRPH, DSOUND, and XPP sections. No proprietary SDK was installed.
+
+Ran v0.15.0's disassembler on just D3D, XGRPH, DSOUND, and XPP (with call-target stubs for the unswept `.text` section). It completed in 9.45 seconds with 78,847 instructions, 1,180 functions, 10,110 cross references, and 668 DSOUND functions. Comparison with the existing v0.13.1-based XPP-seeded analysis found 665 shared DSOUND function starts. All six observed lifecycle routines had identical boundaries: list unlink `0x0021E700..0x0021E71F`, critical-section entry `0x0021E7C3..0x0021E7E1`, voice deferred-settings `0x0021ED29..0x0021ED62`, device deferred-settings traversal `0x0021FE7C..0x0021FEF8`, constructor helper `0x0022005D..0x00220087`, and buffer creation `0x00221DBC..0x00221E58`.
+
+The v0.15 focused run intentionally did not sweep all `.text`, so 21 DSOUND function candidates present only in the older analysis are not evidence of regressions: most are call targets from that omitted game code. A broad all-code pass was stopped after several minutes without output; no result from it is used. Analysis outputs and its small runner are under ignored `iso/local-analysis/xboxrecomp-v0.15.0-analysis/` and are excluded from Git. No guest/runtime code changed and no build or game test was performed for this comparison. This narrows the tool-version hypothesis but does not identify the corrupting writer or fix audio.
+
+Next inspect the callers and list-field writes around the shared constructor/unlink/traversal routines, then target the runtime watch to a reproducing list mutation. Keep v0.13.1-based runtime pinned until a relevant, independently verified upstream fix or discovery delta is found. Milestone 3 and progress bars remain unchanged; mission, audible audio, and campaign completion remain unverified.
+
