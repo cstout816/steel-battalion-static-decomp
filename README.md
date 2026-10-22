@@ -33,7 +33,7 @@ These externally hosted images show the original hardware and game. They are not
 
 The goal is to translate the original Xbox version of *Steel Battalion* (2002) ahead of time into a Windows application and recreate the Xbox services it needs. This is called **static recompilation**. The project is not an emulator packaged under another name.
 
-The translated Windows program builds, but this is not a reliable or playable build. A bounded run showed the title screen and its “PRESS MAIN WEAPON BUTTON” prompt in the native window. In a fresh USB-profile replay, the host mapped a Main Weapon pulse, but the guest's title-action queries had stopped before the press and the screen did not advance. An earlier run did reach Campaign after the same action, so repeatability remains unresolved. The image is incomplete; audible output, full controller support, gameplay, saving, and campaign play remain unverified. The detailed tracker records what each run actually verified.
+The translated Windows program builds, but this is not a reliable or playable build. In a recent bounded run, the native window showed the title prompt, and one Main Weapon pulse through the virtual Steel Battalion controller made the guest action query return success and opened the Campaign menu. Other runs stopped polling before the same pulse, so repeatability remains unresolved. The image is incomplete, and the run slowed to about 4.9 FPS before its watchdog limit. Audible output, full controller support, gameplay, saving, and campaign completion remain unverified. The detailed tracker records what each run actually verified.
 
 ## Controller compatibility
 
@@ -51,14 +51,14 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active. The latest bounded run captured the title prompt, but the image is incomplete and the run ended at the watchdog. Repeatable input, audio, and gameplay remain unverified. |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, is active. A recent run transitioned from the title prompt to Campaign through the virtual controller, but input polling is intermittent, rendering is incomplete, and performance fell below 5 FPS. Audio and gameplay remain unverified. |
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [########------------] 4/5 | The latest bounded run captured the title prompt after guest frames and GPU work advanced. The image remains incomplete, and this run did not test title input or verify audio. Stable startup and gameplay remain unverified. |
+| Boot and compatibility | [########------------] 4/5 | The title prompt and Campaign menu were captured in the native window, with a Main Weapon query returning success. Repeatable startup, correct rendering, audio, and gameplay remain unverified. |
 | Startup rendering performance | [##########----------] 2/4 | Earlier lower-overhead presentation fell to about 1.1 FPS. An instrumented windowed run reached 86 flips and reported 8.12 FPS; two 65-second windowed runs reached 765–767 flips and reported 7.83–7.84 FPS, with roughly 42,000 unhandled NV2A method calls across 152 IDs. The second run used only low-volume tracing, so the slow rate is not caused solely by the temporary thread trace. These remain startup measurements, not a stable gameplay benchmark. A matching fullscreen title draw took 20.8 ms on the Vulkan fast path versus 24.3 ms on CPU in single instrumented samples; image parity is unresolved, so this is not a frame-rate result. Other draw states still use CPU rasterization, and 152 distinct NV2A methods remain unhandled. Stable frame pacing and gameplay performance are unverified. |
-| Virtual controller input | [#############-------] 2/3 | A synchronized Main Weapon pulse reached the guest query, which returned success, and a title-menu transition was captured. Repeatable game interaction is not established; full original controller mapping and outputs remain unverified. |
+| Virtual controller input | [#############-------] 2/3 | A live Main Weapon pulse reached the guest query and opened Campaign in the recent run. Other runs stopped polling before the pulse; full original controller mapping and outputs remain unverified. |
 | Guest DSP and audio | [█-------------------] 1/2 | Guest DSP instructions execute in a title-reaching run. Codec readiness is supplied synthetically for diagnostics. The APU output block/cadence fix builds, but the first 64 blocks in the bounded retest remained silent before a Dolby-logo stall. Game audio remains unverified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
