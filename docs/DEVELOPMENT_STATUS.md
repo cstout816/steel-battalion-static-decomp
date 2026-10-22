@@ -1,3 +1,13 @@
+### 2026-10-21 — crash traced to the guest DirectSound voice-list walk
+
+Re-examined the saved crash registers and the Ghidra decompilation for guest routines `0x0021ED29` (`CDirectSoundVoice_CommitDeferredSettings`) and `0x0021FE7C` (`CDirectSound_CommitDeferredSettings`). The parent walks an intrusive voice list from the device sentinel and calls the child with each list node minus `0x14`. In the crash snapshot, node `0x8038C098` had `next=0xFF000000`; following it and applying that object offset produces the invalid object near `0xFEFFFFEC`, consistent with the guest fault at `0xFFFFFFF4` in the child routine. This is stronger evidence that the observed crash is caused by a bad guest DirectSound list link than the earlier general “voice-list corruption” description.
+
+The exact writer is still unknown, and this does not show that the list fault caused all audio silence. The page watch was correctly armed in later bounded runs and observed insertion, but did not see the corrupting write because those runs did not reproduce the crash. Intermittent nonzero XAudio2 samples still do not prove audible or sustained game audio.
+
+Reviewed upstream XboxRecomp PR #217, merged Oct. 19, 2026 ([voice processor fixes](https://github.com/sp00nznet/xboxrecomp/pull/217)). It changes APU voice processing, including per-voice locking and ADPCM bounds; it does not repair the guest `CDirectSound` intrusive list identified here. The local checkout is a heavily modified v0.13.1 base, so this upstream patch was not transplanted into it. No dependency or code was installed or copied.
+
+Next instrument the guest list insert/remove and deferred-settings traversal together, capturing the node and enclosing voice object's relevant fields before and after each write. Reproduce under the matched title/audio startup path before implementing a fix. Milestone 3 and progress bars remain unchanged; no audible game audio or stable campaign play has been verified.
+
 ### 2026-10-21 — deferred DirectSound callback and intermittent voice-list corruption
 
 Matched bounded runs with the established startup settings confirmed the actual stream handoff. `0xFE000194` is the synthetic Xbox kernel thunk for ordinal 175, `MmLockUnlockBufferPages`; the local bridge exists. The XBE receives nonzero `0x9000`-byte stream packets, its XMO processing returns success, and queued DirectSound work invokes XBE callback routine `0x00227F9C` on object `0x01264B94` with arguments `2,0`.
