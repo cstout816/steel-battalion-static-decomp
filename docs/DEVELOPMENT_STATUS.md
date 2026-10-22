@@ -4548,3 +4548,12 @@ Upstream references: [XboxRecomp v0.16.0 release notes](https://github.com/sp00n
 - Next: resume the existing `xboxrecomp-generated-guestlock-s50` candidate, which emits real back-edge yield calls, for a matched startup comparison. Use that result together with the DirectSound lock trace to identify the active guest wait; keep the v0.13.1 runtime as the working baseline unless a narrow, reproducible compatibility fix emerges.
 
 
+
+### 2026-10-22 — guest-lock candidate reaches DirectSound activity
+
+- Built and ran the existing generated `xboxrecomp-generated-guestlock-s50` tree against the pinned v0.13.1 runtime in an isolated `/Od` diagnostic executable. The generated tree has 7,901 back-edge yield sites; the candidate was kept separate from the normal Release build.
+- Matched 45-second runs with pushbuffer execution enabled advanced the NV2A fence to semaphore value 9 and started the title-created APU worker. They did not reach a title/menu or produce a verified game frame. Both remained in repeated DirectSound critical-section activity (`0x0023FE18`) at watchdog time, with roughly 7.1k indirect calls.
+- The `RECOMP_GUEST_LOCK=1` run reported zero scheduler turns, preemptions, switches, and waits. The logs show the title's worker thread was created, but do not prove that the scheduler's guest-thread gate was contended or that a back-edge yield was requested. Therefore this is not evidence that the scheduler fixes or cannot fix the stall.
+- `RECOMP_APU_DSP_ACK=0x803B8810` was a synthetic diagnostic setting; the APU reported bounded 0-cycle DSP slices. No audible output or DSP emulation correctness is verified. Preserve the baseline runtime and do not adopt this candidate as a fix.
+- The watchdog identifies a repeat path through DirectSound lock helpers and DPC-related indirect calls, but does not capture a current guest instruction pointer. The next useful diagnostic is a narrowly scoped opt-in PC/back-edge trace on the active DirectSound/DPC path, then a matched rerun without synthetic APU acknowledgement. Keep the original ISO and normal saves untouched; local logs and candidate executable remain ignored, and the user's XID patch remains unstaged.
+- Milestone 3 remains active. Progress bars are unchanged: overall 2/8; XBE/decompilation 2/4; boot/compatibility 4/5; rendering 2/4; controller 2/3; DSP/audio 1/2. Mission entry/gameplay, real audio output, save/load, physical Steel Battalion controller behavior, and campaign completion remain unverified.
