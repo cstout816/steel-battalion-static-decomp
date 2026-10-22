@@ -1,3 +1,13 @@
+### 2026-10-22 — PGRAPH notifications are acknowledged while DCF4 completion stops
+
+A three-minute instrumented startup capture recorded nonzero pushbuffer NOP notifications through marker 240. For the sampled notifications, `nv2a_pgraph_notify` entered, the guest PGRAPH ISR observed status `0x00100000`, and the notification was acknowledged. This rules out a blanket failure of the NOP-to-PGRAPH-ISR acknowledgement route during the captured interval; it does not establish what happens after the last sampled marker because the trace intentionally logs sparsely.
+
+DCF4 callback dispatch was observed through callback count 337. The final DCF4 wait sample was frame `0x145`, with target `0x53B` and semaphore `0x537`; the watchdog later sampled semaphore `0x541` and device counter `0x545`, with DCF4 reset and USER PUT=GET. The completion semaphore therefore advanced beyond that wait target while the event remained unsignaled. This narrows the issue toward the guest callback/event dispatch relationship or timing, but does not yet identify a root cause. No interrupt, event, or fence semantics were changed.
+
+All temporary traces were removed and their modified sources restored; no game process remains. A fresh build check was attempted against `build-dsp-scratch-check`, but CMake rejected that scratch tree because its DSP56300 dependency is not at the required reviewed checkout. This is a build-tree/configuration failure, not evidence of a source compilation failure; a clean ordinary build was reported successful immediately before this check, but was not independently reverified in this turn. The user XID patch remains the only tracked modification. The original ISO and saves were not changed. Capture logs remain ignored under `iso/local-analysis/logs/m3-dcf4-pgraph-notify-180s-20261022/`.
+
+Milestone 3 remains active; progress unchanged: overall 2/8, XBE/decompilation 2/4, boot/compatibility 4/5, rendering 2/4, controller 2/3, DSP/audio 1/2. The title can appear in bounded runs, but stable startup, accepted input, audible output, mission entry, save/load, and campaign completion remain unverified. Next instrument the callback code-5 path and DCF4 setter alongside semaphore release at the exact queue-drained/past-target transition, then rebuild using the verified non-scratch build workflow.
+
 ### 2026-10-21 — unlocked D3D completion progresses; DirectSound list corruption reproduces
 
 A 120-second run without the diagnostic guest lock recorded 614 DCF4 waits and 614 matching signals. Its sampled USER DMA reports repeatedly showed `PUT=GET`; the final wait was followed by its event signal. The run rendered 932 flips at 6.38 FPS before an access violation in `sub_0021ED29+0x77` while reading guest address `0xFFFFFFF4`.
