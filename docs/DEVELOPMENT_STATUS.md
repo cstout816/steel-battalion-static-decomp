@@ -4441,3 +4441,8 @@ Extracted only `default.xbe` from the user's local ISO with the bundled XboxReco
 - License review of the local runtime confirms some modified APU and NV2A files retain xemu LGPL-2.1-or-later notices. The root currently has the XboxRecomp MIT notice but no xemu LGPL license text in `third_party/licenses`. The [official xemu repository](https://github.com/xemu-project/xemu) lists LGPL-2.1 among its licenses. Any source baseline bundle must preserve the file notices, include the corresponding license text and attribution, and keep the license scopes clear; no overall repository license has been selected.
 - The next packaging step is therefore a source-only, license-audited baseline export and clean-apply/build verification. It must exclude the local ISO/XBE, generated game code, runtime captures, binaries, and user saves. The DISPATCH gate should be layered only after that baseline is reproducible.
 - No game data or runtime source changed in this audit. Milestone 3 remains active; mission entry, audio output, save/load, physical controller support, and campaign completion remain unverified.
+
+## 2026-10-22 — retain the xemu LGPL text
+
+- Added xemu's `COPYING.LIB` as `third_party/licenses/xemu-LGPL-2.1.txt` and linked it from the third-party dependency notes. The official xemu repository identifies the APU/NV2A-derived components as LGPL-2.1-or-later; source notices remain the authority for each file's scope.
+- This closes the missing license-text item for the project repository. It does not settle the overall project license, establish complete source bundle provenance, or satisfy binary redistribution/relinking steps. Milestone 3 remains active; the dispatch-gate baseline still needs a clean, source-only rebase and rebuild.

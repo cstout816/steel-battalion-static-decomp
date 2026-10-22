@@ -146,8 +146,10 @@ symbol capture remains opt-in and has not been revalidated.
 The upstream `NOTICE` identifies xemu-derived APU and NV2A components under
 LGPL-2.1-or-later. The local executable links xboxrecomp runtime libraries,
 including those components. No game executable or runtime libraries are
-prepared for redistribution. Before distributing binaries, retain all upstream
-notices and license texts and satisfy the LGPL relinking/source requirements.
+prepared for redistribution. A copy of xemu's `COPYING.LIB` is retained at
+[`licenses/xemu-LGPL-2.1.txt`](licenses/xemu-LGPL-2.1.txt). Preserve each
+upstream source notice and license scope when exporting runtime patches; before
+distributing binaries, also satisfy the LGPL relinking/source requirements.
 The project license remains undecided pending the full dependency review.
 
 The opt-in Steel Battalion XID input profile has a separate report-layout
