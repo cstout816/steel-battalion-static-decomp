@@ -1,3 +1,9 @@
+### 2026-10-22 — selector-5 file-trace attempt inconclusive
+
+Retried the selector-5 probe with direct file output after stderr proved unavailable. The process ended before any DCF4 wait or selector-5 entry was recorded; the wait log contains only early DCE4 activity, and the expected callback trace file was not created. No cause for the early termination was captured, so this run is excluded from boot or DCF4 compatibility conclusions. The temporary generated-code change was restored byte-for-byte, no game process remains, and the ordinary Release target rebuilt successfully (exit 0). No game data or runtime behavior was changed.
+
+Milestone and progress bars remain unchanged. Next launch from the verified runtime path with a process-level exit/exception capture and the selector trace routed to a file, then use only runs that reach the established DCF4 wait path for callback analysis.
+
 ### 2026-10-22 — clean build and non-reproducing DCF4 comparison
 
 Rebuilt the intended x64 Release target in `local-tools/steel-battalion-game/build-xpp-seeded`; the build completed with exit code 0. A later attempt against the obsolete `xboxrecomp/build-dsp-scratch-check` tree was rejected because its DSP56300 checkout was not at the reviewed commit, so that scratch-tree error is not a project-source build failure. No game process remains.
