@@ -1,3 +1,11 @@
+### 2026-10-22 — partial DMA_GET stepping experiment discarded
+
+Built an opt-in experiment that published DMA_GET after each pushbuffer parameter while retaining the existing segment scanner. The ordinary build succeeded, and `[PB-GET-STEP]` confirmed the flag was active. The first run omitted `RECOMP_USB_PROFILE=steel-battalion`, so its controller-input result is invalid; a follow-up used the correct profile. The follow-up reached the Dolby intro but stopped producing new framebuffer flips there, while DCE4 waits and callbacks continued. At the 120-second bound USER DMA PUT=GET and DCF4 waits were absent; the process was stopped after preserving the capture. It did not reach the title screen.
+
+Removed the partial stepping change and rebuilt successfully. This is not a test of XboxRecomp's full DMA walker: the upstream implementation preserves command flow, pending packets and guest-driven GET resets, while this experiment only advanced GET within our existing scan. Its earlier stall shows that publishing GET alone is unsafe. The current default code path and renderer remain unchanged. Captures are ignored under `iso/local-analysis/logs/m3-pb-get-step-replay-20261022/` and `iso/local-analysis/logs/m3-pb-get-step-xid-replay-20261022/`.
+
+Next adapt the upstream opt-in DMA walker as a complete, isolated path, including its GET resync and wake-up notification behavior, then compare it against the segment scanner with `RECOMP_USB_PROFILE=steel-battalion`. Keep the option off by default until it reaches at least the title screen without losing notification acknowledgements. M3 and all progress bars remain unchanged.
+
 ### 2026-10-22 — upstream DMA_GET fix matches the remaining fence-wait lead
 
 The live menu replay reached the pilot-name editor and stayed there through its 180-second bound. The first three Main Weapon pulses were accepted and advanced through Campaign, Pilot List, and pilot creation. The fourth pulse was read by the harness at 115.875 s but produced no successful guest input query; pilot-name entry is therefore not verified. The process exited at the watchdog without a crash. The final screenshot still showed the name editor.
