@@ -4536,3 +4536,12 @@ Upstream reference: [XboxRecomp releases and function-detection notes](https://g
 Upstream references: [XboxRecomp v0.16.0 release notes](https://github.com/sp00nznet/xboxrecomp/releases/tag/v0.16.0), [function-boundary/lock-release debugging notes](https://github.com/sp00nznet/xboxrecomp#readme).
 
 
+
+### 2026-10-22 continuation — isolated lock-prefix/scheduler experiments
+
+- The upstream v0.16.0 candidate's early crash was caused by the MMIO decoder rejecting x86 `LOCK` prefix `F0` before an `AND` read-modify-write to NV2A address `0xFD410100`. Added a local-only prefix case in the temporary upstream clone and rebuilt; it got past that exception. This prefix case is not yet a retained fix because its effect on game behavior and concurrent MMIO semantics is unverified.
+- With that decoder experiment, ran both upstream default mode and `RECOMP_GUEST_LOCK=1` for 45-second watchdog windows using the same generated Steel Battalion code and separate saves. Both remained in early initialization: 201 kernel calls, USER DMA PUT=GET `0x495C`, PFIFO PUT=GET `0`, no framebuffer capture, no crash, and no title/menu. The guest-lock scheduler did not provide an observable boot improvement in this bounded check.
+- Built a separate pinned v0.13.1 candidate with the same local `LOCK` prefix case at `/Od`; ran it for the same watchdog window. It likewise stayed at 201 kernel calls with no frame/menu progress. The pinned source file was restored byte-for-byte, and the ordinary baseline build was not overwritten.
+- The upstream runtime candidate is not being adopted. Its unpatched version also needed a temporary test-only harness adjustment because v0.16 removed `xbox_OhciShutdown`; the game source `main.c` was restored byte-for-byte. Both candidate trees/builds/logs are local diagnostics only. Ghidra 12.1.4 and VS 2022 were already installed, so no system dependency was installed.
+- No game process remains. The original ISO and regular saves are untouched, and the user-edited XID patch is still unstaged. Progress bars remain unchanged: overall 2/8; XBE/decompilation 2/4; boot/compatibility 4/5; rendering 2/4; controller 2/3; DSP/audio 1/2.
+- Next: use the watchdog guest stack and Ghidra to identify the active instruction/thread during the unchanged early stall. Keep the pinned runtime as the working baseline while checking whether the new MMIO prefix case is ever reached there; do not retain it without a measurable change in boot progress.
