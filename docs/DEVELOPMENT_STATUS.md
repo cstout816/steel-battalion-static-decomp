@@ -1,3 +1,11 @@
+### 2026-10-22 follow-up — recurring texture-cache miss is an open-only probe
+
+Added opt-in diagnostics to the ignored local XboxRecomp runtime fork and rebuilt the clean x64 Release target successfully. A repeat of the title-to-loading flow again displayed “NOW LOADING”; after capturing the needed trace, I stopped only that duplicate test process before its watchdog. No project game process remains.
+
+The bounded 420-second loading run logged 193 missing paths. Of these, 167 were the same `Cache\TEX00.BIN` lookup in that run's isolated save directory; the remaining misses were empty save slots and early cache probes (`COPYCHECK.DAT`, `st00_0.rep`). The `TEX00.BIN` call used access `0x80100080`, `FILE_OPEN` disposition `1`, and options `0x48`, so the game was checking for an existing cache rather than trying to create it. Ghidra decompiled the immediate return site `0x0018E758` into the generic XAPI wrapper `FUN_0018E630`; this did not identify the game-specific caller or explain the loader loop. The missing cache is a probe, not a confirmed cause. Logs and Ghidra output remain local/ignored; ISO, ordinary saves, and generated game code were untouched.
+
+Milestone 3 remains active and progress bars are unchanged (overall 2/8; decompilation 2/4; boot 4/5; rendering 2/4; controller 2/3; DSP/audio 1/2). Verified evidence still ends at the loading screen; mission entry, audio, save/load, and campaign progression are not verified. Next trace the caller above the generic XAPI wrapper or the code that constructs `TEX00.BIN`, then correlate that path with texture reads and the loader's frame/event loop. Do not add a placeholder cache file or change file-open behavior without evidence that the game expects one.
+
 ### 2026-10-22 — virtual-controller campaign setup reaches a persistent mission loading screen
 
 A bounded run of the clean x64 Release executable used async I/O, pushbuffer DMA execution, APU readiness/DSP acknowledgement, vblank/title events, the virtual Steel Battalion USB profile, framebuffer capture, and a per-run save directory. Screen-guided live `a:800` and camera-hat inputs advanced from the title prompt through Campaign, pilot creation (`BO`, birth date 01/01/2002), YES confirmation, and `HAI SHI DAO 2080 [NORMAL]`. The resulting framebuffer displayed “NOW LOADING.”
