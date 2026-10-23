@@ -4805,3 +4805,9 @@ Mission initialization (`FUN_000F8690`) sets mode 0 during its own segment/cache
 No runtime or dependency behavior was changed and no new game run was started. Ghidra scripts/project and outputs remain local/ignored; the original ISO is untouched. The earlier `NOW LOADING` captures and pending graphics-fence evidence remain the strongest runtime observations.
 
 Next use the existing watchdog peek to snapshot `0x00347700`, worker exit code `0x00311BA4`, worker handle `0x00311CC8`, and loading-loop state `0x006B9CA0`/`0x006B9E1C` at the known loading screen, paired with DMA/fence counters. Then inspect the active branch and callback completion against that same run. Milestone 3 remains active; progress bars unchanged: overall 2/8; XBE/decompilation 2/4; boot/compatibility 4/5; rendering 2/4; virtual controller 2/3; DSP/audio 1/2.
+
+### Follow-up — mode-2 worker scheduling narrowed
+
+A second Ghidra xref pass recovered the mode writer `FUN_0001DAA0`. It stores the requested mode, waits for any prior worker to exit, and creates a thread using callback `0x00017E40`. The mission setup caller requests mode 2, raises that worker's priority, then suspends it; the main loop checks its exit code and resumes/suspends it around frame updates. Once the mode-2 callback returns, the displayed loading animation can continue while the main loop follows a different branch. This makes a screenshot alone insufficient to tell whether mission setup is still running.
+
+The existing route log confirms creation of the callback thread but contains neither its mode nor its exit code. Next diagnostic should sample `0x00347700` and `0x00311BA4` together at the loading screen, plus the main-loop and NV2A fence counters. This is a more direct discriminator between a still-running mission worker and a completed worker with a stalled presentation/transition. No runtime behavior changed; no test was run.
