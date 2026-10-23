@@ -1,0 +1,22 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -1339,9 +1339,15 @@ static void put_pixel(uint8_t *mem, uint32_t bpp, int x, int y, uint32_t argb)
+     uint32_t source_argb = argb, blend_dst = 0;
+ 
+     (void)mem;
+-    if (x < (int)s_gpu.clip_x || x >= (int)(s_gpu.clip_x + s_gpu.clip_w))
+-        return;
+-    if (y < (int)s_gpu.clip_y || y >= (int)(s_gpu.clip_y + s_gpu.clip_h))
++    /* raster_xf_triangle clips its integer bounds before publishing a batch,
++     * so every worker pixel is already inside the guest clip rectangle. Keep
++     * the guard for the serial/generic raster paths, which do not carry that
++     * invariant into put_pixel. */
++    if (!s_xf_raster_active
++        && (x < (int)s_gpu.clip_x
++            || x >= (int)(s_gpu.clip_x + s_gpu.clip_w)
++            || y < (int)s_gpu.clip_y
++            || y >= (int)(s_gpu.clip_y + s_gpu.clip_h)))
+         return;
+     if (!s_xf_raster_active) {
+         s_gpu.pixels++;
