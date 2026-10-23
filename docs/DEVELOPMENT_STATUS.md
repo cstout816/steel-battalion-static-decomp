@@ -5136,3 +5136,7 @@ Next: repeat the adaptive route with bounded file-open/read and wait tracing ena
 - Added `tools/Measure-ProcessPerformance.ps1` and `docs/PERFORMANCE_TESTING.md`. The sampler records process CPU seconds, CPU use normalized to one logical processor and the whole machine, working-set memory, and per-process Windows GPU Engine 3D/Copy counters. It does not launch the game or change runtime settings.
 - The PowerShell parser reports no syntax errors. A live sample and performance replay were not run because Call of Duty remains in the foreground. CSV output and GPU counter availability therefore remain unverified on the game process.
 - Next: use the sampler on matched 4- and 8-worker mission-route runs after the foreground game is closed; compare guest frame rate and mission progress alongside utilization. No performance or milestone bar advances from adding measurement tooling alone.
+
+### 2026-10-23 — correlate guest rate with host utilization
+- Extended `tools/Measure-ProcessPerformance.ps1` with optional `-GuestStderrLog`; CSV rows now include the latest guest `[GPU] ... fps (... flips)` sample when present. Updated `docs/PERFORMANCE_TESTING.md` to distinguish this interval-level guest report from frame-time histograms and 1% lows, and to require all runtime settings except `RECOMP_RASTER_THREADS` to remain fixed in an A/B comparison.
+- PowerShell parser and `git diff --check` pass. No live sampler run, build, or game replay: Call of Duty remains active in the foreground. Performance claims and milestone bars remain unchanged.

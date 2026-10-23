@@ -5,6 +5,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$OutputCsv,
 
+    [string]$GuestStderrLog,
+
     [ValidateRange(1, 60)]
     [int]$IntervalSeconds = 2,
 
@@ -65,6 +67,21 @@ while ($stopwatch.Elapsed.TotalSeconds -lt $DurationSeconds) {
         # CPU and memory samples remain useful when GPU Engine counters are unavailable.
     }
 
+    $guestFps = $null
+    $guestFlips = $null
+    if ($GuestStderrLog -and [IO.File]::Exists($GuestStderrLog)) {
+        try {
+            Get-Content -LiteralPath $GuestStderrLog -Tail 120 | ForEach-Object {
+                if ($_ -match '^\[GPU\]\s+([0-9]+(?:\.[0-9]+)?)\s+fps\s+\(([0-9]+)\s+flips\)') {
+                    $guestFps = [double]$Matches[1]
+                    $guestFlips = [long]$Matches[2]
+                }
+            }
+        } catch {
+            # Keep host usage samples if the runtime log is temporarily unavailable.
+        }
+    }
+
     $rows.Add([pscustomobject]@{
         Timestamp = $sampleAt.ToString('o')
         ProcessId = $ProcessId
@@ -73,6 +90,8 @@ while ($stopwatch.Elapsed.TotalSeconds -lt $DurationSeconds) {
         CpuPercentOfMachine = if ($null -eq $cpuMachinePct) { $null } else { [Math]::Round($cpuMachinePct, 2) }
         Gpu3DPercent = $gpu3dPct
         GpuCopyPercent = $gpuCopyPct
+        LatestGuestFpsSample = $guestFps
+        LatestGuestFlipCount = $guestFlips
         WorkingSetMiB = [Math]::Round($process.WorkingSet64 / 1MB, 1)
     })
 
