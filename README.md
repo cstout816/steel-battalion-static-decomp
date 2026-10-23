@@ -10,7 +10,7 @@
 
 </div>
 
-> **For players:** there is no game to download yet. The corrected local launch now executes the initial graphics command ring and accepts virtual Steel Battalion controller input through pilot setup. A 420-second run reached “NOW LOADING,” but not a mission; its final trace still showed a backlog at the guest graphics fence. That route did not reach the same audio-cleanup path; a separate bounded capture reproduced an intermittent invalid release pointer during audio callback processing. Audio output and cleanup remain unverified. There is no installer or launcher. Please do not send game files.
+> **For players:** there is no game to download yet. Two visible replays created a test pilot with the virtual Steel Battalion controls, selected “HAI SHI DAO 2080 [NORMAL],” and reached “NOW LOADING.” Both stayed on that screen for about three minutes. A retry with the extracted `TEX00.BIN` copied into its private test cache also stalled, so that file alone is not a fix. Neither run reached gameplay. These diagnostics used a synthetic DSP acknowledgement; audible audio is not verified. There is no installer or launcher. Please do not send game files.
 
 ## The game and its controller
 
@@ -51,14 +51,14 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, remains active. Correct DMA execution reaches “NOW LOADING,” but no mission appeared. The latest 420-second sparse trace shows fence progress but still ends on `NOW LOADING`; mission entry remains unverified. Rendering is slow and 155 graphics methods remain unhandled. |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3, boot and compatibility, remains active. The virtual controller route confirms pilot creation and selection of “HAI SHI DAO 2080 [NORMAL]”; two mission-load attempts stayed on “NOW LOADING,” including a private-cache retry. Mission gameplay is not verified. |
 | Research and architecture | [#-------------------] 3/3 | Approach and technical limits documented. |
 | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
 | Initial code translation | [#-------------------] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [#-------------------] 100% | A local build completes. |
-| Boot and compatibility | [########------------] 4/5 | Correctly enabling pushbuffer execution clears the initial zero-frame spin; the virtual Steel Battalion profile reaches pilot setup and loading. Mission entry remains unverified. The latest 420-second sparse trace ended in `D3DDevice_Swap` with DCF4 signaled, the semaphore four counts behind its target, and the device put-counter ahead. Periodic samples show progress, not a confirmed permanent fence deadlock. |
+| Boot and compatibility | [########------------] 4/5 | The virtual Steel Battalion profile reaches pilot creation, mission selection, and the loading screen. Two roughly three-minute attempts did not reach gameplay; the cache-seeded retry fluctuated between 0 and 1 guest FPS. |
 | Startup rendering performance | [##########----------] 2/4 | Earlier lower-overhead presentation fell to about 1.1 FPS. An instrumented windowed run reached 86 flips and reported 8.12 FPS; two 65-second windowed runs reached 765–767 flips and reported 7.83–7.84 FPS. The latest full trace reported 0.68 FPS in its final measurement interval, 1,843 flips, 136,283 draws, 801,587 vertices, and 155 distinct unhandled graphics methods. These are startup/loading measurements, not a stable gameplay benchmark. Stable frame pacing and gameplay performance are unverified. |
-| Virtual controller input | [#############-------] 2/3 | Guest input queries accepted Main Weapon and camera-hat actions through the virtual Steel Battalion USB profile during pilot creation. Physical adapter compatibility and full original controller mapping/outputs remain unverified. |
+| Virtual controller input | [#############-------] 2/3 | Virtual Main Weapon accepted pilot/menu confirmation; analog left-stick directions moved the pilot-name selection across rows and fields. D-pad right did not move this editor's cursor. Physical adapter compatibility and full original controller mapping/outputs remain unverified. |
 | Guest DSP and audio | [█-------------------] 1/2 | Nonzero packets reach the DirectSound stream processor, XMO returns success, and the deferred callback reaches XBE routine `0x00227F9C`. A separate capture reproduced the invalid release argument in an audio callback while draining a DPC-managed list. The corrected loading run did not reach that same cleanup path, and audible output remains unverified. |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
