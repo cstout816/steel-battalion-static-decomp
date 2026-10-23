@@ -5097,3 +5097,23 @@ Next: make the known adaptive title-to-campaign route repeatable, then capture r
 - The existing native dump was reviewed with rust-minidump's CFI stack walker. Only its top Windows wait frames on the main thread are reliable; deeper generated-game and file-bridge frames cited in that report came from stack scanning. The current runtime PDB and local Visual Studio DIA dump utility are available, but the scan-only candidates are not sufficient to attribute the black image. No synchronization or file-I/O behavior change is justified yet.
 - Milestone 3 and progress bars remain unchanged: overall 2/8; decompilation 2/4; boot/compatibility 4/5; rendering 2/4; controller 2/3; DSP/audio 1/2. Campaign menu progression, mission loading/gameplay, audible audio, save/load, original Steel Battalion controller hardware, and campaign completion remain unverified.
 - Next: capture a compact native dump on the black image and inspect every thread's valid unwind and signal/lock state; compare that against the still-progressing frame/DMA counters before attempting another input sequence.
+
+### 2026-10-23 — mission route reaches NOW LOADING, then stalls
+
+A low-volume, windowed replay followed the known adaptive route through the title, Campaign, new-pilot name/date confirmation, NORMAL difficulty, and the actual `NOW LOADING` screen. It remained there for roughly three minutes with the draw count fixed at 30; the window’s reported rate fell from 1 FPS to 0 FPS. No first-level gameplay frame appeared. The process did not crash: a compact dump’s reliable top frame places the guest thread in `xbox_KeWaitForSingleObject`; deeper stack-scan frames are not conclusive. The process was stopped after the repeated no-progress state. Original ISO and ordinary saves were untouched; only the isolated test save was used.
+
+The guest kernel call summary showed very high counts for ordinals 277/294 (`RtlEnterCriticalSection`/`RtlLeaveCriticalSection`). A rate-limited watch associated the hot critical-section address `0x0023FE18` with the game’s DirectSound critical-section object in the Ghidra analysis. This is a lead, not a proven cause of the loading stall. The guest lock owner/waiter evidence and compact stack walk do not establish a deadlock root cause. A brief startup sample reported 35 FPS, but observed menu rates were roughly 1–7 FPS and gameplay frame pacing/1% lows were not measurable.
+
+A local-only diagnostic adjustment in the ignored XboxRecomp checkout made `RECOMP_CS_WATCH` operate without broad critical-section tracing and sampled one watched event per 16,384 operations after the first eight. The x64 Release target rebuilt successfully. This dependency change is not committed or distributed; no game-generated code or assets changed. Diagnostic artifacts are ignored under `iso/local-analysis/logs/m3-first-level-cs-watch2-20261023/` and `m3-first-level-performance-clean-20261023/`.
+
+Progress bars (milestone 3 remains active):
+- Overall: `██░░░░░░` 2/8
+- XBE/decompilation: `█████░░░░░` 2/4
+- Boot/compatibility: `████████░░` 4/5
+- Rendering: `█████░░░░░` 2/4
+- Controller: `███████░░░` 2/3
+- DSP/audio: `█████░░░░░` 1/2
+- Route to first mission frame: `██████░░` 6/8 (title through loading verified; gameplay and mission completion remain unverified)
+- 60-FPS gameplay verification: `░░░░░░░░░░` 0/1
+
+Next: repeat the adaptive route with bounded file-open/read and wait tracing enabled, then correlate the first-level loader’s last completed file/event with the waiting guest thread. Keep the 60-FPS goal unverified until a gameplay interval can be measured with stable presentation and pacing.
