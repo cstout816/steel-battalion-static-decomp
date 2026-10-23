@@ -1,3 +1,13 @@
+### 2026-10-22 — repeated route diverges before mission selection
+
+Built the correct XPP-seeded x64 Release target with the installed Visual Studio 2022 Build Tools. A 420-second replay used the saved virtual-controller timeline, async I/O, the Steel Battalion USB profile, isolated saves, pushbuffer execution, vblank/title-event diagnostics, and framebuffer/progress capture. It remained in the pilot-name editor through frame 40 and did not select or load a mission. Only the first three timed USB report steps were observed (through 77 seconds); later scripted steps were not observed in this run. The route is therefore not reliably repeatable yet; this run is not evidence about the later mission-loader stall.
+
+The watchdog placed the guest in the D3D swap/fence wait path. At timeout, the guest semaphore was `0xC025`, device put-counter `0xC02B`, USER DMA PUT/GET were `0x4F5E4`/`0x48B1C`, and DCF4 was unsignaled. Five-second samples showed USER DMA GET, device counters, and frame sequence continuing to advance during the run. This is another short GPU backlog at timeout, not proof of a permanent fence deadlock. The local worker-function probe added no usable PC because this translation only inserts trace hooks at selected addresses and did not hook the worker callback; those fields were removed. No worker-stall conclusion follows.
+
+Restored the diagnostic source to its prior state and rebuilt the same target successfully. The run used an isolated save directory; original ISO, extracted files, and ordinary saves were not changed. Captures and logs remain ignored under `iso/local-analysis/logs/m3-worker-function-trace-xpp-20261022/`. Mission gameplay, audio output, save/load, physical controller behavior, and campaign completion remain unverified. Progress bars are unchanged; Milestone 3 remains active.
+
+Next, make the recorded route repeatable across fresh isolated saves before comparing mission-load behavior again. Preserve the mode/worker-status peek from the successful `NOW LOADING` run and instrument only known callback addresses if another worker-PC sample is required. Avoid treating this earlier divergence as a cache result.
+
 ### 2026-10-22 — framebuffer capture confirms the Dolby splash stop
 
 Repeated the visible startup with `RECOMP_ASYNC_IO=1` and corrected the framebuffer-dump path to an absolute local path. The captured 640×480 framebuffer visibly shows the Dolby Digital splash. The trace sampled 25.71 FPS at 261 flips during startup; this is splash animation, not title or gameplay performance.
