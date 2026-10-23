@@ -1,3 +1,11 @@
+### 2026-10-22 — framebuffer capture confirms the Dolby splash stop
+
+Repeated the visible startup with `RECOMP_ASYNC_IO=1` and corrected the framebuffer-dump path to an absolute local path. The captured 640×480 framebuffer visibly shows the Dolby Digital splash. The trace sampled 25.71 FPS at 261 flips during startup; this is splash animation, not title or gameplay performance.
+
+The framebuffer dump and logs stopped updating for at least 30 seconds while the window title still reported two draws; Windows marked the process unresponsive. I stopped only this diagnostic PID. No title prompt or gameplay input was reached. This distinguishes the current startup stall from a black frame and from the later mission texture-cache loop. The original XPR files resolved successfully in the immediately preceding low-noise trace. Captures remain ignored under `local-tools/steel-battalion-game/iso/local-analysis/logs/m3-splash-frame-snapshot-abs-20261022/`; no game-derived files entered Git.
+
+Progress bars remain unchanged and Milestone 3 remains active. Next capture a watchdog stack and progress counters while the Dolby splash is frozen, then correlate the wait with the Ghidra splash loader and async-I/O completion path. Once the title route is stable again, resume the separate `TEX*.BIN` mission-load investigation.
+
 ### 2026-10-22 — async-I/O splash trace corrects the startup replay comparison
 
 The two one-flip file-trace retries immediately preceding this run omitted `RECOMP_ASYNC_IO=1`, which was present in earlier title-to-loading runs. They are not comparable startup attempts. A watchdog sample from the no-async run showed the XBE in splash initialization (`FUN_000DFE90` → `FUN_000C83C0` → 10 ms wait), not in the mission texture loader. The source XBE decompilation shows that routine loading splash XPRs.
