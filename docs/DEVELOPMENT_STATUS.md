@@ -1,3 +1,9 @@
+### 2026-10-22 — visible Vulkan-path per-draw timings
+
+Ran the existing `RECOMP_PB_TIMING` instrumentation with `RECOMP_FB_WINDOW=1`, the corrected DMA executor, and the user's own XBE. The visible Vulkan window initialized on the RTX 4070 SUPER. Startup samples show the exact black-depth quad taking about 0.26 ms, repeated `vulkan-logo` draws about 8–19 ms, and 1024×1024 `vulkan-linear-nearest` draws about 18–20 ms. Other full-screen 1024×1024 draws still take the `cpu-raster` fallback at about 24–35 ms; repeated 128×128 textured quads take about 12–16 ms. This identifies both expensive fallback draws and costly per-draw Vulkan submissions. `RECOMP_PB_TIMING` adds synchronous logging, and the window reported around 1 FPS during the sampled intro, so that rate is diagnostic only and not a gameplay benchmark.
+
+The run did not receive gameplay input or reach the campaign. No runtime change was made from these timings. The process was stopped and no game process remains. Logs and captures are ignored under `iso/local-analysis/logs/m3-visible-pb-timing-20261022/`; no ISO, asset, or generated game code entered Git. XID patch remains unstaged. Milestone 3/progress bars remain unchanged. Next inspect and measure the Vulkan helper's per-draw waits/resource allocation, then target the 1024×1024 CPU fallback with a narrow exact-state path while checking output against captured frames.
+
 ### 2026-10-22 — corrected renderer profiling mode
 
 The earlier isolated raster-batching comparison and the first per-draw timing run were launched without `RECOMP_FB_WINDOW`. The runtime explicitly leaves its Vulkan framebuffer presenter off in that mode, so those samples measured the CPU reference fallback; they are not evidence about the intended Vulkan presentation path. The per-draw timer found 512×512 full-screen CPU raster draws taking roughly 15–25 ms and some 1024×1024 draws taking 15–100 ms, but these measurements apply only to that fallback.
