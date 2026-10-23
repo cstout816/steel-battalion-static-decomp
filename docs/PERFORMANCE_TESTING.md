@@ -8,7 +8,7 @@ $game = Get-Process your_game_recomp | Select-Object -First 1
   -ProcessId $game.Id `
   -OutputCsv .\iso\local-analysis\logs\cpu-gpu-usage.csv `
   -GuestStderrLog .\iso\local-analysis\logs\run\stderr.log `
-  -IntervalSeconds 2 `
+  -IntervalSeconds 5 `
   -DurationSeconds 300
 ```
 
@@ -16,4 +16,4 @@ $game = Get-Process your_game_recomp | Select-Object -First 1
 
 For a useful comparison, keep the executable, save, input route, display mode, and capture interval the same; change only `RECOMP_RASTER_THREADS`. Save each CSV beside that run's logs. Record the guest flip-rate samples and whether the run reached a gameplay frame separately. Do not compare an instrumented diagnostic run with a clean performance run as if they were equivalent.
 
-When `-GuestStderrLog` is supplied, each row also repeats the latest `[GPU] ... fps (... flips)` line found in that log tail. This is the runtime's guest flip-rate report, not a per-frame timing histogram or a 1% low. Keep all other `RECOMP_*` settings identical in thread-count comparisons, especially the scheduling and graphics settings; record any differences in the run notes.
+When `-GuestStderrLog` is supplied, each row repeats the latest `[GPU] ... fps (... flips)` report read incrementally from the runtime log. This is the guest flip-rate report, not a per-frame timing histogram or a 1% low. The sampler refreshes GPU-engine discovery every 30 seconds and queries the target process's discovered engines between refreshes; a longer interval reduces measurement overhead. Keep all other `RECOMP_*` settings identical in thread-count comparisons, especially the scheduling and graphics settings; record any differences in the run notes.

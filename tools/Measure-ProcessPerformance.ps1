@@ -8,7 +8,7 @@ param(
     [string]$GuestStderrLog,
 
     [ValidateRange(1, 60)]
-    [int]$IntervalSeconds = 2,
+    [int]$IntervalSeconds = 5,
 
     [ValidateRange(1, 86400)]
     [int]$DurationSeconds = 300
@@ -23,8 +23,14 @@ if (-not [IO.Directory]::Exists($outputDirectory)) {
 }
 
 $counterPath = '\GPU Engine(*)\Utilization Percentage'
+$gpuCounterPaths = @()
+$nextGpuDiscovery = [DateTimeOffset]::MinValue
 $previousCpuSeconds = $null
 $previousAt = $null
+$guestLogOffset = 0L
+$guestLogRemainder = ''
+$latestGuestFps = $null
+$latestGuestFlips = $null
 $stopwatch = [Diagnostics.Stopwatch]::StartNew()
 $rows = [Collections.Generic.List[object]]::new()
 
@@ -50,13 +56,26 @@ while ($stopwatch.Elapsed.TotalSeconds -lt $DurationSeconds) {
 
     $gpu3dPct = $null
     $gpuCopyPct = $null
+    $counterSamples = @()
     try {
-        $counter = Get-Counter -Counter $counterPath -ErrorAction Stop
-        $processSamples = @($counter.CounterSamples | Where-Object {
-            $_.Path -match "(?i)pid_$ProcessId(?:_|\\)"
-        })
-        $gpu3d = @($processSamples | Where-Object { $_.InstanceName -match '(?i)engtype_3D' })
-        $gpuCopy = @($processSamples | Where-Object { $_.InstanceName -match '(?i)engtype_Copy' })
+        $now = [DateTimeOffset]::Now
+        if ($now -ge $nextGpuDiscovery) {
+            # Enumerate all engines only at startup and occasionally thereafter.
+            # Reuse exact per-process counter paths between discovery passes.
+            $counter = Get-Counter -Counter $counterPath -ErrorAction Stop
+            $counterSamples = @($counter.CounterSamples | Where-Object {
+                $_.Path -match "(?i)pid_$ProcessId(?:_|\\)"
+            })
+            $gpuCounterPaths = @($counterSamples | Where-Object {
+                $_.InstanceName -match '(?i)engtype_(3D|Copy)'
+            } | Select-Object -ExpandProperty Path -Unique)
+            $nextGpuDiscovery = $now.AddSeconds(30)
+        } elseif ($gpuCounterPaths.Count -gt 0) {
+            $counter = Get-Counter -Counter $gpuCounterPaths -ErrorAction Stop
+            $counterSamples = @($counter.CounterSamples)
+        }
+        $gpu3d = @($counterSamples | Where-Object { $_.InstanceName -match '(?i)engtype_3D' })
+        $gpuCopy = @($counterSamples | Where-Object { $_.InstanceName -match '(?i)engtype_Copy' })
         if ($gpu3d.Count -gt 0) {
             $gpu3dPct = [Math]::Round(($gpu3d | Measure-Object -Property CookedValue -Sum).Sum, 2)
         }
@@ -65,20 +84,57 @@ while ($stopwatch.Elapsed.TotalSeconds -lt $DurationSeconds) {
         }
     } catch {
         # CPU and memory samples remain useful when GPU Engine counters are unavailable.
+        $gpuCounterPaths = @()
+        $nextGpuDiscovery = [DateTimeOffset]::Now.AddSeconds(30)
     }
 
-    $guestFps = $null
-    $guestFlips = $null
+    $guestFps = $latestGuestFps
+    $guestFlips = $latestGuestFlips
     if ($GuestStderrLog -and [IO.File]::Exists($GuestStderrLog)) {
+        $logStream = $null
+        $logReader = $null
         try {
-            Get-Content -LiteralPath $GuestStderrLog -Tail 120 | ForEach-Object {
-                if ($_ -match '^\[GPU\]\s+([0-9]+(?:\.[0-9]+)?)\s+fps\s+\(([0-9]+)\s+flips\)') {
-                    $guestFps = [double]$Matches[1]
-                    $guestFlips = [long]$Matches[2]
+            $logStream = [IO.File]::Open(
+                $GuestStderrLog,
+                [IO.FileMode]::Open,
+                [IO.FileAccess]::Read,
+                [IO.FileShare]::ReadWrite
+            )
+            if ($logStream.Length -lt $guestLogOffset) {
+                $guestLogOffset = 0L
+                $guestLogRemainder = ''
+            }
+            [void]$logStream.Seek($guestLogOffset, [IO.SeekOrigin]::Begin)
+            $logReader = [IO.StreamReader]::new(
+                $logStream,
+                [Text.Encoding]::UTF8,
+                $true,
+                4096,
+                $true
+            )
+            $logChunk = $guestLogRemainder + $logReader.ReadToEnd()
+            $guestLogOffset = $logStream.Position
+            $lines = [regex]::Split($logChunk, "`r?`n")
+            $completeLineCount = $lines.Count
+            if (-not $logChunk.EndsWith("`n")) {
+                $completeLineCount--
+                $guestLogRemainder = $lines[$lines.Count - 1]
+            } else {
+                $guestLogRemainder = ''
+            }
+            for ($lineIndex = 0; $lineIndex -lt $completeLineCount; $lineIndex++) {
+                if ($lines[$lineIndex] -match '^\[GPU\]\s+([0-9]+(?:\.[0-9]+)?)\s+fps\s+\(([0-9]+)\s+flips\)') {
+                    $latestGuestFps = [double]$Matches[1]
+                    $latestGuestFlips = [long]$Matches[2]
                 }
             }
+            $guestFps = $latestGuestFps
+            $guestFlips = $latestGuestFlips
         } catch {
             # Keep host usage samples if the runtime log is temporarily unavailable.
+        } finally {
+            if ($logReader) { $logReader.Dispose() }
+            if ($logStream) { $logStream.Dispose() }
         }
     }
 
