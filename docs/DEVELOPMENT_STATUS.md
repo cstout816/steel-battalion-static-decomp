@@ -4986,3 +4986,13 @@ Write-watch follow-up with native stack capture: the second fresh isolated-save 
 - This diagnostic did not verify title input, mission loading, or gameplay. It identifies the event path but does not explain the earlier black/loading transition. Stopped only the diagnostic game PID after collecting the trace. The temporary trace-field change was removed and the normal Release build succeeded; existing compiler warnings remain. The XBE/ISO and ordinary saves were untouched; isolated saves and trace logs are ignored under `iso/local-analysis/logs/m3-dcf4-wait-caller-20261023/` and `iso/local-analysis/saves-m3-dcf4-wait-caller-20261023/`. The temporary upstream disassembler edits were restored; the user's XID patch remains unstaged.
 - Milestone 3 remains active and bars stay unchanged: overall 2/8, XBE/decompilation 2/4, boot/compatibility 4/5, rendering 2/4, virtual controller 2/3, DSP/audio 1/2. Mission play, audible output, saves, physical controller, and campaign completion remain unverified.
 - Next: correlate `sub_00211AB0`'s queue/readiness result and the DCF4 loop with the campaign loading state, while capturing the hot indirect-call targets only after a repeatable mission-selection route. Do not change wait/event semantics based on this trace.
+
+### 2026-10-23 — startup queue-readiness probe (inconclusive)
+
+A temporary trace around the three readiness checks in `sub_00211E10` produced one sample before the route diverged: readiness `0x944`, below the `0x2000` threshold that takes the DCF4 wait path. The sampled frame was 1, USER DMA PUT/GET were both `0x495C`, and there were no DCF4 wait/set/reset records; DCE4 activity continued. The diagnostic process ended at its configured watchdog. This is an early-startup timing-divergent run and provides no evidence about the queue during mission loading.
+
+Removed the generated-code probe and rebuilt the normal VS 2022 x64 Release target successfully. No game process remains. Probe artifacts are ignored under `iso/local-analysis`; the original ISO and ordinary saves were untouched. The user-edited XID patch remains unstaged.
+
+Progress unchanged: overall 2/8; XBE/decompilation 2/4; boot/compatibility 4/5; rendering 2/4; virtual controller 2/3; DSP/audio 1/2. Mission gameplay, audible audio, save/load, physical controller support, and full campaign completion remain unverified. Milestone 3 remains active.
+
+Next: make the known adaptive title-to-campaign route repeatable, then capture readiness values on the actual mission-loading route. Preserve wait/event semantics until that route supplies correlated evidence.
