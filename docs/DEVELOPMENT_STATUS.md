@@ -1,3 +1,11 @@
+### 2026-10-22 — successful file-open trace build; startup replay inconclusive
+
+Added temporary, opt-in diagnostics to the ignored local XboxRecomp checkout: successful opens under `Cache` or `Media\BIN` can now report the host path and handle, and the existing bounded read trace includes the handle for correlation. The x64 Release target rebuilt successfully with Visual Studio Build Tools.
+
+The first run started hidden and stopped at one guest flip. I stopped it and retried with the game window visible and read tracing enabled; that run also remained at one flip for about a minute and did not reach the title, menu, or texture-cache loader. Its file trace therefore provides no cache-open evidence. Both processes started for this diagnostic were stopped. No tracked runtime code or project dependency patch was changed, and the temporary trace code remains only in the ignored local checkout. This replay does not change the cache-seed conclusion or any compatibility progress bar.
+
+Next retry with the known visible title-to-menu route, keeping only successful open-path tracing enabled so read logging does not add overhead. If the run again stops at its first flip, investigate that startup-repeatability failure separately before drawing conclusions about mission assets.
+
 ### 2026-10-22 — cache-seeded mission-load retry
 
 Repeated the visible route with the previously created pilot and virtual Steel Battalion USB input. After confirming the pilot and selecting “HAI SHI DAO 2080 [NORMAL],” the guest again displayed “NOW LOADING.” The isolated test cache was seeded with only `TEX00.BIN` from the user's extracted `Media\BIN` directory; SHA-256 matched exactly (`F728F66092482F17115A0A5E6C941F9AF9AC3C91D475435495ABC3BC732D11E1`). The original ISO and extracted source file were not modified.
