@@ -1,3 +1,11 @@
+### 2026-10-22 — async-I/O splash trace corrects the startup replay comparison
+
+The two one-flip file-trace retries immediately preceding this run omitted `RECOMP_ASYNC_IO=1`, which was present in earlier title-to-loading runs. They are not comparable startup attempts. A watchdog sample from the no-async run showed the XBE in splash initialization (`FUN_000DFE90` → `FUN_000C83C0` → 10 ms wait), not in the mission texture loader. The source XBE decompilation shows that routine loading splash XPRs.
+
+Rebuilt the temporary local XboxRecomp diagnostic with bounded successful `NtOpenFile` and `NtCreateFile` path traces, enabled async I/O, and ran the visible Vulkan build. The host successfully opened `Media\title\capcom.xpr`, `nude.xpr`, and `dolby.xpr` from the user's extracted files. It also opened `BGM00.WAV`, `ADVANCE.BIN`, `bgm01/02.wav`, and `STRM00` through `STRM04` from the isolated cache. The log reached 266 flips and a sampled 26.23 FPS interval, then stopped producing new frame/log progress at two draws before any title prompt. The game process was stopped. These are startup diagnostics, not a stable performance measurement; audible audio is unverified.
+
+This rules out a simple failure to resolve the three splash XPR paths in this run. It does not explain the later stop or revise the separately observed mission-load cache requests. The temporary trace is confined to ignored `local-tools/xboxrecomp`; no project runtime or dependency patch was added. Logs remain ignored under `local-tools/steel-battalion-game/iso/local-analysis/logs/m3-splash-async-open-trace-20261022/`. Progress bars remain unchanged. Next preserve `RECOMP_ASYNC_IO=1` in the known visible route, capture a bounded framebuffer at the 266-flip stop, and use the watchdog's guest stack to identify the current startup wait before returning to the mission cache trace.
+
 ### 2026-10-22 — successful file-open trace build; startup replay inconclusive
 
 Added temporary, opt-in diagnostics to the ignored local XboxRecomp checkout: successful opens under `Cache` or `Media\BIN` can now report the host path and handle, and the existing bounded read trace includes the handle for correlation. The x64 Release target rebuilt successfully with Visual Studio Build Tools.
