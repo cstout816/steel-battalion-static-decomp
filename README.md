@@ -74,4 +74,8 @@ The project uses [sp00nznet/xboxrecomp](https://github.com/sp00nznet/xboxrecomp)
 
 The work prioritizes campaign reliability and the original Steel Battalion controller before visual enhancements. See the [community compatibility and preservation plan](docs/community-compatibility-preservation.md) for planned controller support, campaign checks, accessibility, and future Line of Contact research.
 
+## Performance and hardware use
+
+The runtime uses CPU worker threads for general Xbox graphics rasterization and the RTX 4070 SUPER for the Vulkan presentation path and a small, verified GPU-rendered splash draw. A previous runtime log confirms the NVIDIA card was selected. The available synthetic raster test was fastest with 4–8 workers; 12–16 workers did not improve it, so the current 4-worker default stays in place until a repeatable mission benchmark supports changing it. The whole game is not yet GPU-rendered, and gameplay GPU utilization or 60 FPS has not been verified.
+
 This independent project is not affiliated with or endorsed by Capcom or Microsoft. Product names and trademarks belong to their respective owners. A Windows release will be considered only after compatibility work and license review.
