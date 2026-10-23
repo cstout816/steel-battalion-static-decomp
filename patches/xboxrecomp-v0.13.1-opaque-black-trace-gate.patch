@@ -1,0 +1,12 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -2487,7 +2487,7 @@
+-    if (T.opaque_black)
++    if (T.opaque_black && getenv("RECOMP_OPAQUE_BLACK_TRACE"))
+         fprintf(stderr,
+                 "[OPAQUE-BLACK] mode=%s pixels=%llu checked=%llu mismatches=%llu\n",
+                 T.validate_opaque_black ? "validate" : "fast",
+                 (unsigned long long)cnt.pixels,
+                 (unsigned long long)cnt.black_checked,
+                 (unsigned long long)cnt.black_mismatches);
