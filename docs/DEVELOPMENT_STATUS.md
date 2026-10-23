@@ -1,3 +1,10 @@
+### 2026-10-23 — file-trace replay diverges during startup
+
+A follow-up run enabled bounded file-open/read traces and indirect-call-site attribution, then reused the isolated save from the pilot-creation run. It diverged before the title: the last captured image was the Dolby splash, the frame sequence stayed at `0xE2`, USER DMA remained at PUT/GET `0x4F2B4`/`0x4ED68`, and DCF4 stayed signaled while title input queries returned released state. Open-path records showed repeated isolated-cache accesses to `COPYCHECK.DAT` and `STRM01`–`STRM03.WAV`, alongside successful opens of original stream files. No bounded `[READ]` sample or `[ICALL-SITE]` record appeared before the route stopped advancing.
+
+Stopped only this diagnostic process after the frame and DMA counters remained unchanged. It did not reach mission loading, so this trace cannot identify the 600-second mission-load loop or attribute its invalid indirect-call targets. Treat this as a timing-divergent startup replay, not a regression or fix. Logs/captures are ignored under `iso/local-analysis/logs/m3-saved-pilot-load-filetrace-900s-20261023/`; the isolated save and original game files were kept separate. No runtime source or generated code changed. Milestone 3 and all progress bars remain unchanged.
+
+Next retry the known adaptive route with lower-overhead indirect-call-site attribution first; add bounded successful-open/read tracing only once mission selection is visible, to avoid drawing conclusions from a divergent startup run.
 ### 2026-10-23 — adaptive pilot creation reaches mission loading
 
 Using the existing XboxRecomp XPP-seeded x64 build, Visual Studio 2022 Build Tools, a virtual Steel Battalion USB/XID profile, and an isolated save directory, an adaptive input replay visibly progressed through the title prompt, Campaign, new-pilot name entry, birth-date entry, pilot confirmation, and `HAI SHI DAO 2080 [NORMAL]`. A 600-second diagnostic run reached the game's `NOW LOADING` screen. The separate earlier 240-second watchdog replay had already shown that name-editor `COMPLETE` advances to birth-date entry; its exit was the configured watchdog, not a confirmed game crash.
