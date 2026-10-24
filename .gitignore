@@ -1,5 +1,6 @@
 # Original game files and derived data
 iso/
+/local-analysis/
 **/*.iso
 **/*.xiso
 **/*.xbe
@@ -14,6 +15,12 @@ iso/
 # Build products and local diagnostics
 local-tools/
 build/
+/tools/cleanup-audit/
+/tools/*cleanup*.ps1
+/tools/*delete*.ps1
+/tools/*obsolete*.ps1
+/tools/*redundant*.csv
+/tools/*reviewed*.csv
 out/
 bin/
 obj/
