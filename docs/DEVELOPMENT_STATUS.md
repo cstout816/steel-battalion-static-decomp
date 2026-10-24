@@ -5455,3 +5455,9 @@ Progress remains unchanged:
 - 60-FPS gameplay: `░` 0/1
 
 Next: after PID 41760 exits, build the separate ProducerTrace executable with the guarded helper, reuse the existing saves without cloning, and collect synchronized framebuffer, raster batch/worker time, DMA PUT/GET/semaphore target, and complete DCF4 callback argument/branch traces. Stop at the first mission frame and report all remaining unverified behavior.
+
+### 2026-10-24 — Xbox ordinal annotation applied and verified
+
+The Ghidra 12.1.4 `SteelBattalionStartupDecomp` project opens successfully when launched with its saved Java 21 runtime. The original Python annotator could not run in headless mode because the installed launch path did not initialize Jython/PyGhidra; a Ghidra Java version was added instead. It decoded entry point `0x00192C47` with the retail key and thunk table `0x0025D0E0`, then applied 123 candidate labels. A separate read-only verification script reopened the project and confirmed 123/123 labels persisted. The labels are explicitly provisional for XDK build 4627, since the source map is cross-checked against builds 3944/4039. No XBE bytes or instructions were changed.
+
+The scripts, 371-entry CSV, and upstream MIT license notice are now in `tools/reverse-engineering/xbox-kernel-ordinals/`. The separate Ghidra 12.2 Felix/OSGi startup failure remains specific to that installation; the 12.1.4 workflow is verified. Milestone 3 remains active; the first mission frame is still unverified.

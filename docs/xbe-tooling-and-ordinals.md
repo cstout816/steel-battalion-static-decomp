@@ -2,7 +2,7 @@
 
 ## Findings
 
-- The local Ghidra 12.1.4 workspace already includes the XboxDev `ghidra-xbe` extension and its XbSymbolDatabase integration. This is the preferred path for importing and analyzing the original-Xbox XBE. A local Ghidra script and Xbox kernel ordinal CSV are in `local-tools/reverse-engineering/scripts/xbox_kernel_ordinals/` and have also been installed in the active Ghidra script workspace.
+- The local Ghidra 12.1.4 workspace already includes the XboxDev `ghidra-xbe` extension and its XbSymbolDatabase integration. This is the preferred path for importing and analyzing the original-Xbox XBE. The portable Java annotator, verifier, candidate CSV, and upstream license notice are in [`tools/reverse-engineering/xbox-kernel-ordinals/`](../tools/reverse-engineering/xbox-kernel-ordinals/README.md) and were installed in the active Ghidra script workspace.
 - The supplied Steel Battalion executable is a retail `XBEH` image; the local parser reports XDK library build 4627 and 123 distinct kernel thunk imports. All 123 ordinals occur in the current xboxrecomp candidate map. That map's own notes say it is cross-checked against kernel builds 3944 and 4039, so the Ghidra labels remain explicitly provisional for this build.
 - Cxbx-Reloaded contains an XBE metadata printer and loader checks for XBE signatures and section integrity. Those are useful independent metadata checks. Cxbx-Reloaded is an emulator, so running it does not create or validate this project's statically recompiled Windows executable.
 - Exact-name public-source searches did not verify a project named **XbeTripper** or **xberewrite**. Do not base the pipeline on either name until a repository or project URL is supplied and its source/licensing can be reviewed.
@@ -24,4 +24,4 @@ The Ghidra script labels existing kernel thunk cells and never modifies the XBE.
 
 ### Revalidation note
 
-The local parser was run read-only on the supplied XBE after the annotation script was added: seven library records all report build 4627; the 123 distinct imported ordinals all occur in the 371-entry candidate CSV. This proves ordinal coverage only. Names remain provisional pending build-matched verification. Script syntax passed; script execution in Ghidra and application of labels remain unverified.
+The local parser was run read-only on the supplied XBE: seven library records all report build 4627; the 123 distinct imported ordinals all occur in the 371-entry candidate CSV. Ghidra 12.1.4 headless then applied candidate labels to 123 thunk cells in the small `SteelBattalionStartupDecomp` project; a separate read-only verification pass found all 123 labels persisted. The labels are provisional because the CSV's cross-checks cover builds 3944/4039, not 4627. The XBE bytes were not modified. See the tool README for the exact command and limits.
