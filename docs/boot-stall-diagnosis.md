@@ -36,6 +36,12 @@ The last screenshot at 00:04:05 local still shows the campaign menu. The GPU rep
 
 The write watch at guest address `0x8038C098` observed list initialization/link writes in translated functions `sub_0022005D` and `sub_002200A2`; this run did not reach the earlier DirectSound crash and does not identify its corrupting writer. No game-behavior fix was made. First mission frame, pilot selection, gameplay, audio, save/load behavior, campaign completion, and 60 FPS remain unverified.
 
+## Upstream diagnostic tools reviewed (2026-10-24)
+
+The public XboxRecomp README documents guest-stack watchdog dumps, `tools/stackwalk.py`, `RECOMP_TRACE_ARGS`/`RECOMP_TRACE_DEREF`, `RECOMP_PEEK(_CHAIN)`, guest-address write watches, and push-buffer scan/execute diagnostics. The local XboxRecomp checkout is v0.13.1 and already contains watchdog/stackwalk support; upstream's current README advertises newer trace and NV2A diagnostics. The current run's log has no guest stack sample, so the most useful next trace is the hot guest thread's stack/PC at the DCF4 wait, alongside the call site that submits `NO_OPERATION` payload 5 and the waiter/event reset. Reuse the diagnostics already present first; compare newer upstream changes selectively rather than updating or replacing the runtime wholesale.
+
+Upstream's NV2A README explicitly describes its extracted register/push-buffer code as incomplete without shader execution and texture sampling, and its project README identifies D3D8/NV2A translation as the rendering bridge. This supports keeping the existing AOT runtime and tracing the producer path; it does not support replacing this run with xemu or treating GPU emulation as static recompilation. No rendering, fence, or timing fix is supported by the current trace. See [XboxRecomp README](https://github.com/sp00nznet/xboxrecomp/blob/main/README.md), [debugging guide](https://github.com/sp00nznet/xboxrecomp/blob/main/docs/pipeline/06-debugging.md), and [NV2A README](https://github.com/sp00nznet/xboxrecomp/blob/main/src/nv2a/README.md).
+
 The run folder is ignored and local at `iso/local-analysis/logs/m3-first-mission-writewatch-20261024/` (about 14 MiB at last measurement). The new screenshots show distinct stages and were retained. The D: scan at directory depth three found no Steel Battalion project path to relocate.
 
 ## Latest synchronized run (2026-10-23 local)
