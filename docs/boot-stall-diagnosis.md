@@ -8,6 +8,8 @@ At the last captured DCF4 wait, the guest requested target `0x2FF` while the sem
 
 The translated guest interrupt handler calls this dispatcher only for NV097 `NO_OPERATION` notifications and forwards the method payload as the callback argument. Thus the trace confirms that no payload 5 reached the DCF4 signal branch after the last reset. Repeated NV2A interrupt snapshots after that point show PGRAPH interrupt status 0 while the PCRTC vblank bit remains set. The current logs cannot yet distinguish whether the title stopped submitting the payload-5 notification or whether the runtime failed to deliver/dispatch it.
 
+The frozen frame is not an idle process: a three-second read-only sample measured about 2.95 CPU-seconds on native thread 27524 (roughly one host core), while the DCF4 wait thread 35728 was blocked and the NV2A IRQ thread 37288 was mostly waiting. The window still reported 0 FPS. Runtime kernel-call summaries were dominated by critical-section enter/leave calls, but the hot thread's guest call stack was not captured. This is evidence of a separate CPU busy-loop or lock-polling path during the stall, not proof that it caused the missing DCF4 signal.
+
 ## Two distinct failures
 
 - In the current run, the title/logo route stalled at DCF4. No rendering, guest-fence, callback, or gameplay fix has been made.
@@ -22,4 +24,4 @@ The small-triangle batch rasterizer from local commit `1ea1871` is already prese
 
 The traces do not show why the callback producer stops delivering the DCF4 signal payload. The first mission framebuffer, mission loading completion, gameplay, audio output, campaign completion, and 60 FPS are unverified. The full raw logs and captures remain in the user's local analysis folders and are not part of this repository.
 
-Next diagnostic: enable the existing opt-in push-buffer NOP/PGRAPH-notify enter-and-ack trace, then correlate submitted `NO_OPERATION` payloads with the guest handler branch, interrupt state, waiting thread, event reset/set, and semaphore. Keep the same saved-pilot route and preserve guest synchronization while collecting evidence. Do not change synchronization behavior based only on the upstream DMA-walk note.
+Next diagnostic: enable the existing opt-in push-buffer NOP/PGRAPH-notify enter-and-ack trace and obtain a guest stack/PC sample for the hot native thread. Correlate submitted `NO_OPERATION` payloads with the guest handler branch, interrupt state, waiting thread, event reset/set, and semaphore. Keep the same saved-pilot route and preserve guest synchronization while collecting evidence. Do not change synchronization behavior based only on the upstream DMA-walk note.
