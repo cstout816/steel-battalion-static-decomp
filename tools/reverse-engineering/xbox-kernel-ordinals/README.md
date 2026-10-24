@@ -22,6 +22,12 @@ To inventory the already analyzed memory blocks and function bodies without chan
 analyzeHeadless <project-location> <project-name> -process default.xbe -readOnly -noanalysis -scriptPath <script-directory> -postScript SummarizeXbeAnalysis.java
 ```
 
+To map observed trace addresses to existing function boundaries, callers, and direct call targets:
+
+```text
+analyzeHeadless <project-location> <project-name> -process default.xbe -readOnly -noanalysis -scriptPath <script-directory> -postScript InspectXbeTraceAddresses.java 00211E10 0021702F
+```
+
 The annotator was run against both `SteelBattalionStartupDecomp` and the larger `SteelBattalionStartup` project in Ghidra 12.1.4. It reported the retail entry point `0x00192C47`, thunk table `0x0025D0E0`, and 123 annotated cells. Separate read-only runs verified all 123 labels in each database after save/reopen. The summary script reports that the existing `SteelBattalionStartup` database has 79 memory blocks and 6,463 defined functions. This count describes the current Ghidra database; it does not prove every function boundary has been manually validated. No XBE bytes or instructions were changed.
 
 ## Naming confidence and provenance
