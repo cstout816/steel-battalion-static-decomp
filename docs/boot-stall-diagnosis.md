@@ -342,3 +342,11 @@ The last reviewed frame (#55 at 02:55:47 local) is the pilot-name editor with `A
 At the final recorded interval, the four-worker raster report was 140 batches / 280 triangles, 15.97 ms batch wall and 21.43 ms summed worker time. The latest NV2A tick recorded callback count 1,138 before the last wait/set cycle; the wait log then showed callback 1,140 signaling DCF4. DMA samples remained PUT=GET, the semaphore advanced to `0x23A1`, and DCF4 waits continued to receive sets. This run therefore supplies no evidence of an unsignaled-fence failure. No queue-depth data was collected, so its raster timing cannot prove a growing render backlog.
 
 Detailed DCF4 callback arguments and branch selections stop at record #1,024, while wait/set and aggregate callback counters continued through at least #1,140. Callback coverage after #1,024 is missing. The report is not a complete synchronized capture of the requested route. No fix is supported. Preserve guest fence behavior and the existing `1ea1871` small-triangle rasterizer; no mission frame, gameplay, audio, save/load, full campaign, or 60-FPS performance has been verified.
+
+### Diagnostic preparation while the game remains open (2026-10-24)
+
+A fresh process check found only PID 41760 still running/responding. The earlier PID 39328 is absent; its latest image, #57, remains the pilot-name editor with `A` selected. No input was sent and no game was closed. The current-source capture remains route-mismatched and cannot verify the saved-pilot loading path.
+
+The local generated callback dispatcher at `iso/local-analysis/xboxrecomp-generated-xpp-untraced-current/gen/recomp_0015.c` hard-capped opt-in `[DCF4-CB]` details at 1,024 records. I changed that ignored generated file's diagnostic-only cap to 16,384 so a later capture can retain the argument and selected branch across a normal route. This file is ignored by Git; no build was made, so the running executable is unchanged. Do not interpret this telemetry edit as a runtime fix.
+
+Both the verified save directory and the archived run copy occupy 5.05 GB of logical image files; the archived copy is already under `local-analysis/cleanup-review/` for later review. Neither was deleted or altered during this check. The first mission frame and the root cause of the separate `NOW LOADING` stall remain unverified.
