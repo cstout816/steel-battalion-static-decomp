@@ -22,3 +22,19 @@ This is a sanitized, copyable question for the original Xbox recompilation commu
 ## Sharing boundary
 
 Do not attach the ISO, XBE, extracted assets, or save data. If logs are shared, redact local usernames and paths, retain only the synchronized diagnostic window, and label the run accurately as Campaign-menu state rather than a mission-loading failure.
+
+## Separate title-input question (2026-10-24)
+
+Keep this issue separate from the DCF4 wait above. A later diagnostic clone stayed at the title prompt. The live A input reached the XID report and USB DMA buffer (`report[2]` changed 0→1→0); title input query #79 returned 1 once, while later queries returned 0. The framebuffer remained at the title prompt. That run used `saves-m3-known-save-copy-20261023`, whose content was not verified against the known-good save, so it is not a valid saved-pilot or mission-loading reproduction.
+
+### Copyable question for the XboxRecomp community
+
+> On an original-Xbox Steel Battalion AOT recompilation using the XboxRecomp XPP-seeded path, my diagnostic clone is displaying the title prompt. A screen-gated Main Weapon/A input is visible in the host XID report and the guest USB DMA report buffer (byte 2 toggles 0→1→0). The title-input trace reports one positive query (`sub_000C8050` result 1), then later queries return 0, but the framebuffer does not leave the title prompt. I have not verified the save contents for this run, so it is not evidence about the saved-pilot loading stall.
+>
+> What would you trace next to identify the title/menu input consumer and its expected edge/hold semantics? In particular, which caller/control-flow branch should be logged around `sub_000C8050`, and what guest state confirms that the prompt accepted Main Weapon? Please point to existing XboxRecomp input diagnostics or source locations. I want to diagnose before changing input behavior, retain static AOT translation, and keep this separate from the Campaign-screen DCF4 wait and the older `NOW LOADING` capture.
+
+## Community findings
+
+- The XboxRecomp release page now lists v0.16.0, while this project's local dependency is pinned to v0.13.1. The newer release includes disassembler/function-discovery and x86-width fixes, including functions behind NOP padding; it does not claim a Steel Battalion DCF4 or title-input fix. Treat it as a targeted generator comparison candidate, not an automatic runtime upgrade.
+- The Steel Battalion community's Xemu status discussion reports keyboard mapping and reaching the first level in an emulator build. This is useful for screen/route and controller expectations only; it is not verification of this AOT executable and supplies no direct fix for the DCF4 path.
+- The XboxRecomp maintainer's recomp Discord is the best public venue for the two sanitized, separate questions above. Do not post local logs, save data, ISO/XBE files, usernames, or filesystem paths.
