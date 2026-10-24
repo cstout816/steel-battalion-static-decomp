@@ -16,7 +16,13 @@ To verify saved labels without modifying the project:
 analyzeHeadless <project-location> <project-name> -process default.xbe -readOnly -noanalysis -scriptPath <script-directory> -postScript VerifyXboxKernelOrdinalLabels.java
 ```
 
-The scripts were run against the existing `SteelBattalionStartupDecomp` project in Ghidra 12.1.4. The annotator reported the retail entry point `0x00192C47`, thunk table `0x0025D0E0`, and 123 annotated cells. A separate read-only run verified all 123 labels after save/reopen. No XBE bytes or instructions were changed.
+To inventory the already analyzed memory blocks and function bodies without changing the project:
+
+```text
+analyzeHeadless <project-location> <project-name> -process default.xbe -readOnly -noanalysis -scriptPath <script-directory> -postScript SummarizeXbeAnalysis.java
+```
+
+The annotator was run against both `SteelBattalionStartupDecomp` and the larger `SteelBattalionStartup` project in Ghidra 12.1.4. It reported the retail entry point `0x00192C47`, thunk table `0x0025D0E0`, and 123 annotated cells. Separate read-only runs verified all 123 labels in each database after save/reopen. The summary script reports that the existing `SteelBattalionStartup` database has 79 memory blocks and 6,463 defined functions. This count describes the current Ghidra database; it does not prove every function boundary has been manually validated. No XBE bytes or instructions were changed.
 
 ## Naming confidence and provenance
 
