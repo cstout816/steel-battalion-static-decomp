@@ -6,6 +6,10 @@ The latest current-source replay reached the Steel Battalion title prompt and th
 
 The latest framebuffer still shows the campaign menu, not the first mission. The live process was still present at the last check and was left open. A prior run separately exited on an access violation in the guest DirectSound path; this replay did not reproduce that crash. Do not combine those failures or infer an audio-list cause from the current DCF4 wait.
 
+### Route distinction
+
+This still-open 23:57 replay is **not** the validated saved-pilot route: its scheduled A presses began during the studio logos, before the title prompt, and the capture stopped at Campaign. The earlier known-good saved-pilot route used screen-checked input through pilot creation and NORMAL difficulty and reached `NOW LOADING`, but did not produce a mission frame. Keep those observations separate. The current DCF4 capture is useful for the menu-path publication boundary; it cannot explain the saved route's loading-screen behavior by itself.
+
 ### Earlier DCF4 stall sample (2026-10-23)
 
 In that separate run, the guest requested target `0x2FF` while the semaphore was `0x2FB`. The semaphore subsequently advanced to `0x305`, but the DCF4 event stayed unsignaled, frame counters stayed fixed, and DMA PUT and GET remained equal at `0x457C`. The callback stream selected switch index 1 (`0x03600021`), while the DCF4 `KeSetEvent` branch requires index 5 (argument low five bits equal 5). The last raster aggregate near the wait was 24.20 ms of batch wall time and 84.14 ms summed across workers; raster work then stopped. That evidence separated that wait from a continuously overloaded renderer.
@@ -64,6 +68,14 @@ At 00:28, the same process remained responsive and the latest screenshot still s
 
 At 00:31, TID 42112 remained in `Wait:UserRequest`, TID 45272 remained `Running` (1,341 CPU seconds), and the process remained responsive (1,964 process CPU seconds total). NV2A samples through tick `68398312` remained frame `0xEC`, counter `0x403`, target `0x3F7`, callbacks 294, DMA PUT=GET=`0xBEA0`, and DCF4 clear. No new raster report appeared. This is consistent with a persistent guest synchronization wait plus a separate CPU-active runtime thread; it does not identify the code path of that hot thread or the missing signal producer.
 
+## Live software-cursor vs DMA publication (2026-10-24 00:34–00:36 local)
+
+Two read-only `ReadProcessMemory` samples confirmed the waiting state. D3D context flags are `3`; the guest PB cursor at context `+0` is `0x8000C1DC`, while context `+0x2C` and NV2A USER DMA PUT/GET remain `0x8000BEA0` / `0xBEA0` / `0xBEA0`. The software cursor is 828 bytes ahead of the last published DMA position. The guest completion counter at `0x80003000` is `0x3FF`, DCF4 target is `0x3F7`, and event state remains zero. The selected slot is `0x3B`, its output buffer is `0x8008346C`, and that buffer still holds packet words `0x00040100, 5`.
+
+The full 828-byte guest-memory interval `0x8000BEA0..0x8000C1DC` was read successfully. It contains neither the `0x00040100, 5` packet nor a literal pointer to `0x8008346C` / `0x0008346C`. The staged packet therefore is not in the current not-yet-published DMA span. Static control flow shows the normal `sub_00211C70` path writes the guest PB cursor to USER DMA PUT and mirrors it to context `+0x2C`; the current guest thread is blocked inside `sub_00211E10` before its caller reaches that submission path. This is the strongest supported boundary so far: a DCF4 wait is active, the marker is staged outside the visible DMA span, and the producer cursor has not been published. It still does not prove which other producer/queue action should publish that slot or whether an asynchronous prior submission was expected to signal it. Do not synthesize a fence, change guest wait semantics, or patch publication based on this correlation alone.
+
+This rules out a measured backlog in the host DMA consumer: published PUT and GET are equal, and the existing raster reports predate the stall. The new evidence points to a guest command-publication/synchronization path before GPU consumption. The next trace must capture `sub_00211B20`'s returned slot and its link into the PB, `sub_00211E10`'s wait entry/return, and `sub_00211C70`'s PB cursor, USER PUT, and completion counter at entry/exit. The live process remains open; no input, build, or behavior change was made.
+
 During the same live run, 16 newly accumulated byte-identical menu captures (14,746,464 bytes) were moved, not deleted, to the existing cleanup-review folder. A later duplicate-only pass moved 7 more exact copies (6,451,578 bytes); the manifest rows for those moves were reconstructed and verified after the initial manifest schema rejected the append. Cumulative exact duplicates moved there: 49 captures (45,161,046 bytes). The active screenshot remains in place. The process continues periodic capture; review-folder contents still occupy disk space until the user deletes them.
 
 ## Latest synchronized run (2026-10-23 local)
@@ -93,6 +105,20 @@ The current callback trace rules against losing one of the 294 NOP notifications
 Next diagnostic: capture the guest stack/PC for the DCF4 waiter and trace the guest control path that is expected to submit the next payload 5 after wait #53 resets. The existing NOP/PGRAPH enter/ack and callback-argument traces are already enabled and show the last submitted sequence. Preserve the AOT runtime and guest fence behavior; do not add a synthetic signal or alter callback behavior without evidence.
 
 **Progress bars remain unchanged:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first-mission frame `░ 0/1`; 60-FPS gameplay `░ 0/1`.
+
+## Community and upstream findings (2026-10-24)
+
+Upstream XboxRecomp release notes describe the small-triangle worker batching improvement from PR #228 and report a first-level raster rate change in Fallout: Brotherhood of Steel. This project already contains its local equivalent from commit `1ea1871`; do not re-port that rasterizer. The release notes also describe other renderer correctness and performance changes, but they are not evidence that any one of them causes Steel Battalion's wait. Review a narrowly matched change only after this title's traces identify a relevant method or worker boundary. See [XboxRecomp releases](https://github.com/sp00nznet/xboxrecomp/releases).
+
+The current upstream debugging guidance recommends guest stack/watchdog capture, guest argument and dereference traces, guest-address watches, push-buffer scans, and framebuffer capture. Most are already used here. The efficient next capture is a low-volume, single-route trace at the exact handoff: `sub_00211B20` descriptor return/link, `sub_00211E10` marker write/PFB flush/wait entry and return, and `sub_00211C70` software cursor/USER PUT/completion counter before and after submission. Keep callback argument/branch, DMA GET, semaphore target, raster batch count/time, and framebuffer stage on the same monotonic tick. Upstream documents the opt-in DMA walker fence limitation; keep the current walker and guest fence semantics unchanged. See the [debugging guide](https://github.com/sp00nznet/xboxrecomp/blob/main/docs/pipeline/06-debugging.md) and [NV2A notes](https://github.com/sp00nznet/xboxrecomp/blob/main/src/nv2a/README.md).
+
+The Steel Battalion community fork and discussion are useful for controller behavior, expected menu flow, and visual comparison; they use emulation and do not establish a cause in this statically recompiled runtime. Community reports vary by machine and mission, so use them as route references rather than performance proof. See [Xemu-SB-VK](https://github.com/quizerno/Xemu-SB-VK), [r/SteelBattalionOnline](https://www.reddit.com/r/steelbattaliononline/), and the [controller input guide](https://github.com/quizerno/Steel-Battalion-Entry-Guide/blob/main/3-Controller%20Inputs.md).
+
+### Interpreting the apparent boot stall
+
+There is not yet one proven cause shared by every failed run. Some runs stopped earlier because scheduled controller inputs did not align with the title screen; the current still-open capture also diverged before pilot selection. A separate validated route reached `NOW LOADING` and recorded heavy CPU-side software raster work (334,778 triangles, about 1.68 billion pixel writes, and 0.43 reported guest FPS in one instrumented interval), so rendering throughput is a real loading-stage concern. Other synchronized captures instead show no raster reports after a DCF4 wait, DMA PUT=GET, and no accumulating worker queue. The live cursor sample further shows the staged signal marker outside the published DMA span. Those point to a producer/publication or guest synchronization boundary for that menu wait, not a measured host rendering backlog.
+
+No fix is justified by combining these separate cases. The saved route must be replayed with screen-checked inputs and the narrow synchronized handoff trace before changing renderer, loader, or fence behavior. First mission, gameplay, audio, save/load, full-campaign completion, and 60 FPS remain unverified.
 
 ## Synchronized trace recheck (2026-10-23 22:50 local)
 
