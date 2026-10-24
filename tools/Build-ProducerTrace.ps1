@@ -17,7 +17,7 @@ $projectFile = Join-Path $buildRoot 'your_game_recomp.vcxproj'
 $generatedSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0015.c'
 $msbuild = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
 $traceDir = Join-Path $buildRoot 'ProducerTrace\Release'
-$stagedExe = Join-Path $traceDir 'your_game_recomp.exe'
+$stagedExe = Join-Path $traceDir 'your_game_recomp_diag.exe'
 $traceExe = Join-Path $traceDir 'your_game_recomp_producer_trace.exe'
 $archiveDir = 'C:\Project\SteelBattalion-Delete-Later-20261024\workspace\local-tools\steel-battalion-game\build-xpp-seeded\ProducerTrace\Release'
 
