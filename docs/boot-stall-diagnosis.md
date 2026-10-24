@@ -57,3 +57,11 @@ A read-only Windows thread query mapped the hot native TID 43464's start address
 The NV2A acknowledgement thread intentionally loops over busy/idle register acknowledgements, mirror/counter updates, and push-buffer scanning, then calls `Sleep(0)`. That explains why the thread can consume CPU while the game is frozen. It is not evidence of raster work or proof that this helper caused the missing DCF4 signal. The latest raster queue remains idle, and the producer-versus-delivery cause remains unresolved. No behavior change follows from this observation.
 
 An attempted Windows CPU profile could not start because this session lacks the system profiling privilege; it produced no capture. The next useful step is a guest PC/stack sample and DCF4 producer trace using a permitted debugger/profiling path. Do not change the guest fence or the acknowledgement loop based on the thread start address alone.
+
+## Watchdog guest stack (2026-10-23 23:28 local)
+
+The 1,800-second watchdog captured the main guest thread while DCF4 was still unsignaled. Guest stack reconstruction against the XBE function boundaries gives sub_0020E520+0xA0 → sub_001914F8+0x72 → xbe_entry_point+0x59. The top frame is immediately after the call at 0x0020E5B8 into sub_00211E10 from a function classified as game rendering. The final framebuffer still shows PRESS MAIN WEAPON BUTTON; there is no mission frame.
+
+This supports the immediate DCF4 wait diagnosis and localizes the blocked title/render path. It still does not show why the callback producer stopped. TID 43464 starts in the runtime's nv2a_ack_thread, whose source polls NV2A busy/idle state and yields; this explains the CPU-heavy helper sample but does not establish a rendering backlog or missing-event cause. TID 44900 is the main process thread and DCF4 waiter. No guest synchronization or renderer behavior was changed. A Windows CPU profile could not be collected because the session lacks the profiling privilege.
+
+The game process is now absent after the watchdog interval; it was not closed by this diagnostic. No matching Windows crash event was found. The exact exit trigger remains unverified. Continue by tracing the producer feeding the DCF4 callback and the title input consumer; preserve AOT execution and guest fence behavior.
