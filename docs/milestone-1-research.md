@@ -1,12 +1,12 @@
 # Milestone 1: Research and Architecture
 
-Updated 2026-10-17. Architecture: user selected sp00nznet/xboxrecomp. Milestone 2 is complete; Milestone 3 boot work is in progress but currently blocked before the title screen. The game has not been successfully booted.
+Updated 2026-10-24. Architecture: user selected sp00nznet/xboxrecomp for ahead-of-time x86 translation. Milestones 1 and 2 have produced an XBE feasibility assessment and translated Windows build. Milestone 3 remains active: captured routes have shown title/menu screens and `NOW LOADING`, but no mission frame or playable boot is verified.
 
 ## Disc and executable evidence
 
 - Local image: `iso/Steel Battalion (USA).iso` (7,825,162,240 bytes). The original ISO was only read; no bytes were written back to it.
 - The ISO 9660 compatibility volume exposes `VIDEO_TS`; the game is in an XDVDFS partition. The XDVDFS header magic was verified at byte offset `0x18310000` (partition base `0x18300000` plus `0x10000`). This matches the documented XGD1 Redump layout. The ISO/XDVDFS format and offsets are described by the [xboxrecomp disc image notes](https://github.com/sp00nznet/xboxrecomp/blob/main/docs/formats/disc-image.md) and the [XDVDFS technical reference](https://purelogiccode.github.io/XISOStudio/XDVDFS-Technical-Documentation.html).
-- The XDVDFS root names `default.xbe`, 6,635,520 bytes. A local analysis copy is at `iso/local-analysis/default.xbe`; the entire `iso/` tree is ignored by Git.
+- The XDVDFS root names `default.xbe`, 6,635,520 bytes. A local analysis copy is at `iso/local-analysis/game_files/default.xbe`; the entire `iso/` tree is ignored by Git.
 - Parsed header magic is `XBEH`; title certificate says `STEEL BATTALION`, title ID `0x43430002`, base address `0x00010000`, 78 sections, 6,740-byte header, and 10,546,272-byte image.
 - Retail-decoded entry point is `0x00192C47`, inside `.text` (`0x00012000`, 2,073,036 bytes). Retail-decoded kernel thunk table VA is `0x0025D0E0`, mapped to the start of `.rdata`.
 - XDK library versions are all build 4627: `XAPILIB`, `D3D8`, `XGRAPHC`, `DSOUND`, `DMUSIC`, `XBOXKRNL`, and `LIBCMT`. The executable has no non-kernel import directory. Its XBE kernel thunk table contains 123 ordinal imports.
