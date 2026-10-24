@@ -1,3 +1,35 @@
+### Community research refresh — boot stall and upstream acceleration
+
+The last correctly configured new-pilot route delivered all 13 virtual-controller actions and reached `NOW LOADING`, then remained there through its 600-second watchdog. No pilot save payload was present in its configured `UserData` folder. The run recorded 358,446 software-rasterized triangles, about 1.675 billion CPU-side pixel writes, and below 1 guest FPS. Separate title/loading runs also show the RTX GPU mostly presenting the completed guest framebuffer rather than rendering the game scene. This is strong evidence for a severe software-raster/render-throughput bottleneck, but the simultaneous DCF4/fence waits mean it is not proof that rendering alone blocks mission entry. The first playable mission frame is still unverified.
+
+The local XboxRecomp checkout identifies as v0.13.1, while upstream currently lists v0.16.0. A useful performance fix has already been cherry-picked into the local history: commit `1ea1871` / upstream PR #228 batches small triangles across raster workers. The local `nv2a_pb_exec.c` and `tests/nv2a_raster_batch` contain this work, so it must not be ported again. Upstream PR #231 is a separate, still-open pipelining proposal; it is not a safe drop-in. Other v0.14–v0.16 work includes callback/function discovery and XBE decoder correctness changes. Compare only fixes that intersect Steel Battalion's translated functions or observed runtime path; wholesale upgrading the heavily modified runtime risks losing local APU, input, and renderer work.
+
+Steel Battalion community sources reviewed: the public xemu compatibility report is old (2022), reaches only Intro/menu, and reports no input; it is historical cross-check evidence, not a current benchmark. `Xemu-SB-VK` documents keyboard remapping, controller display/light behavior, joystick limitations, and libusb-adapter references. Its own report says original-game playability is inconsistent, so use it to prioritize controller cases rather than as evidence for this static runtime's boot. The upstream XboxRecomp docs also recommend full code-section disassembly, ABI analysis, and optional Ghidra naming; these can accelerate analysis but will not cure the loading/runtime bottleneck by themselves.
+
+**Next highest-value step:** when no game is active, replay the known-good route with the current-source build and capture one synchronized sample of (1) framebuffer stage, (2) raster worker busy time and batch sizes, (3) DMA PUT/GET and target/semaphore, and (4) DCF4 callback argument/selected branch. This distinguishes a CPU raster backlog from a guest completion/fence issue without bypassing guest synchronization. Do not rerun the old source-snapshot build as if it contained current local fixes.
+
+### Continuation — first-level stall telemetry prepared
+
+The ignored generated XPP output already contains opt-in `RECOMP_DCF4_CALLBACK_TRACE` instrumentation at the game's callback dispatcher. It records the callback argument, switch target, DCF4 event state, and queue context fields for the first 512 matching callbacks. Added opt-in `RECOMP_RASTER_PERF_TRACE` to the local XboxRecomp NV2A software rasterizer. When enabled, it reports two-second aggregates for batch count, parallelized batches, thread count, triangle count, bounding-box pixel estimate, actual pixel writes, raster batch wall time, and summed active raster time across the executor and workers. With the option unset, it does not call the performance clock inside raster batches. A clock-availability guard disables the trace cleanly if the Windows performance counter cannot initialize.
+
+Read-only review of the cache-backed file trace found successful `TEX00.BIN`, `TEXMOVIE.BIN`, and `TEXOBJ.BIN` opens/reads, but the game remained at `NOW LOADING`; the same groups of resource files reopened roughly 100 times. The `TEX00.BIN` entries' guest stack returns into translated helper `sub_000C2EB0`. Added ignored generated-code trace `RECOMP_LOAD_REPEAT_TRACE`, which records that helper's return address and first ten stack arguments for its first 512 entries and every 1,024th entry after that. This can distinguish repeated helper calls with changing arguments from a loop inside one call. It has not been built or run.
+
+Static control flow connects that helper to a possible retry/state loop: `sub_000467A0` calls `sub_00101A60`, then `sub_00045DF0` and `sub_001067B0`; return values 0 or 6 branch back and call `sub_00101A60` again. `sub_00101A60` contains the call to `sub_000C3020`, which in turn calls `sub_000C2EB0`. This makes repeated resource initialization a concrete hypothesis, but static flow alone does not prove that the branch is taken repeatedly in the saved run. Extended `RECOMP_LOAD_REPEAT_TRACE` at `sub_00101A60` to sample the caller, registers, and state globals that gate its resource path.
+
+Static review and `git diff --check` found no whitespace errors. The running Steel Battalion process is still active, so this change has **not** been built or runtime-verified. No game, build, or test process was started. On the next permitted replay, enable all three traces in the current-source build and compare helper-call repetition, guest callback progress, and raster throughput. Progress bars are unchanged; no mission frame is verified.
+
+### 2026-10-24 — wrong build source identified; USB worker trace added
+
+**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first-level gameplay at verified frame `░ 0/1`.
+
+The previously used `build-guestlock-s50-current` directory is configured to compile XboxRecomp from `C:\temp\sb-xboxrecomp-sourcebaseline-20261022`, not the project's current local checkout. This explains why a trace edit to `local-tools/xboxrecomp/src/usb/ohci.c` did not appear in that executable. The existing `build-xpp-seeded` directory is configured to use the current local checkout and remains the correct build for current source changes; no renderer or recompilation architecture was changed.
+
+Added opt-in `RECOMP_USB_THREAD_TRACE` state logging to the local OHCI worker and rebuilt `build-xpp-seeded` successfully with the installed Visual Studio 2022 CMake. A bounded run of that build entered OHCI operational mode after about 5.6 seconds, attached the virtual Steel Battalion device on port 3, and completed five setup requests including the Steel Battalion XID descriptor. Over several minutes it showed no periodic endpoint/report traffic and produced no framebuffer dump in the hidden run. This confirms USB initialization and XID descriptor service, not game-side input acceptance, title progression, mission entry, or stable rendering. PID 13912 (the Codex-started probe) was stopped; no other game process was stopped.
+
+The local NV2A runtime already has four-thread software rasterization. Do not duplicate upstream parallel-raster changes; upstream work is a comparison source for more targeted optimizations. Existing first-level captures still show severe CPU-side raster cost and DCF4 queue backlog as separate leads. Next use the current-source build for a visible, image-captured replay with the recorded controller route, and retain build-source path, XID traffic, framebuffer, queue/fence state, and per-process GPU/CPU samples together.
+
+**Correction to this probe:** its launch environment used `RECOMP_DSP_FAKE_ACK`, but the runtime reads `RECOMP_APU_DSP_ACK` (the known-good route uses `RECOMP_APU_DSP_ACK=0x803B8810`). The run therefore did not reproduce the known-good startup configuration. Its OHCI operational state and XID descriptor response remain valid observations; the absence of a frame dump and periodic input endpoint cannot be attributed to the current source until replayed with the correct APU setting. Read-only review of `m3-known-save-route-replay-20261023` confirms its live route was consumed and the final framebuffer was `NOW LOADING`; its DCF4 trace continued, while guest rendering stayed below 1 FPS. Call of Duty is currently open, so no new game replay was started.
+
 ### 2026-10-23 — saved-pilot replay reaches first-mission loading; GPU work remains absent
 
 Built the x64 Release game target with an opt-in null-node log in the ignored generated XPP source. A low-trace replay from the fresh pilot route reproduced the `sub_0021ED29+0x77` access violation at guest address `0xFFFFFFF4`; the DirectSound commit loop had reached a null node. A second replay from a copied isolated campaign-save folder followed the recorded USB route through pilot creation and selected `HAI SHI DAO 2080 [NORMAL]`; the null-node diagnostic did not fire. This makes the earlier crash state-dependent. Its cause is still unknown, and no gameplay behavior was changed.
@@ -5295,3 +5327,131 @@ A read-only audit found substantial duplicated local diagnostic data: `local-too
 ### Live-input comparison — 2026-10-23
 
 Compared existing full-trace output with the earlier known-save route. The full-trace fixed schedule announced only steps 0 and 2–10; steps 11–12 were never observed, the last screen was the title logo, flips stayed at 149, and USER DMA PUT/GET were equal at `0x37BAC`. The earlier `RECOMP_PAD_LIVE` run delivered all 13 actions and reached `NOW LOADING`, but then stalled there without a cockpit frame. Input delivery/timing is now a concrete difference between these runs, not a proven root cause. Next: use live input with screen checks for each menu transition, and analyze the loader separately. No runtime source was changed during this comparison.
+
+### 2026-10-23 — corrected storage measurements and save-copy verification
+
+A current NTFS allocated-byte audit measures the workspace at about 169.7 GiB physically allocated; sparse image files total about 1.5 TiB in logical lengths. The largest trees are `iso/local-analysis` (127.03 GiB allocated), its `logs` folder (42.96 GiB), and `local-tools/steel-battalion-game` (25.20 GiB). The original ISO is 7.83 GB and is not the main storage driver. Top-level `iso/local-analysis/saves-m3-*` folders account for 77.06 GiB allocated across 37 directories.
+
+A read-only SHA-256 comparison of large complete save snapshots found no byte-for-byte duplicate folders. The 38 old paths previously described as duplicate save folders currently contain no files, so they do not offer meaningful space recovery. Do not delete distinct save states as duplicates based on similar names. The dry-run cleanup script lists 14 generated build-output directories and preserves the two active build trees; no build, save, ISO, or log data was deleted. C: has about 1.5 GiB free, so avoid another build or long runtime capture until storage is reclaimed. The latest test route was stopped for this audit; no first-mission frame, audio output, or gameplay performance result was verified.
+
+### 2026-10-23 — DCF4 callback path cross-check
+
+Read-only source/log correlation refined the queue-drained loading stall. The last recorded guest wait is `DCF4[29]` at device counter `0x341`, target `0x337`, with fence `0x333`; the runtime later stored release values through `0x33D`, and USER DMA PUT/GET both reached `0x5050`. The XBE thunk map identifies the event signal as kernel ordinal 145 (`KeSetEvent`), called from translated return site `0x0021702F`. The DCF4 event was set only through cycle 28. The trace records the first 32 nonzero NV097 NOP notifications with matching PGRAPH acknowledgements, but its logging is sparse after that, so it cannot establish whether later notifications occurred. Later sampled PGRAPH state was clear while PCRTC vblank continued. The translated callback counter reached 230 and then remained fixed while vblank IRQ ticks continued. This points beyond a missing semaphore packet: the guest DCF4 completion callback/event dispatch ceases after the queue drains. It does not yet identify whether guest callback scheduling, callback state, or an earlier loading transition condition causes that cessation. No runtime code changed and no build/test was run. Next capture the callback context/ring fields and game thread state at the first stalled tick, using a focused log with isolated output on D:; keep fence semantics unchanged until that evidence distinguishes the cause.
+
+Source-only callback dispatch note: guest handler `sub_00217130` has a guarded branch at `0x002171BF` that dispatches `sub_00216EA0` only when the decoded interrupt value equals `0x100`; `sub_00216EA0` then selects behavior from the interrupt argument's low five bits. The DCF4 set is one specific dispatch branch, so continuing vblank interrupts alone does not imply that this event branch ran. Current logs sample only the first callback arguments and periodic counts, leaving the last callback's branch unobserved. This gives the next diagnostic a concrete point: record the interrupt value and callback argument on every invocation through the stalled transition, plus the callback context fields, with a strict cap. Do not infer the root cause or alter synchronization yet.
+
+### 2026-10-23 — obsolete build cleanup attempt
+
+Revalidated the 14 allowlisted obsolete build-output folders before cleanup. They total 22.27 GiB in logical file lengths; none contain reparse points, and no game process was running. The current builds `build-xpp-seeded` and `build-guestlock-s50-current` were not targets. Recursive removal was rejected by the execution policy before deletion began, so none of the 14 folders were removed. The PowerShell allowlist was provided in chat for the user to run locally. Do not retry through another shell or deletion API. No source, ISO, save, or log data changed.
+
+Static table verification: mapped VA `0x00217094` through the XBE D3D section (`VA 0x0020C1E0`, raw offset `0x001FD000`) and read the ten 32-bit callback targets. Low-five-bit values map as 1→`0x00216EC9`, 2→`0x0021708B`, 3–4→`0x00216FDF`, **5→`0x0021701E`**, 6–7→`0x00217038`, 8→`0x00217053`, 9→`0x0021707C`, 10→`0x00217003`. The XBE-derived code at `0x0021701E` passes event address `context+0x1A4` to kernel thunk `0x0025D1E8` (ordinal 145, `KeSetEvent`), confirming low-five-bit value 5 is the DCF4-signal branch. Existing diagnostic sampling did not log the final callback argument at the stall; no claim that value 5 stopped is supported yet. Next diagnostic should log every callback argument, branch target, context `+0x1A4` signal state, and queue counters for a bounded transition window. Static read only; no build/test/runtime change.
+
+Diagnostic preparation: added an opt-in `RECOMP_DCF4_CALLBACK_TRACE` probe to the ignored local translated C output at `iso/local-analysis/xboxrecomp-generated-xpp-untraced-current/gen/recomp_0015.c`. It records every callback among the first 512, including the argument, XBE-selected branch target, event signal dword, and context counters at `+0x1C0/+0x1C4/+0x1C8/+0x1CC/+0x1D4/+0x1D8`. `git check-ignore` confirms the generated file is excluded from Git. This instrumentation is not compiled or runtime-verified; C: has only about 1.5 GiB free, and the cleanup tool's recursive delete was policy-rejected. Next compile only after safe storage is reclaimed, then use a bounded transition capture on D: to see whether low-five-bit value 5 stops appearing or the event state is mishandled.
+
+### 2026-10-23 — allocated-space audit and DCF4 callback capture
+Measured the checkout at about 157.22 GiB allocated despite roughly 1,495 GiB logical file lengths; sparse image files explain most of the apparent discrepancy. `iso` accounts for 134.32 GiB allocated and `local-tools` 22.88 GiB. The largest file is the user-supplied ISO (7.29 GiB); large next entries are per-run 2.20 GiB save partition images. A previous hash audit found no byte-identical complete save snapshots, so size alone is not enough to call these obsolete.
+Added `tools/audit-and-clean-obsolete-files.ps1`. By default it creates a real allocated-space CSV report under `%TEMP%`. Its optional deletion mode is restricted to the previously audited 14 obsolete build folders and asks before each removal; active builds and game/save data are excluded. Syntax parsing succeeded; the script was not run and no files were removed.
+The bounded DCF4 trace was stopped after storage became the focus. Before stopping, 149 callbacks showed branch values 1, 8, and 9; the event stayed signaled. The capture displayed the Dolby splash, with 0 FPS / 2 draws, and did not reach the first level. This narrows the branch observation but does not establish the loading stall root cause.
+The cleanup script also supports `-DeleteExactPath` for a file explicitly selected from the CSV; it confirms each target and blocks ISO/XBE files. It does not infer that save images are obsolete.
+
+### 2026-10-23 — synchronized saved-pilot stall evidence
+
+**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission frame `░ 0/1`.
+
+The known saved-pilot route was replayed with synchronized framebuffer-stage, raster-worker/batch, DMA PUT/GET, semaphore, DCF4 callback argument/branch, and guest wait traces. In the still-open run, the guest resets and waits on DCF4 at tick `61261328` (target `0x2FF`, semaphore `0x2FB`). The semaphore later passes the target (`0x305`), while DMA remains idle at PUT=GET=`0x457C`; DCF4 remains unsignaled and the frame counter remains frozen at `0x309`. The callback stream takes index 1 (`0x03600021`) after the wait instead of index 5 (`arg & 31 == 5`, the DCF4 `KeSetEvent` branch). Raster work also stops; the final nearby aggregate was 24.20 ms batch wall / 84.14 ms summed worker time. This supports an event-notification stall as the immediate blocker in this run, not a continuing raster backlog. It does not yet explain why the callback producer stopped supplying the DCF4-signal argument.
+
+The run had no `RECOMP_PB_WALK` setting and no DMA-walk enable record; local source enables that alternate walker only for `RECOMP_PB_WALK=dma`. The upstream v0.16.0 DMA-walk software-interrupt warning therefore does not directly explain this capture. We made no synchronization or gameplay fix. The first mission frame remains unverified. The companion run separately ended on a DirectSound voice-list access violation; it also did not reach a mission. Full evidence and exact log paths are in [DIAGNOSIS.md](../iso/local-analysis/logs/m3-saved-pilot-audio-list-trace-20261023/DIAGNOSIS.md).
+
+Moved `D:\SteelBattalionDiagnosticBuild` to `local-analysis/cleanup-review/D-SteelBattalionDiagnosticBuild-20261023` on C:; kept it intact for later review. No files were deleted. PID 41236 remains open and was not closed by this investigation.
+
+Follow-up synchronized live sample: at tick64 61940296–61943343, the window stayed at 0 FPS / 1 draw, DMA PUT=GET=0x457C, DCF4=0, and frame/counter/target were unchanged. The process used 3.547 CPU-seconds over 3.047 seconds; thread 27524 accounted for 3.359 s, thread 22600 for 0.516 s, while DCF4 wait thread 35728 had no measurable CPU. No raster batch was reported after tick 61259343. Idle raster workers block on an event in source, so CPU saturation is a separate busy-loop/lock-polling lead; the hot guest PC/stack remains unknown. Full small capture: iso/local-analysis/logs/m3-saved-pilot-audio-list-trace-20261023/live-cpu-sync-sample.txt. The first failed sample attempt used PowerShell's reserved $PID variable and was overwritten; only the corrected sample is evidence.
+
+
+### Bounded lock caller trace prepared (2026-10-23)
+Added opt-in RECOMP_CRITSEC_TRACE to the local XboxRecomp bridge. It samples guest critical-section caller VA, lock VA, operation, and host thread ID without changing lock behavior. It emits the first 32 operations and then every 8192 per operation type. Source diff hygiene passes; it is not built while PID 41236 remains open. Historical lock traces are from other runs and are not treated as proof of the current hot thread's cause. Next use it with RECOMP_PB_NOTIFY_TRACE=1 on the same saved-pilot route, preserving guest-fence behavior.
+
+
+Static comparison note: prior m3-critical-lock-direct callers 0x001AA166/0x001AA1A2 map into generated sub_001AA151, which locks 	his+0xA8, dispatches a vtable method, and unlocks. This is not proof that the current run's hot ordinals are from that wrapper; new per-caller samples are still required.
+
+
+
+### 2026-10-24 — v19 screen-gated route checkpoint
+
+Current-source AOT trace reached the pilot list on the prior route save directory; no loading or mission frame. PID 45836 is the diagnostic; original PID 41760 remains open and untouched. A/XID input reached guest memory, but the traced positive predicate sites are per-object update paths, not the menu selector. The actual pilot-list handler remains unidentified; no fix made.
+
+At 478 DCF4 callbacks, latest branch 0x03600021 selected index 1 / 0x00216EC9 with event_state=1. Latest NV2A sample: frame 0x181, counter 0x10FD, target 0x10BF, fence 0x10F9, DCF4=1. Semaphore advanced to 0x1105; DMA PUT=GET=0x5D240. Raster sample: 98 batches / 196 triangles, 78.22 ms wall, 276.37 ms worker-active. Cost is high; no growing worker queue is measured. This differs from the earlier very slow NOW LOADING route and a separate unsignaled DCF4 wait. Keep those causes separate.
+
+Preserved AOT, guest fences, and local small-triangle batch path 1ea1871. The upstream XboxRecomp v0.16.0 gap-function discovery and conformance updates are a useful read-only comparison to local v0.13.1, not a proven runtime fix. Xemu-SB-VK remains emulator-side. One exact duplicate BMP was moved to the delete-later folder with a SHA-256 manifest; no other exact duplicates found. No relevant D: project files found. Progress unchanged; first mission frame 0/1.
+
+Next: identify the real pilot-list selection consumer, then continue the screen-gated route. Do not patch until a trace supports a cause.
+
+## 2026-10-24 — v19 save-route correction
+
+A follow-up inspection corrected the route label in the preceding v19 note. `saves-m3-known-save-copy-20261023` contains 22 files / 178,019,034 bytes under `Cache`, but `UserData`, `SystemData`, and `TitleData` are empty. Therefore v19 did **not** replay a saved pilot; it reached the pilot menu with `LIST AS NEW` highlighted. The identical structure is present in `saves-m3-first-level-windowed-20261023`, so earlier notes calling that a saved-pilot directory are not substantiated by its contents. The 2026-10-23 `m3-first-level-cs-watch2` run entered `NOW LOADING` after a new-pilot route; it is evidence for a separate loading-stage slowdown, not saved-pilot loading.
+
+Corrected interpretation: v19 establishes the current title-to-pilot-list path and synchronized GPU/event behavior only. It does not establish why a saved pilot fails to load, because there are no pilot save files in that configured directory. No runtime fix was made. Next, locate/verify an actual Steel Battalion pilot save before repeating the requested saved-pilot route; otherwise screen-gate a clearly labeled new-pilot route and do not conflate it with save loading. Preserve all current AOT, fence, renderer, and rasterizer behavior.
+
+## Save-path resolution evidence
+
+The directory audit is now tied to the active runtime's path rules. `main.c` sets `YOUR_GAME_DIR` to `iso/local-analysis/game_files`. In the current local XboxRecomp v0.13.1 source, `U:\` maps to `<RECOMP_SAVE_DIR>\UserData`, while `\Device\Harddisk0\Partition1\...` maps to `YOUR_GAME_DIR`. Historical path/file-call logging confirms Steel Battalion opens both the title metadata path under `game_files\UDATA\43430002` and the `U:\` user-data root. The game-files title directory contains only `SaveImage.xbx`, `TitleImage.xbx`, and `TitleMeta.xbx`; it has no save-slot payload. The v19 `RECOMP_SAVE_DIR\UserData` is empty. Thus the pilot list had no saved pilot to load; its `LIST AS NEW` state is consistent with the available save data. The old `NOW LOADING` route created a new pilot and is not evidence of saved-pilot loading. This still does not explain why confirmation of `LIST AS NEW` failed to advance in v19; that guest input/state path remains untraced. No fix made.
+
+## 2026-10-24 — pilot enumeration cross-check
+
+Read-only audit found no actual pilot slot in the local save trees. Current v0.13.1 path rules map `U:\` to `<RECOMP_SAVE_DIR>\UserData`; v19 uses `saves-m3-known-save-copy-20261023`, whose `UserData` is empty. `game_files\UDATA\43430002` and the five upstream-0.16 comparison save roots contain only the three title metadata files (`SaveImage.xbx`, `TitleImage.xbx`, `TitleMeta.xbx`) and no save-slot subdirectory or payload. Historical `m3-ac97-apu-ready` file-call traces confirm the title reads those metadata files and opens `U:\`; they do not show a pilot payload. Thus the current `LIST AS NEW` screen reflects missing saved-pilot data in the available workspace; it does not by itself prove a menu-handler bug. The new-pilot confirmation path and the later loading stall remain separate, and the mission frame is still unverified. No source or runtime behavior changed.
+
+## 2026-10-24 — new-pilot producer-watch update
+
+The separate producer-tracing run reached the pilot name editor, birth-date editor, and YES/NO confirmation screen, but its final confirm was sent immediately before the 900-second watchdog. It exited itself with code 3 and did not reach pilot creation or a first mission frame. PID 41760 was left open and remains responsive.
+
+The watch on `0x8038C0AC` saw normal initialization only; the voice-list head chain remained plausible. The earlier `0xFF000080` tail and `0xFFFFFFF4` access violation did not recur. No cause for the earlier tail's origin is established, so no behavior fix was made. At the final sample DMA PUT=GET=`0x67D98`, semaphore=`0x6A86B`; raster measured 3,880 batches / 7,760 triangles, 459.50 ms wall and 716.33 ms summed worker-active. Producer threshold queue fields ended at `0x0D/0x0F`, but this is not a measured renderer queue depth and does not prove backlog. The trace does not support either rendering backlog or guest synchronization failure as the watchdog cause.
+
+Detailed DCF4 callback logging stopped at 16,384 records; the final periodic aggregate count was 25,872. Callback-branch totals are therefore partial. Raw logs were compressed in place with verified SHA-256 round trips; 85 nonrepresentative frame captures and both uncompressed logs were moved to `C:\Project\SteelBattalion-Delete-Later-20261024\workspace\iso\local-analysis\logs\m3-dsound-tail-writer-20261024\` for later review, not deleted. The workspace run directory is about 202 MB smaller. No D: project files were moved in this turn; prior audit found none requiring transfer.
+
+Progress bars remain unchanged (Milestone 3 active):
+- Overall: `██░░░░░░` 2/8
+- XBE/decompilation: `██░░` 2/4
+- Boot/compatibility: `████░` 4/5
+- Rendering: `██░░` 2/4
+- Controller: `██░` 2/3
+- Audio/DSP: `█░` 1/2
+- First mission frame: `░` 0/1
+- 60-FPS gameplay: `░` 0/1
+
+Verified: the new-pilot editor and confirmation screen, producer/DMA/semaphore/DCF4/raster trace fields, and that the prior invalid DirectSound tail did not recur in this run. Unverified: pilot creation/save, loading, first mission, audio, gameplay, stable performance, and the missing final 9,488 callback details. Next: raise only the diagnostic callback-record limit in the isolated executable, shorten/reliably schedule the already-screen-gated input sequence, and continue the new-pilot route until a mission frame or reproducible failure. Keep AOT, guest fences, and local rasterizer `1ea1871` unchanged.
+
+### Isolated rebuild attempt
+
+After identifying the 16,384-record DCF4 detail cap, attempted to raise it for a separate diagnostic executable. The build could not start: `cmake` is unavailable in PATH, and the installed Visual Studio MSBuild project imports a missing `Microsoft.Cpp.Default.props` from the absent VC toolset. No compiler was found in PATH, and no new executable was produced. The temporary generated-source cap edit was reverted; the existing producer-trace executable and the live PID 41760 were left untouched. This is a build-environment blocker, not a game/runtime cause. To get complete callback history, install or select an existing MSVC C++/CMake build toolchain, then rebuild only the separate ProducerTrace target with a cap above 25,872. I did not install system-wide dependencies.
+
+Next: resolve the missing MSVC C++/CMake toolchain (or provide an already-installed build path), rebuild the isolated tracer with full callback detail, then continue the screen-gated new-pilot route. No runtime fix is supported; the first mission is still unverified.
+
+
+### Ghidra XBE tooling and ordinal references
+
+The local Ghidra workspace now contains a Ghidra-only kernel thunk annotator and a 371-entry ordinal CSV under local-tools/reverse-engineering/scripts/xbox_kernel_ordinals/. The script, CSV, and usage note are also installed in the active Ghidra script directory at `C:\Project\GhidraAnalysis\scripts\`. The annotator labels existing thunk cells only; it does not alter executable bytes or inject hooks. Because Steel Battalion's XDK metadata is build 4627 and the source map documents cross-checks for builds 3944/4039, names are explicitly provisional candidates pending build-matched corroboration. The installed ghidra-xbe extension remains the primary XBE loader/signature workflow. Cxbx-Reloaded is a diagnostic emulator reference, not the static-recompilation runtime. Exact-name searches did not verify XbeTripper or xberewrite. See [XBE tooling and ordinals](xbe-tooling-and-ordinals.md).
+
+Storage note: Moved 252 exact-hash duplicate BMPs (232,256,808 bytes) from the still-live first-mission writewatch run into the Delete-Later review folder with a SHA-256/path manifest. Nothing deleted; 19 unique/endpoint/recent images remain in the live run directory. PID 41760 remained responsive and open. Latest retained image still shows the Campaign menu, so first mission is not verified.
+
+### 2026-10-24 — build-toolchain recheck
+
+The earlier isolated-build failure was recorded as missing CMake/MSVC tools, based on PATH and a failed project import. A read-only inspection now found Visual Studio Build Tools 2022 (17.14), x64 MSVC 14.44, `Microsoft.Cpp.Default.props`, and the bundled CMake executable under `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\`. These tools are not on PATH. The existing `ProducerTrace` executable is present at `local-tools/steel-battalion-game/build-xpp-seeded/ProducerTrace/Release/your_game_recomp_producer_trace.exe` (112,317,440 bytes, built 10/24 9:21 AM) and contains the producer-trace markers. Its generated callback logger still has a 16,384-record cap. The active PID 41760 uses the separate `Release/your_game_recomp.exe` path and was left open. No build or test was started during this check. Next build attempt should use the discovered explicit tool paths, refresh only the separate ProducerTrace output, and raise the detailed DCF4 callback cap enough to cover a complete bounded saved-pilot run.
+
+### 2026-10-24 — current live process and analysis-tool status
+
+PID 41760 remains responsive on the Campaign menu. The latest available writewatch frame (10:52:20 AM) still shows Campaign; no first mission frame has been verified. The user chose to wait and reuse the existing save set, so no second 5.42 GB copy was made. Do not build or replay against the shared save directory while PID 41760 is open.
+
+SHA-256 comparison found 69 exact duplicate screenshots in the live writewatch folder. They were moved to `C:\Project\SteelBattalion-Delete-Later-20261024\workspace\iso\local-analysis\logs\m3-first-mission-writewatch-20261024\redundant-identical-screenshots\` with a hash/path/size manifest (63,594,126 bytes total). No files were deleted; distinct images, one representative, the latest capture, and logs were retained. The live process may generate more duplicates until it exits.
+
+The Ghidra project record is `SteelBattalionStartup:default.xbe`. Read-only headless inspection fails during Felix/OSGi initialization before opening the program, including with a fresh temporary cache. No Ghidra project database or XBE bytes were changed. The ordinal annotator and CSV are installed but have not been executed in Ghidra. No runtime fix is supported by the current evidence; preserve AOT and guest fence behavior.
+
+Progress remains unchanged:
+- Overall: `██░░░░░░` 2/8
+- XBE/decompilation: `██░░` 2/4
+- Boot/compatibility: `████░` 4/5
+- Rendering: `██░░` 2/4
+- Controller: `██░` 2/3
+- Audio/DSP: `█░` 1/2
+- First mission frame: `░` 0/1
+- 60-FPS gameplay: `░` 0/1
+
+Next: after PID 41760 exits, build the separate ProducerTrace executable with the guarded helper, reuse the existing saves without cloning, and collect synchronized framebuffer, raster batch/worker time, DMA PUT/GET/semaphore target, and complete DCF4 callback argument/branch traces. Stop at the first mission frame and report all remaining unverified behavior.
