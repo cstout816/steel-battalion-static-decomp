@@ -51,7 +51,9 @@ $requiredTraceMarkers = @(
     'sb_put_trace_count < 100000u',
     'dcf4_reset_trace_count < 100000u',
     'sb_marker_trace_count < 100000u',
-    'n <= 100000u'
+    'n <= 100000u',
+    '[SB-PFB-POLL]',
+    'sb_pfb_poll_count < 2048u'
 )
 foreach ($marker in $requiredTraceMarkers) {
     $match = Select-String -LiteralPath $generatedSource -SimpleMatch $marker -Quiet
