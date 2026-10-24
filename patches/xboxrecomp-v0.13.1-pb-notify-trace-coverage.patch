@@ -1,0 +1,30 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -4247,6 +4247,6 @@
+         if (getenv("RECOMP_PB_NOTIFY_TRACE") && param != 0) {
+             static unsigned shown;
+             unsigned n = ++shown;
+-            if (n <= 512u || (n % 256u) == 0) {
++            if (n <= 2048u || (n % 256u) == 0) {
+                 fprintf(stderr,
+                         "[PB-NOP] n=%u tick=%lu tid=%lu sub=%u method=%04X data=%08X\n",
+diff --git a/src/nv2a/nv2a_core.c b/src/nv2a/nv2a_core.c
+--- a/src/nv2a/nv2a_core.c
++++ b/src/nv2a/nv2a_core.c
+@@ -617,6 +617,6 @@ void nv2a_pgraph_notify(uint32_t subchannel, uint32_t method,
+     if (getenv("RECOMP_PB_NOTIFY_TRACE")) {
+         static unsigned shown;
+         unsigned n = ++shown;
+-        if (n <= 512u || (n % 256u) == 0) {
++        if (n <= 2048u || (n % 256u) == 0) {
+             fprintf(stderr,
+                     "[PGRAPH-NOTIFY] enter n=%u tick=%lu tid=%lu "
+@@ -638,6 +638,6 @@ void nv2a_pgraph_notify(uint32_t subchannel, uint32_t method,
+     if (getenv("RECOMP_PB_NOTIFY_TRACE")) {
+         static unsigned shown;
+         unsigned n = ++shown;
+-        if (n <= 512u || (n % 256u) == 0) {
++        if (n <= 2048u || (n % 256u) == 0) {
+             fprintf(stderr,
+                     "[PGRAPH-NOTIFY] acked n=%u tick=%lu tid=%lu "
