@@ -2,25 +2,41 @@
 
 ## Current finding
 
-The newest instrumented run reached the title and pilot menus, then exited on its own with an access violation in the guest DirectSound path. The guest DCF4 event continued to reset and signal, and DMA PUT/GET remained caught up at the sampled points, so this run does not support a DCF4 deadlock or a growing render backlog. The malformed DirectSound list is the immediate crash site; its corrupting writer is still unknown.
+The latest current-source replay reached the Steel Battalion title prompt and then the campaign menu. It remains stopped at that menu with a guest DCF4 wait that has not returned: the callback trace ends at callback 294, DCF4 remains unsignaled, DMA PUT/GET remain equal at `0xBEA0`, and the framebuffer no longer advances. Correlation now points upstream of the DCF4 dispatcher: all 294 observed push-buffer NOP notifications entered the dispatcher, and the last pending PGRAPH interrupt was cleared, but no notification followed callback 294. After wait #53 reset the event, the only subsequent callback carried `0x03600021` (branch 1), not the `0x00000005` payload that takes the signal branch. This supports a guest-side notification producer/frame path that stopped submitting work, rather than a lost callback already submitted to the dispatcher. The reason that guest path stops is still unknown. No raster queue accumulated, and guest fence behavior was not changed.
 
-The earlier saved-pilot run described below remains a separate loading-screen stall. Its DCF4 producer/delivery issue is not explained by this newer audio crash. Do not combine the two failures or change guest fence behavior based on either trace alone.
+The latest framebuffer still shows the campaign menu, not the first mission. The live process was still present at the last check and was left open. A prior run separately exited on an access violation in the guest DirectSound path; this replay did not reproduce that crash. Do not combine those failures or infer an audio-list cause from the current DCF4 wait.
 
-At the last captured DCF4 wait, the guest requested target `0x2FF` while the semaphore was `0x2FB`. The semaphore subsequently advanced to `0x305`, but the DCF4 event stayed unsignaled, frame counters stayed fixed, and DMA PUT and GET remained equal at `0x457C`. The callback stream selected switch index 1 (`0x03600021`), while the DCF4 `KeSetEvent` branch requires index 5 (argument low five bits equal 5). The last raster aggregate near the wait was 24.20 ms of batch wall time and 84.14 ms summed across workers; raster work then stopped. That evidence separates this wait from a continuously overloaded renderer.
+### Earlier DCF4 stall sample (2026-10-23)
 
-The translated guest interrupt handler calls this dispatcher only for NV097 `NO_OPERATION` notifications and forwards the method payload as the callback argument. Thus the trace confirms that no payload 5 reached the DCF4 signal branch after the last reset. Repeated NV2A interrupt snapshots after that point show PGRAPH interrupt status 0 while the PCRTC vblank bit remains set. The current logs cannot yet distinguish whether the title stopped submitting the payload-5 notification or whether the runtime failed to deliver/dispatch it.
+In that separate run, the guest requested target `0x2FF` while the semaphore was `0x2FB`. The semaphore subsequently advanced to `0x305`, but the DCF4 event stayed unsignaled, frame counters stayed fixed, and DMA PUT and GET remained equal at `0x457C`. The callback stream selected switch index 1 (`0x03600021`), while the DCF4 `KeSetEvent` branch requires index 5 (argument low five bits equal 5). The last raster aggregate near the wait was 24.20 ms of batch wall time and 84.14 ms summed across workers; raster work then stopped. That evidence separated that wait from a continuously overloaded renderer.
+
+The translated guest interrupt handler calls this dispatcher only for NV097 `NO_OPERATION` notifications and forwards the method payload as the callback argument. The earlier trace alone could not distinguish a guest that stopped submitting payload 5 from a runtime delivery problem; the current run's matching PB-NOP, PGRAPH-enter, and callback totals now shows that the path delivered all notifications observed through callback 294. It still does not identify why the guest path submitted no further notification.
 
 The frozen frame is not an idle process: a synchronized 3.047-second read-only sample measured 3.547 CPU-seconds across the process (116% of one logical processor). Native thread 27524 used 3.359 CPU-seconds and thread 22600 used 0.516; the DCF4 wait thread 35728 used no measurable CPU, while the NV2A IRQ thread 37288 used 0.094 CPU-seconds. DMA, frame counters, and DCF4 remained unchanged through the sample, with no intervening raster batches. Runtime kernel-call summaries were dominated by critical-section enter/leave calls, but the hot thread's guest call stack was not captured. The source raster workers block on an event when idle, making them an unlikely source of this continuous CPU use. This supports a separate guest/runtime busy-loop or lock-polling path, but does not prove that it caused the missing DCF4 signal.
 
-## Two distinct failures
+## Observed failure modes
 
-- An earlier title run stalled at DCF4 after a reset without a later signal. That producer/delivery cause remains unresolved; it is separate from the newer run, where DCF4 continued to reset and signal.
-- The newest run exited in the guest DirectSound path on a malformed list node at guest VA `0xFFFFFFF4`. This is a reproducible crash signature from prior runs, but the list's corrupting writer is still unknown.
-- Raster reports include large CPU worker spikes. They show workload cost, but without queue-depth growth they do not prove a growing rendering backlog or explain either the earlier DCF4 wait or this audio-list crash.
+- The current replay's DCF4 wait has no matching return or later event set. The observed callback branches and DMA state are documented below; the producer-versus-delivery cause remains unresolved.
+- A prior run exited in the guest DirectSound path on a malformed list node at guest VA `0xFFFFFFF4`. The list's corrupting writer is still unknown, and this was not reproduced in the current replay.
+- Raster reports include significant CPU worker cost, but no samples were recorded after the current wait began. They do not show an accumulating queue and do not explain the stalled event.
 
 The current executable used the default push-buffer segment scanner. The opt-in DMA walk was not enabled. XboxRecomp upstream documents a software-method interrupt limitation for its DMA-walk fence path; because this run did not use that walker, the upstream warning is not sufficient to explain this capture. See the [XboxRecomp release notes](https://github.com/sp00nznet/xboxrecomp/releases).
 
 The small-triangle batch rasterizer from local commit `1ea1871` is already present and was not re-ported. The ahead-of-time static-recompilation architecture and guest fence behavior remain unchanged.
+
+## Current-source route replay (2026-10-24 local)
+
+The four-worker XPP-seeded executable started at 23:57:21 with the copied known-pilot save, current Steel Battalion XID profile, and the requested synchronized diagnostics. A logging-only generated-code change raised the DCF4 detail limit to 1,024; all 294 callbacks observed in this run have an argument and selected branch in the local trace. The existing small-triangle batch rasterizer from commit `1ea1871` was not re-ported, and guest fence behavior was left untouched.
+
+The framebuffer sequence captured the studio logos, the title prompt, and the campaign menu. The timed route's early A pulses occurred during startup logos, before the title prompt appeared. A live A hold later moved the display from the title prompt to the campaign menu; XID reports show the mapped Main Weapon bit set and released. A later menu confirmation did not produce a subsequent visible screen before the DCF4 wait stopped frame updates. Do not treat this timing-divergent input run as a saved-pilot or mission-entry success.
+
+DCF4 wait #53 reset guest event `0x0021DCF4` at tick `66657156`, frame sequence `0xEC`, device counter `0x403`, target `0x3F7`, and semaphore snapshot `0x3F3`. It has no later return or event-set entry in the captured trace. Callback #292 carried `0x00000005` and selected index 5 (`0x0021701E`, the signal branch); callback #293 then selected index 1 (`0x00216EC9`). The reset/wait began with callback count 293. Only callback #294 was logged after that reset, also selecting index 1, which does not signal DCF4. No later callback was recorded. Later NV2A samples remained at frame sequence `0xEC`, counter `0x403`, target `0x3F7`, DCF4 `0`; DMA PUT and GET remained equal at `0xBEA0`. The mirrored fence later read `0x3FF`, but the runtime mirrors this location from DMA state, so it is not independent proof of hardware completion or release of the guest wait.
+
+The last screenshot at 00:04:05 local still shows the campaign menu. The GPU reported 0.00 FPS with 235 flips, and no further raster-performance sample followed tick `66657234`; this separates the frozen interval from an observed continuously growing raster queue. Before the wait, four-worker raster samples ranged from 28 to 140 batches, 56 to 280 triangles, and about 35 to 183 ms batch wall time, with summed worker time up to about 666 ms. These were taken with intrusive write-watch and detailed logging enabled, so they are diagnostic overhead measurements, not a clean performance benchmark. The process remained present at the 00:05:46 local check and was not closed.
+
+The write watch at guest address `0x8038C098` observed list initialization/link writes in translated functions `sub_0022005D` and `sub_002200A2`; this run did not reach the earlier DirectSound crash and does not identify its corrupting writer. No game-behavior fix was made. First mission frame, pilot selection, gameplay, audio, save/load behavior, campaign completion, and 60 FPS remain unverified.
+
+The run folder is ignored and local at `iso/local-analysis/logs/m3-first-mission-writewatch-20261024/` (about 14 MiB at last measurement). The new screenshots show distinct stages and were retained. The D: scan at directory depth three found no Steel Battalion project path to relocate.
 
 ## Latest synchronized run (2026-10-23 local)
 
@@ -44,9 +60,11 @@ The public [Steel Battalion Xemu fork](https://github.com/quizerno/Xemu-SB-VK) i
 
 ## What is still unknown
 
-The earlier DCF4 freeze still lacks a producer-versus-delivery explanation, and the DirectSound list still lacks a proven corrupting writer/lifetime cause. The first mission framebuffer, mission loading completion, gameplay, audio output, campaign completion, and 60 FPS are unverified. The full raw logs and captures remain in the user's local analysis folders and are not part of this repository.
+The current callback trace rules against losing one of the 294 NOP notifications already observed, but the guest/graphics path that should submit a later payload 5 is still unknown. The earlier DirectSound list still lacks a proven corrupting writer/lifetime cause. The first mission framebuffer, mission loading completion, gameplay, audio output, campaign completion, and 60 FPS are unverified. The full raw logs and captures remain in the user's local analysis folders and are not part of this repository.
 
-Next diagnostic: enable the existing opt-in push-buffer NOP/PGRAPH-notify enter-and-ack trace and obtain a guest stack/PC sample for the hot native thread. Correlate submitted `NO_OPERATION` payloads with the guest handler branch, interrupt state, waiting thread, event reset/set, and semaphore. Keep the same saved-pilot route and preserve guest synchronization while collecting evidence. Do not change synchronization behavior based only on the upstream DMA-walk note.
+Next diagnostic: capture the guest stack/PC for the DCF4 waiter and trace the guest control path that is expected to submit the next payload 5 after wait #53 resets. The existing NOP/PGRAPH enter/ack and callback-argument traces are already enabled and show the last submitted sequence. Preserve the AOT runtime and guest fence behavior; do not add a synthetic signal or alter callback behavior without evidence.
+
+**Progress bars remain unchanged:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first-mission frame `░ 0/1`; 60-FPS gameplay `░ 0/1`.
 
 ## Synchronized trace recheck (2026-10-23 22:50 local)
 
