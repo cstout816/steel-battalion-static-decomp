@@ -1,0 +1,27 @@
+# XBE inspection and Ghidra support
+
+## Findings
+
+- The local Ghidra 12.1.4 workspace already includes the XboxDev `ghidra-xbe` extension and its XbSymbolDatabase integration. This is the preferred path for importing and analyzing the original-Xbox XBE. A local Ghidra script and Xbox kernel ordinal CSV are in `local-tools/reverse-engineering/scripts/xbox_kernel_ordinals/` and have also been installed in the active Ghidra script workspace.
+- The supplied Steel Battalion executable is a retail `XBEH` image; the local parser reports XDK library build 4627 and 123 distinct kernel thunk imports. All 123 ordinals occur in the current xboxrecomp candidate map. That map's own notes say it is cross-checked against kernel builds 3944 and 4039, so the Ghidra labels remain explicitly provisional for this build.
+- Cxbx-Reloaded contains an XBE metadata printer and loader checks for XBE signatures and section integrity. Those are useful independent metadata checks. Cxbx-Reloaded is an emulator, so running it does not create or validate this project's statically recompiled Windows executable.
+- Exact-name public-source searches did not verify a project named **XbeTripper** or **xberewrite**. Do not base the pipeline on either name until a repository or project URL is supplied and its source/licensing can be reviewed.
+
+## Why this is not an executable patch
+
+The Ghidra script labels existing kernel thunk cells and never modifies the XBE. No custom hooks or cave are needed for this step. Any future hook proposal must first prove a specific need and must be reviewed against the XBE section table, mapped section bounds, alignment, and code/data references. A zero/NOP byte run alone is not proof that bytes are unused. Prefer a separately added, correctly aligned PE section for host-side instrumentation; do not patch user game bytes without a separate, reviewed design.
+
+## References
+
+- [ghidra-xbe](https://github.com/XboxDev/ghidra-xbe) — XBE loader and XbSymbolDatabase integration.
+- [XboxRecomp XBE parser](https://github.com/sp00nznet/xboxrecomp/blob/main/tools/xbe_parser/xbe_parser.py) — XBE metadata and kernel ordinal candidate names.
+- [Cxbx-Reloaded](https://github.com/Cxbx-Reloaded/Cxbx-Reloaded) — emulator-side XBE loader/diagnostic reference.
+- [Cxbx-Reloaded README](https://github.com/Cxbx-Reloaded/Cxbx-Reloaded) — identifies the project as an original-Xbox emulator and lists its GPL-2.0 license. No Cxbx code is incorporated.
+- [Cxbx-Reloaded XbePrinter.cpp](https://github.com/Cxbx-Reloaded/Cxbx-Reloaded/blob/master/src/common/xbe/XbePrinter.cpp) — reference implementation for printing XBE metadata.
+- [Cxbx-Reloaded XBE loader](https://github.com/Cxbx-Reloaded/Cxbx-Reloaded/blob/master/src/core/kernel/init/CxbxKrnl.cpp) — source path for signature and section-integrity checks during emulator launch.
+- [Cxbx-Reloaded Xbe.h](https://github.com/Cxbx-Reloaded/Cxbx-Reloaded/blob/master/src/common/xbe/Xbe.h) — reference for its XBE section structures and retail/debug entry-point and thunk XOR constants. This is implementation reference material, not a selected runtime dependency.
+- [XBE format overview](https://xboxdevwiki.net/Xbe) — XBE header, sections, and thunk-table format.
+
+### Revalidation note
+
+The local parser was run read-only on the supplied XBE after the annotation script was added: seven library records all report build 4627; the 123 distinct imported ordinals all occur in the 371-entry candidate CSV. This proves ordinal coverage only. Names remain provisional pending build-matched verification. Script syntax passed; script execution in Ghidra and application of labels remain unverified.
