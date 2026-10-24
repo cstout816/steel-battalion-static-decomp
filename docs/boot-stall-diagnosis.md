@@ -42,6 +42,10 @@ The public XboxRecomp README documents guest-stack watchdog dumps, `tools/stackw
 
 Upstream's NV2A README explicitly describes its extracted register/push-buffer code as incomplete without shader execution and texture sampling, and its project README identifies D3D8/NV2A translation as the rendering bridge. This supports keeping the existing AOT runtime and tracing the producer path; it does not support replacing this run with xemu or treating GPU emulation as static recompilation. No rendering, fence, or timing fix is supported by the current trace. See [XboxRecomp README](https://github.com/sp00nznet/xboxrecomp/blob/main/README.md), [debugging guide](https://github.com/sp00nznet/xboxrecomp/blob/main/docs/pipeline/06-debugging.md), and [NV2A README](https://github.com/sp00nznet/xboxrecomp/blob/main/src/nv2a/README.md).
 
+## Guest wait source correlation (2026-10-24 local)
+
+Read-only correlation against the current Steel Battalion XBE disassembly maps the DCF4 wait trace's `caller_hint=0x00211F3B` to the return/test immediately after `KeWaitForSingleObject` inside `sub_00211E10`. Its caller is `sub_0020E520` at `0x0020E5BB` in the rendering path. The callback dispatcher is `sub_00216EA0`; selected branch 5 at `0x0021701E` calls `KeSetEvent` on the DCF4 event. The last branch-5 callback (#292) signaled the preceding wait (#52); wait #53 then reset that already-signaled event. Callbacks #293 and #294 both selected branch 1, which does not set DCF4. This confirms normal earlier delivery and localizes the current wait to the next absent signal, but does not explain why its producer did not submit a branch-5 notification. No runtime or guest behavior change follows from this correlation.
+
 The run folder is ignored and local at `iso/local-analysis/logs/m3-first-mission-writewatch-20261024/` (about 14 MiB at last measurement). The new screenshots show distinct stages and were retained. The D: scan at directory depth three found no Steel Battalion project path to relocate.
 
 ## Latest synchronized run (2026-10-23 local)
