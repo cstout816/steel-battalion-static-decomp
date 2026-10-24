@@ -1,0 +1,29 @@
+diff --git a/src/kernel/kernel_bridge.c b/src/kernel/kernel_bridge.c
+index 8a50b1e..0242bf6 100644
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -1722,8 +1722,23 @@ static void bridge_trace_wait(uint32_t object, uint32_t wait_reason,
+             wait_reason, wait_mode, alertable, timeout_ptr,
+             XBOX_TO_NATIVE(timeout_ptr));
+     fclose(f);
+-    if (target_dcf4)
++    if (target_dcf4) {
+         bridge_trace_guest_frames("wait-DCF4", (LONG)dcf4_count);
++        /* The EBP chain can be absent in optimized guest frames. Keep a
++         * bounded, opt-in raw stack window so the caller of D3D_BlockOnTime
++         * can be recovered from saved return addresses on a later run. */
++        if (dcf4_count <= 64 && getenv("RECOMP_DCF4_STACK_TRACE")
++                && g_esp >= 0x10000u && g_esp <= 0x04000000u - 64u) {
++            unsigned i;
++            fprintf(stderr, "[GUEST-STACK-RAW] wait=%ld esp=%08X ebp=%08X\n",
++                    (long)dcf4_count, g_esp, g_ebp);
++            for (i = 0; i < 16; i++)
++                fprintf(stderr, "[GUEST-STACK-RAW] wait=%ld i=%u va=%08X value=%08X\n",
++                        (long)dcf4_count, i, g_esp + i * 4u,
++                        BRIDGE_MEM32(g_esp + i * 4u));
++            fflush(stderr);
++        }
++    }
+ }
+ 
+ static void bridge_KeWaitForSingleObject(void)
