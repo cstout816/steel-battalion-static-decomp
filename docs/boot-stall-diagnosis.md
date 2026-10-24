@@ -2,7 +2,9 @@
 
 ## Current finding
 
-The latest synchronized saved-pilot run reached the Steel Battalion title/logo stage but did not reach a mission. Its final state is best explained by a guest DCF4 completion event that is reset and then never signaled again. This identifies the immediate blocker, not yet the producer-side defect that prevents the signal.
+The newest instrumented run reached the title and pilot menus, then exited on its own with an access violation in the guest DirectSound path. The guest DCF4 event continued to reset and signal, and DMA PUT/GET remained caught up at the sampled points, so this run does not support a DCF4 deadlock or a growing render backlog. The malformed DirectSound list is the immediate crash site; its corrupting writer is still unknown.
+
+The earlier saved-pilot run described below remains a separate loading-screen stall. Its DCF4 producer/delivery issue is not explained by this newer audio crash. Do not combine the two failures or change guest fence behavior based on either trace alone.
 
 At the last captured DCF4 wait, the guest requested target `0x2FF` while the semaphore was `0x2FB`. The semaphore subsequently advanced to `0x305`, but the DCF4 event stayed unsignaled, frame counters stayed fixed, and DMA PUT and GET remained equal at `0x457C`. The callback stream selected switch index 1 (`0x03600021`), while the DCF4 `KeSetEvent` branch requires index 5 (argument low five bits equal 5). The last raster aggregate near the wait was 24.20 ms of batch wall time and 84.14 ms summed across workers; raster work then stopped. That evidence separates this wait from a continuously overloaded renderer.
 
@@ -12,17 +14,37 @@ The frozen frame is not an idle process: a synchronized 3.047-second read-only s
 
 ## Two distinct failures
 
-- In the current run, the title/logo route stalled at DCF4. No rendering, guest-fence, callback, or gameplay fix has been made.
-- A companion run reached the Campaign menu and then exited on a DirectSound voice-list access violation at guest address `0xFFFFFFF4`. That is a separate audio failure. The list-corruption source is not known.
-- An earlier window did show a large raster spike (about 1.08 seconds batch wall time and 4.17 seconds summed worker time). CPU raster performance remains a real issue, but it does not account for the current run's idle DMA and absent raster batches after the event wait.
+- An earlier title run stalled at DCF4 after a reset without a later signal. That producer/delivery cause remains unresolved; it is separate from the newer run, where DCF4 continued to reset and signal.
+- The newest run exited in the guest DirectSound path on a malformed list node at guest VA `0xFFFFFFF4`. This is a reproducible crash signature from prior runs, but the list's corrupting writer is still unknown.
+- Raster reports include large CPU worker spikes. They show workload cost, but without queue-depth growth they do not prove a growing rendering backlog or explain either the earlier DCF4 wait or this audio-list crash.
 
 The current executable used the default push-buffer segment scanner. The opt-in DMA walk was not enabled. XboxRecomp upstream documents a software-method interrupt limitation for its DMA-walk fence path; because this run did not use that walker, the upstream warning is not sufficient to explain this capture. See the [XboxRecomp release notes](https://github.com/sp00nznet/xboxrecomp/releases).
 
 The small-triangle batch rasterizer from local commit `1ea1871` is already present and was not re-ported. The ahead-of-time static-recompilation architecture and guest fence behavior remain unchanged.
 
+## Latest synchronized run (2026-10-23 local)
+
+The current source and four-worker build ran with the saved-pilot route and copied save directory. The first feeder launch failed because its PowerShell script path contained spaces and was split into separate arguments. The corrected feeder began about two minutes after game launch, shifting the time-based route. The observed framebuffer stages were Dolby startup, `PRESS MAIN WEAPON BUTTON`, Campaign menu, then pilot selection with `LIST AS NEW` highlighted. The first mission frame was not reached. A later route input was delivered through the Steel Battalion XID report, but this run did not enable the guest title-input query trace.
+
+The synchronized DCF4 wait trace reached wait #205: frame sequence `0x179`, counter `0xD81`, semaphore target `0xD59`, semaphore `0xD77`, and callback count 584. The matching event set occurred at tick `65596468` from guest caller `0x0021702F`, with callback count 586. The last NV2A tick recorded counter `0xD89`, target `0xD59`, fence `0xD85`, and DCF4 signaled. Sampled DMA PUT/GET values matched, advancing from `0x9250` to `0x96C8` before the crash handler finished collecting state.
+
+The callback logger captured 512 callback argument/branch pairs before its generated-code cap. Among those: `0x03600021` selected branch 1 to `0x00216EC9` (169 calls); `0x01080021` selected branch 1 to `0x00216EC9` (168); `0x00000005` selected branch 5 to `0x0021701E` (168); `0x00000009` selected branch 9 to `0x0021707C` (6); and `0x00000028` selected branch 8 to `0x00217053` (1). The event trace shows 586 callbacks overall, so arguments for callbacks 513–586 were not captured individually. Expand that diagnostic cap before claiming full callback coverage.
+
+Across 137 raster reports with four workers, batches ranged from 4 to 485, with 1–2 triangles per batch. `batch_wall_ms` ranged from 4.01 to 391.15 ms; summed worker `raster_active_ms` ranged from 8.17 to 1,387.03 ms. The largest single batch wall time was 86.35 ms and largest single-worker active time was 331.41 ms. These are sampled raster costs, not a queue-depth measurement; no accumulating render backlog was observed. The existing small-triangle batch rasterizer from commit `1ea1871` was not re-ported.
+
+The process exited on an access violation while in guest function `sub_0021ED29` (`game_audio`), faulting on guest VA `0xFFFFFFF4` (host mapped address `0x10000FFF4`). Immediately beforehand, the generated DirectSound commit trace found owner/argument `0x010810A4`, sentinel `0x010810B4`, node `0xFF000000`, and predecessor `0x8038C098`; a second scan reached a null node. The crash registers held `EAX=ESI=0xFFFFFFEC` and `EDI=0x010810A4`. This is evidence of malformed guest list state at the crash, not yet evidence of which guest/runtime write corrupted it. The device voice-list head at `0x01081014` is a distinct structure and must not be conflated with the `owner+0x10` list.
+
+No behavior fix was made. The raw crash dump, logs, and distinct framebuffer captures are local only under `iso/local-analysis/logs/m3-dcf4-wait-caller-20261024/`; no game assets or captures were added to Git. No exact duplicate framebuffer images were found to move from this run. The next diagnostic should start the feeder at process launch, enable the title-input consumer trace, raise the callback-detail cap above 586, and trace the first writer that changes the malformed DirectSound list links. Preserve the AOT architecture and guest fence behavior.
+
+## Community/tooling review (2026-10-24)
+
+The local XboxRecomp checkout is pinned at v0.13.1. Upstream's current README and guides describe newer lifter/discovery coverage, unresolved-stub tracing, XBE conformance checks, and optional live inspection through xemu's GDB stub. The upstream candidate-game guide specifically calls out custom NV2A push-buffer use and multithreading as harder recompilation targets. These are selective analysis/tooling leads, not a reason to wholesale-upgrade this project or replace its AOT runtime. See [XboxRecomp](https://github.com/sp00nznet/xboxrecomp), its [getting-started guide](https://github.com/sp00nznet/xboxrecomp/blob/main/docs/GETTING_STARTED.md), and its [candidate-game criteria](https://github.com/sp00nznet/xboxrecomp/blob/main/docs/technical/candidate-games.md).
+
+The public [Steel Battalion Xemu fork](https://github.com/quizerno/Xemu-SB-VK) is an emulator fork, so it can inform controller and visual-state comparisons but is not an AOT implementation to port wholesale. A [community discussion reports reaching the first level in Xemu](https://www.reddit.com/r/steelbattaliononline/comments/1v53hau/xemu_steel_battalion_current_status/); that is useful as an external behavior reference, not proof about this runtime's audio-list or DCF4 failure.
+
 ## What is still unknown
 
-The traces do not show why the callback producer stops delivering the DCF4 signal payload. The first mission framebuffer, mission loading completion, gameplay, audio output, campaign completion, and 60 FPS are unverified. The full raw logs and captures remain in the user's local analysis folders and are not part of this repository.
+The earlier DCF4 freeze still lacks a producer-versus-delivery explanation, and the DirectSound list still lacks a proven corrupting writer/lifetime cause. The first mission framebuffer, mission loading completion, gameplay, audio output, campaign completion, and 60 FPS are unverified. The full raw logs and captures remain in the user's local analysis folders and are not part of this repository.
 
 Next diagnostic: enable the existing opt-in push-buffer NOP/PGRAPH-notify enter-and-ack trace and obtain a guest stack/PC sample for the hot native thread. Correlate submitted `NO_OPERATION` payloads with the guest handler branch, interrupt state, waiting thread, event reset/set, and semaphore. Keep the same saved-pilot route and preserve guest synchronization while collecting evidence. Do not change synchronization behavior based only on the upstream DMA-walk note.
 
