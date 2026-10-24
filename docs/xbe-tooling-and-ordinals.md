@@ -3,6 +3,7 @@
 ## Findings
 
 - The local Ghidra 12.1.4 workspace already includes the XboxDev `ghidra-xbe` extension and its XbSymbolDatabase integration. This is the preferred path for importing and analyzing the original-Xbox XBE. The portable Java annotator, verifier, candidate CSV, and upstream license notice are in [`tools/reverse-engineering/xbox-kernel-ordinals/`](../tools/reverse-engineering/xbox-kernel-ordinals/README.md) and were installed in the active Ghidra script workspace.
+- Upstream review confirms XbSymbolDatabase is an MIT-licensed OOVPA pattern-signature library, and `ghidra-xbe` uses it for library-symbol recovery. This is a complementary source for recognizing compiled XDK/library routines in the XBE; it is not a verified build-4627 ordinal-name table. Keep its matches separate from the provisional ordinal CSV and verify recovered names against code and call sites. No XbSymbolDatabase or Ghidra extension code was copied into this repository.
 - The supplied Steel Battalion executable is a retail `XBEH` image; the local parser reports XDK library build 4627 and 123 distinct kernel thunk imports. All 123 ordinals occur in the current xboxrecomp candidate map. That map's own notes say it is cross-checked against kernel builds 3944 and 4039, so the Ghidra labels remain explicitly provisional for this build.
 - Cxbx-Reloaded contains an XBE metadata printer and loader checks for XBE signatures and section integrity. Those are useful independent metadata checks. Cxbx-Reloaded is an emulator, so running it does not create or validate this project's statically recompiled Windows executable.
 - Exact-name public-source searches did not verify a project named **XbeTripper** or **xberewrite**. Do not base the pipeline on either name until a repository or project URL is supplied and its source/licensing can be reviewed.
@@ -14,6 +15,7 @@ The Ghidra script labels existing kernel thunk cells and never modifies the XBE.
 ## References
 
 - [ghidra-xbe](https://github.com/XboxDev/ghidra-xbe) — XBE loader and XbSymbolDatabase integration.
+- [XbSymbolDatabase](https://github.com/Cxbx-Reloaded/XbSymbolDatabase) — MIT-licensed OOVPA library-signature database used by `ghidra-xbe`; useful for identifying compiled library routines, not as proof of 4627 ordinal names.
 - [XboxRecomp XBE parser](https://github.com/sp00nznet/xboxrecomp/blob/main/tools/xbe_parser/xbe_parser.py) — XBE metadata and kernel ordinal candidate names.
 - [Cxbx-Reloaded](https://github.com/Cxbx-Reloaded/Cxbx-Reloaded) — emulator-side XBE loader/diagnostic reference.
 - [Cxbx-Reloaded README](https://github.com/Cxbx-Reloaded/Cxbx-Reloaded) — identifies the project as an original-Xbox emulator and lists its GPL-2.0 license. No Cxbx code is incorporated.
