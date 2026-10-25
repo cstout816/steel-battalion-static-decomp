@@ -17,6 +17,11 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')]
     [string]$RunName,
 
+    [ValidateRange(1800, 43200)]
+    [int]$WatchdogSeconds = 7200,
+
+    [string]$GuestWatchAddress,
+
     [string]$SaveDirectory = (Join-Path $PSScriptRoot '..\iso\local-analysis\saves-m3-known-save-copy-20261023')
 )
 
@@ -71,6 +76,11 @@ $settings = [ordered]@{
     RECOMP_CRASH_DUMP = $crashPath
     RECOMP_DCF4_CALLBACK_TRACE = '1'
     RECOMP_DCF4_STACK_TRACE = '1'
+    # Keep file traces bounded: open/read samples are capped in kernel_bridge.c.
+    # RECOMP_FILE_TRACE is intentionally omitted because it logs every open.
+    RECOMP_FILE_FAIL_PATH_TRACE = '1'
+    RECOMP_FILE_OPEN_PATH_TRACE = '1'
+    RECOMP_FILE_READ_TRACE = '1'
     RECOMP_DISPATCH_GATE = '1'
     RECOMP_DSOUND_COMMIT_TRACE = '1'
     RECOMP_DSOUND_NULL_TRACE = '1'
@@ -79,6 +89,7 @@ $settings = [ordered]@{
     RECOMP_FB_WINDOW_DUMP_EVERY = '1800'
     RECOMP_GUEST_LOCK = '1'
     RECOMP_INPUT_DIAG = '1'
+    RECOMP_LOAD_REPEAT_TRACE = '1'
     RECOMP_IRQ_SAFE_POINTS = '1'
     RECOMP_KERNEL_LOG_BUDGET = '0'
     RECOMP_NV2A_IRQ_TRACE = '1'
@@ -91,21 +102,29 @@ $settings = [ordered]@{
     RECOMP_RASTER_THREADS = '4'
     RECOMP_SAVE_DIR = $saveRoot
     RECOMP_SB_DCF4_PRODUCER_TRACE = '1'
+    RECOMP_SB_PRED_TRACE = '1'
     RECOMP_SYNC_TRACE = '1'
     RECOMP_TITLE_INPUT_TRACE = '1'
     RECOMP_TITLE_ROUTE_TRACE = '1'
     RECOMP_TITLE_KEVENTS = '1'
     RECOMP_MENU_STATE_TRACE = '1'
+    RECOMP_MENU_DISPATCH_TRACE = '1'
+    RECOMP_MENU_RESOURCE_TRACE = '1'
+    RECOMP_MENU_CALLBACK_GATE_TRACE = '1'
+    RECOMP_PILOT_LIST_TRACE = '1'
     RECOMP_USB = '1'
     RECOMP_USB_PROFILE = 'steel-battalion'
     RECOMP_USB_STATS = '1'
     RECOMP_VBLANK = '1'
     RECOMP_WAIT_TRACE_LOG = $waitTrace
-    RECOMP_WATCH = '0x8038C098'
-    RECOMP_WATCH_BLOCK = '1'
-    RECOMP_WATCH_NATIVE_RIP = '1'
-    RECOMP_WATCHDOG_SECS = '1800'
+    RECOMP_WATCHDOG_SECS = [string]$WatchdogSeconds
     RECOMP_XID_REPORT_TRACE = '1'
+}
+
+if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress)) {
+    $settings.RECOMP_WATCH = $GuestWatchAddress
+    $settings.RECOMP_WATCH_BLOCK = '1'
+    $settings.RECOMP_WATCH_NATIVE_RIP = '1'
 }
 
 $environmentNames = @($settings.Keys) + 'RECOMP_PAD_SCRIPT'
