@@ -5997,3 +5997,7 @@ Run identity `m3-new-pilot-loader-20261026-r72-file-caller`, PID 91128, current 
 
 No process was stopped, no new dump or build was made, and no guest behavior was changed. On the next run, omit `-EnableFileCallerTrace`; use `-AsyncTraceRelay` with bounded file lifecycle and file-I/O completion traces so path/status correlation does not depend on synchronous per-caller output. Async relay behavior remains source-reviewed, not runtime-verified. The build script still refuses to build beside a live game process. PID 91128 remains open and unresponsive; PID 84444 was absent at the prior authorized check.
 **Progress bars:** overall `██░░░░░░ 2/8`; decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; graphics `██░░ 2/4`; controller `██░ 2/3`; audio `█░ 1/2`; first mission frame `░ 0/1`.
+
+### r72 live-thread poll follow-up (2026-10-26 07:56 CDT)
+
+A five-second read-only poll of PID 91128 showed process CPU increasing from 1,356.55 to 1,357.42 seconds; `Responding=False` and the log files stayed unchanged. The highest cumulative thread, TID 56388, advanced by about 0.91 CPU seconds and changed from Running to Wait during the sample. Its saved stack offset `your_game_recomp_producer_trace.exe+0x64C53E1` maps through the same-build linker map to `mcpx_apu_frame_thread+0x201`. The other displayed thread CPU totals did not advance. This short sample does not show a sustained game-thread busy loop; it cannot rule out unrelated rendering or loader waits. PID 91128 remains open and was not modified.
