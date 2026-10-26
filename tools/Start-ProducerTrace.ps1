@@ -82,6 +82,9 @@ else {
 $generatedSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0015.c'
 $generatedDiagnosticSources = @(
     $generatedSource,
+    # This header decides whether generic function trace hooks are compiled
+    # in or reduced to no-ops; include it in freshness and provenance checks.
+    (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_types.h'),
     # Input snapshots and dispatch instrumentation live in this chunk. Include
     # it in the freshness gate so a trace executable cannot silently omit them.
     (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0001.c'),
