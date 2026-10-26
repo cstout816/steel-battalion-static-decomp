@@ -54,7 +54,7 @@ param(
     [ValidateRange(256, 1048576)]
     [int]$AsyncTraceQueueCapacity = 32768,
 
-    [string]$SaveDirectory = (Join-Path $PSScriptRoot '..\iso\local-analysis\saves-m3-known-save-copy-20261023')
+    [string]$SaveDirectory = (Join-Path $PSScriptRoot '..\iso\local-analysis\saves-m3-route-file-read-copy-20261023')
 )
 
 $ErrorActionPreference = 'Stop'
