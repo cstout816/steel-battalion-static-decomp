@@ -6005,3 +6005,24 @@ A five-second read-only poll of PID 91128 showed process CPU increasing from 1,3
 ### 2026-10-26 — prepared file-I/O trace semantics audited
 
 Source review of the Windows XboxRecomp file layer confirms the planned status rows are interpretable: ordinary `NtCreateFile` handles are created without `FILE_FLAG_OVERLAPPED`; `NtWriteFile` calls `WriteFile` and fills the IOSB before returning, while query/set-information are synchronous. The new `[FILE-IO]` rows therefore capture the returned NTSTATUS and IOSB byte/status fields for those operations. `RECOMP_ASYNC_IO=1` changes the guest-visible return from `NtReadFile` for handles marked async, but this HLE still performs the read and writes/signals the IOSB before returning; a `[READ]` row with `guest=STATUS_PENDING` is not evidence that the bytes remain unread. Correlate `[FILE-IO]`/`[READ]` by token and tick with lifecycle path records. This is source-reviewed only; the patch remains unbuilt and unrun. PID 91128 remains open and unresponsive, so no build or replay was started.
+
+### 2026-10-26 — XBE-backed copy-path indirect targets resolved
+
+Read `default.xbe` directly from the supplied XISO using the repository-local MIT-licensed XDVDFS reader; no XBE was extracted and the ISO was not changed. The parser identifies retail title `STEEL BATTALION` (`0x43430002`), XBOXKRNL 1.0.4627, 78 sections, 123 kernel imports, and the declared thunk table at `0x0025D0E0`. The copy helper `sub_0018E7BB`'s indirect cells are real import slots inside the XBE `.rdata`, not absent AOT game functions:
+
+| XBE cell | Raw thunk | Import |
+| --- | --- | --- |
+| `0x0025D100` | `0x800000BB` | ordinal 187, `NtClose` |
+| `0x0025D104` | `0x800000E2` | ordinal 226, `NtSetInformationFile` |
+| `0x0025D10C` | `0x800000CA` | ordinal 202, `NtOpenFile` |
+| `0x0025D110` | `0x80000121` | ordinal 289, `RtlInitAnsiString` |
+| `0x0025D114` | `0x800000EC` | ordinal 236, `NtWriteFile` |
+| `0x0025D11C` | `0x800000DB` | ordinal 219, `NtReadFile` |
+| `0x0025D144` | `0x800000D3` | ordinal 211, `NtQueryInformationFile` |
+| `0x0025D150` | `0x800000BE` | ordinal 190, `NtCreateFile` |
+| `0x0025D154` | `0x800000AC` | ordinal 172, `MmFreeSystemMemory` |
+| `0x0025D158` | `0x800000A7` | ordinal 167, `MmAllocateSystemMemory` |
+
+Within `sub_0018E7BB`, the file-operation call sites are `NtOpenFile` at `0x0018E826`, `NtQueryInformationFile` at `0x0018E85B`, `NtCreateFile` at `0x0018E8A9`, `NtSetInformationFile` at `0x0018E920`, `NtReadFile` at `0x0018E954`, and `NtWriteFile` at `0x0018E97C`; close calls use `0x0025D100`. The current kernel bridge patches XBE ordinal thunk entries to synthetic kernel VAs; `RECOMP_ICALL_SAFE_AT` then falls back to `recomp_lookup_kernel`, and `kernel_thunks.c` has dispatch bindings for these ordinals. No missing-target seed or game-code rebuild is justified for these cells. The local ordinal names and current runtime bindings do not independently prove every export's XDK-4627 semantics; preserve that caveat.
+
+This resolves only the indirect-target question. It does not explain r69's repeated `Z:\TEX00.BIN` cache misses or r71's NOW LOADING stall. The next run should disable synchronous file-caller tracing and correlate lifecycle paths with the bounded query/create/read/write/set-information status records and these call sites. PID 91128 remains open, so no build or replay was started.
