@@ -1,5 +1,5 @@
 diff --git a/src/usb/usb_gamepad.c b/src/usb/usb_gamepad.c
-index bd00f3f..78cc5cd 100644
+index bd00f3f..2d627a1 100644
 --- a/src/usb/usb_gamepad.c
 +++ b/src/usb/usb_gamepad.c
 @@ -38,6 +38,23 @@ static const uint8_t s_device_desc[18] = {
@@ -115,8 +115,11 @@ index bd00f3f..78cc5cd 100644
              if ((setup->wValue >> 8) == 0x01)
                  return copy_out(out, max, caps_in, (int)sizeof caps_in,
                                  setup->wLength);
-@@ -556,7 +614,7 @@ static void pad_script_apply(int pad, uint8_t *out)
+@@ -554,9 +612,10 @@ static void pad_script_apply(int pad, uint8_t *out)
+             memcpy(&out[12], ax, sizeof ax);
+         }
      }
++
  }
  
 -int usb_gamepad_report(int pad, uint8_t *out, int max)
@@ -124,16 +127,26 @@ index bd00f3f..78cc5cd 100644
  {
      XBOX_INPUT_STATE state;
      const XBOX_GAMEPAD *g;
-@@ -630,3 +688,45 @@ int usb_gamepad_report(int pad, uint8_t *out, int max)
+@@ -630,3 +689,67 @@ int usb_gamepad_report(int pad, uint8_t *out, int max)
      pad_script_apply(pad, out);
      return 20;
  }
 +
 +int usb_gamepad_report(int pad, uint8_t *out, int max)
 +{
++    static int report_trace = -1;
++    static unsigned report_trace_count;
 +    uint8_t standard[20];
 +    int32_t axis;
 +    uint16_t unsigned_axis;
++
++    if (report_trace < 0)
++        report_trace = getenv("RECOMP_USB_REPORT_TRACE") != NULL;
++    if (report_trace && report_trace_count++ < 16u) {
++        fprintf(stderr, "[USB-REPORT] pad=%d max=%d steel_profile=%d\n",
++                pad, max, usb_steel_battalion_profile());
++        fflush(stderr);
++    }
 +
 +    if (!usb_steel_battalion_profile())
 +        return usb_gamepad_standard_report(pad, out, max);
@@ -147,24 +160,36 @@ index bd00f3f..78cc5cd 100644
 +     * unambiguous mapping for the existing synthetic Start diagnostic. */
 +    if (standard[2] & 0x10u)
 +        out[2] |= 0x40u;
++    /* Map the conventional face buttons to the three right-stick weapon
++     * controls. In particular, A reaches the title's "Main Weapon" prompt. */
++    if (standard[4]) out[2] |= 0x01u; /* A -> RightJoyMainWeapon */
++    if (standard[5]) out[2] |= 0x02u; /* B -> RightJoyFire */
++    if (standard[6]) out[2] |= 0x04u; /* X -> RightJoyLockOn */
 +    /* Aiming lever from the right stick; rotation and sight-change axes from
 +     * the left stick. This fallback is intentionally partial: it does not
 +     * replace a native Steel Battalion controller or a complete remapper. */
 +    axis = (int16_t)((uint16_t)standard[16]
 +                     | ((uint16_t)standard[17] << 8));
 +    unsigned_axis = (uint16_t)(axis + 32768);
-+    out[9] = (uint8_t)unsigned_axis; out[10] = (uint8_t)(unsigned_axis >> 8);
++    out[8] = (uint8_t)unsigned_axis; out[9] = (uint8_t)(unsigned_axis >> 8);
 +    axis = (int16_t)((uint16_t)standard[18]
 +                     | ((uint16_t)standard[19] << 8));
 +    axis = 32768 - axis;
 +    if (axis > 65535) axis = 65535;
 +    unsigned_axis = (uint16_t)axis;
-+    out[11] = (uint8_t)unsigned_axis; out[12] = (uint8_t)(unsigned_axis >> 8);
-+    out[13] = standard[12]; out[14] = standard[13];
++    out[10] = (uint8_t)unsigned_axis; out[11] = (uint8_t)(unsigned_axis >> 8);
++    out[12] = standard[12]; out[13] = standard[13];
++    /* The Steel Battalion report separates SightChangeX and SightChangeY.
++     * Keep the host left stick's X axis in X (also used for the rotation
++     * lever above), and put its Y axis in Y. XInput is positive-up while the
++     * Steel Battalion report is positive-down for this field. */
++    axis = (int16_t)((uint16_t)standard[12]
++                     | ((uint16_t)standard[13] << 8));
++    out[14] = (uint8_t)axis; out[15] = (uint8_t)((uint16_t)axis >> 8);
 +    axis = -(int16_t)((uint16_t)standard[14]
 +                      | ((uint16_t)standard[15] << 8));
-+    out[15] = (uint8_t)axis; out[16] = (uint8_t)((uint16_t)axis >> 8);
-+    out[17] = 0; out[18] = 0; out[19] = 0; out[20] = 0; /* pedals */
++    out[16] = (uint8_t)axis; out[17] = (uint8_t)((uint16_t)axis >> 8);
++    out[18] = 0; out[19] = 0; out[20] = 0; /* pedals */
 +    out[21] = 0; out[22] = 0; out[23] = 0; /* pedals */
 +    out[24] = 0; /* tuner */
 +    out[25] = 0xFF; /* neutral gear */
