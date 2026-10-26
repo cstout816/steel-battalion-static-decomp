@@ -54,6 +54,8 @@ param(
     [ValidateRange(256, 1048576)]
     [int]$AsyncTraceQueueCapacity = 32768,
 
+    [string]$ExecutablePath,
+
     [string]$SaveDirectory = (Join-Path $PSScriptRoot '..\iso\local-analysis\saves-m3-route-file-read-copy-20261023')
 )
 
@@ -65,7 +67,18 @@ if ($AsyncTraceRelay -and $DirectTraceOutput) {
 $useAsyncTraceRelay = -not $DirectTraceOutput
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$traceExe = Join-Path $projectRoot 'local-tools\steel-battalion-game\build-xpp-seeded\ProducerTrace\Release\your_game_recomp_producer_trace.exe'
+$defaultTraceExe = Join-Path $projectRoot 'local-tools\steel-battalion-game\build-xpp-seeded\ProducerTrace\Release\your_game_recomp_producer_trace.exe'
+if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
+    $traceExe = $defaultTraceExe
+}
+else {
+    $requestedExe = if ([IO.Path]::IsPathRooted($ExecutablePath)) { $ExecutablePath } else { Join-Path $projectRoot $ExecutablePath }
+    $traceExe = [IO.Path]::GetFullPath($requestedExe)
+    $projectPrefix = $projectRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    if (-not $traceExe.StartsWith($projectPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "ExecutablePath must stay inside the project workspace: $traceExe"
+    }
+}
 $generatedSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0015.c'
 $generatedDiagnosticSources = @(
     $generatedSource,
@@ -74,7 +87,9 @@ $generatedDiagnosticSources = @(
     (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0001.c'),
     (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0004.c'),
     (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0008.c'),
-    (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0000.c')
+    (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0000.c'),
+    (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0005.c'),
+    (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0016.c')
 )
 $logRoot = Join-Path $projectRoot 'iso\local-analysis\logs'
 $saveRoot = (Resolve-Path -LiteralPath $SaveDirectory -ErrorAction Stop).Path
@@ -278,6 +293,7 @@ try {
     }
 
     $environmentSnapshot = @($settings.GetEnumerator() | ForEach-Object { "{0}={1}" -f $_.Key, $_.Value })
+    $environmentSnapshot += "EXECUTABLE_PATH=$traceExe"
     $environmentSnapshot += 'RECOMP_PAD_SCRIPT=<unset; screen-gated live input only>'
     if (-not $EnableFileCallerTrace) {
         $environmentSnapshot += 'RECOMP_FILE_CALLER_TRACE=<unset; opt-in>'

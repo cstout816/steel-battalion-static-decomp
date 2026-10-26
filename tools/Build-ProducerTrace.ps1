@@ -1,18 +1,41 @@
 [CmdletBinding()]
-param()
+param(
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')]
+    [string]$SideBySideName
+)
 
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$buildRoot = Join-Path $projectRoot 'local-tools\steel-battalion-game\build-xpp-seeded'
+$isSideBySide = -not [string]::IsNullOrWhiteSpace($SideBySideName)
+if ($isSideBySide) {
+    $traceDir = Join-Path $buildRoot (Join-Path 'ProducerTrace-Candidates' (Join-Path $SideBySideName 'Release'))
+    $traceExe = Join-Path $traceDir 'your_game_recomp_producer_trace.exe'
+    if (Test-Path -LiteralPath $traceDir) {
+        throw "Side-by-side output already exists; choose a new name so prior candidates are preserved: $traceDir"
+    }
+}
+else {
+    $traceDir = Join-Path $buildRoot 'ProducerTrace\Release'
+    $traceExe = Join-Path $traceDir 'your_game_recomp_producer_trace.exe'
+}
 $activeGames = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
     $_.ProcessName -like 'your_game_recomp*'
 })
-if ($activeGames.Count -gt 0) {
-    $ids = ($activeGames | ForEach-Object { $_.Id }) -join ', '
-    throw "A game process is still open (PID $ids). Close it naturally before building; this script will not stop it."
+$blockingGames = @($activeGames | Where-Object {
+    if (-not $isSideBySide) { return $true }
+    if ([string]::IsNullOrWhiteSpace($_.Path)) { return $true }
+    [string]::Equals([IO.Path]::GetFullPath($_.Path), [IO.Path]::GetFullPath($traceExe), [StringComparison]::OrdinalIgnoreCase)
+})
+if ($blockingGames.Count -gt 0) {
+    $ids = ($blockingGames | ForEach-Object { $_.Id }) -join ', '
+    if ($isSideBySide) {
+        throw "A game process is using the requested candidate output path (PID $ids); this script will not replace it."
+    }
+    throw "A game process is still open (PID $ids). Close it naturally before replacing the standard diagnostic executable; this script will not stop it. Use -SideBySideName to build an isolated candidate."
 }
 
-$buildRoot = Join-Path $projectRoot 'local-tools\steel-battalion-game\build-xpp-seeded'
 $projectFile = Join-Path $buildRoot 'your_game_recomp.vcxproj'
 $kernelProject = Join-Path $buildRoot 'xboxrecomp\src\kernel\xbox_kernel.vcxproj'
 $usbProject = Join-Path $buildRoot 'xboxrecomp\src\usb\xbox_usb.vcxproj'
@@ -25,10 +48,8 @@ $generatedFileCopySource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp
 $generatedPreloadSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0000.c'
 $kernelTraceSource = Join-Path $projectRoot 'local-tools\xboxrecomp\src\kernel\kernel_bridge.c'
 $msbuild = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
-$traceDir = Join-Path $buildRoot 'ProducerTrace\Release'
 $stagedExe = Join-Path $traceDir 'your_game_recomp_diag.exe'
 $stagedPdb = Join-Path $buildRoot 'Release\your_game_recomp_diag.pdb'
-$traceExe = Join-Path $traceDir 'your_game_recomp_producer_trace.exe'
 $tracePdb = Join-Path $traceDir 'your_game_recomp_diag.pdb'
 $archiveDir = 'C:\Project\SteelBattalion-Delete-Later-20261024\workspace\local-tools\steel-battalion-game\build-xpp-seeded\ProducerTrace\Release'
 
@@ -139,7 +160,10 @@ $usbOutDirArg = '/p:OutDir=' + (Join-Path $buildRoot 'xboxrecomp\src\usb\Release
 & $msbuild $usbProject '/nologo' '/m' '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' $usbOutDirArg '/v:minimal'
 if ($LASTEXITCODE -ne 0) { throw "USB trace-library build failed with exit code $LASTEXITCODE" }
 $outDirArg = '/p:OutDir=' + $traceDir + '\'
-& $msbuild $projectFile '/nologo' '/m' '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' $outDirArg '/v:minimal'
+# Some generated diagnostic chunks add bounded fprintf(stderr, ...) probes but
+# do not carry the CRT declaration themselves. Force-include stdio so a fresh
+# generated-source pass remains buildable without editing game semantics.
+& $msbuild $projectFile '/nologo' '/m' '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' '/p:ForcedIncludeFiles=stdio.h' $outDirArg '/v:minimal'
 if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
 if (-not (Test-Path -LiteralPath $stagedExe -PathType Leaf)) {
     throw "Build completed without producing the staged executable: $stagedExe"
@@ -149,6 +173,13 @@ if (-not (Test-Path -LiteralPath $stagedPdb -PathType Leaf)) {
 }
 if ((Get-Item -LiteralPath $stagedExe).Length -lt 10MB) {
     throw "Staged executable is unexpectedly small; existing trace executable was preserved."
+}
+
+if ($isSideBySide) {
+    Move-Item -LiteralPath $stagedExe -Destination $traceExe
+    Move-Item -LiteralPath $stagedPdb -Destination $tracePdb
+    "Built isolated producer-trace candidate without replacing any existing executable: $traceExe"
+    return
 }
 
 if (Test-Path -LiteralPath $traceExe) {
