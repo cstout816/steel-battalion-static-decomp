@@ -323,6 +323,38 @@ try {
     }
     $environmentSnapshot | Set-Content -LiteralPath (Join-Path $runDirectory 'environment.txt') -Encoding UTF8
 
+    # Preserve the exact executable, matching symbols, and generated AOT probe
+    # inputs used for this run. Environment/path-only notes were insufficient
+    # to identify the historical r69/r72 diagnostic images after replacement.
+    $pdbPaths = @(Get-ChildItem -LiteralPath (Split-Path -Parent $traceExe) -File -Filter '*.pdb' |
+        Select-Object -ExpandProperty FullName)
+    $provenancePaths = @($traceExe) + $pdbPaths + $generatedDiagnosticSources
+    $provenanceFiles = @(
+        foreach ($path in ($provenancePaths | Select-Object -Unique)) {
+            $file = Get-Item -LiteralPath $path
+            $digest = Get-FileHash -LiteralPath $path -Algorithm SHA256
+            [ordered]@{
+                Path = $file.FullName
+                Length = $file.Length
+                LastWriteTimeUtc = $file.LastWriteTimeUtc.ToString('o')
+                SHA256 = $digest.Hash
+            }
+        }
+    )
+    $runManifest = [ordered]@{
+        SchemaVersion = 1
+        RunName = $RunName
+        CapturedAtUtc = [DateTime]::UtcNow.ToString('o')
+        RunDirectory = $runDirectory
+        ExecutablePath = $traceExe
+        GeneratedSourceDirectory = Split-Path -Parent $generatedSource
+        SaveDirectory = $saveRoot
+        TraceOutputMode = if ($useAsyncTraceRelay) { 'bounded-asynchronous-relay' } else { 'direct-files' }
+        AsyncTraceQueueCapacity = if ($useAsyncTraceRelay) { $AsyncTraceQueueCapacity } else { $null }
+        Files = $provenanceFiles
+    }
+    $runManifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $runDirectory 'run-manifest.json') -Encoding UTF8
+
     if ($useAsyncTraceRelay) {
         $relaySource = Join-Path $PSScriptRoot 'ProducerTraceAsyncRelay.cs'
         if (-not (Test-Path -LiteralPath $relaySource -PathType Leaf)) {
