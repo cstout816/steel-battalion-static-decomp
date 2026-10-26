@@ -1,6 +1,6 @@
 # Milestone 1: Research and Architecture
 
-Updated 2026-10-24. Architecture: user selected sp00nznet/xboxrecomp for ahead-of-time x86 translation. Milestones 1 and 2 have produced an XBE feasibility assessment and translated Windows build. Milestone 3 remains active: captured routes have shown title/menu screens and `NOW LOADING`, but no mission frame or playable boot is verified.
+Updated 2026-10-26. The user-selected execution architecture remains sp00nznet/xboxrecomp ahead-of-time x86 translation with an Xbox compatibility runtime; no full-system emulator is the execution core. Milestones 1 and 2 have produced an XBE feasibility assessment and translated Windows build. Milestone 3 remains active: captured routes have shown title/menu screens and `NOW LOADING`, but no mission frame or playable boot is verified. The D3D11 statements below describe the selected toolkit's original renderer; the project's later graphics-backend decision and evidence are maintained separately in [`VULKAN_MIGRATION_MAP.md`](VULKAN_MIGRATION_MAP.md).
 
 ## Disc and executable evidence
 
@@ -40,7 +40,7 @@ The MIT-licensed [xboxrecomp](https://github.com/sp00nznet/xboxrecomp) is an alt
 
 ## Architecture decision
 
-On 2026-10-17, the user selected **sp00nznet/xboxrecomp** as the static-recompilation runtime. The intended execution model remains ahead-of-time x86 translation plus Xbox compatibility layers. Full-system emulation is not an approved substitute. Begin Milestone 2 with local XBE analysis and a first runtime-specific translation assessment.
+On 2026-10-17, the user selected **sp00nznet/xboxrecomp** as the static-recompilation runtime. The intended execution model remains ahead-of-time x86 translation plus Xbox compatibility layers. Full-system emulation is not an approved substitute. Milestone 2 has since produced a translated Windows build; Milestone 3 boot and compatibility remain active.
 
 The selected toolkit's documented Windows renderer is D3D8-to-D3D11, not D3D12. This is an acknowledged mismatch with the original graphics API request, not a claim that D3D12 is supported. First establish whether this title can be statically translated and reach a baseline boot using the selected runtime. Any later D3D12 renderer replacement or port requires technical feasibility analysis and must preserve the approved static-recompilation CPU architecture. xboxrecomp has not been shown to support this title or XDK build 4627; no successful boot or rendering is claimed.
 
