@@ -1746,3 +1746,7 @@ Checked the new one-pass marker-count logic against the existing r72 `stderr.log
 ### 2026-10-26 run-manifest serialization preflight
 
 Without launching ProducerTrace or writing into the project, exercised the manifest file-discovery, SHA-256 collection, JSON serialization, and JSON round-trip against the existing r76 candidate and current source inputs. The result parsed with 10 file identities: 112,347,136-byte candidate SHA-256 `C3AF14894E2733F76D584A9A963523653BB18F113A10296BAD6DB721BD0B97FF`, one PDB, seven generated C files, and `recomp_types.h`; all entries had nonzero size and a SHA-256. This validates the manifest data shape and source discovery only; the actual launcher and post-run update remain unverified. PID 91128 still exists and was not touched.
+
+### 2026-10-26 r72 input rows explain zero pilot callbacks
+
+Read the two `[SB-INPUT-PRED]` and one `[SB-EDGE-CONSUME]` rows from the held-open r72 log using a read-only shared stream. Its sole XID report at tick 260966890 (TID 87724) had report byte 2=`00`; DMA at 260966953 also delivered byte 2=`00` to `0x01081763`. At 260980296, edge transition 1 copied `0x004B0160:0000` to `0x004AFC08:0000`; the predicate returned 0 at parent `0x000E029F`. A second predicate at parent `0x000E0140` also returned 0 at tick 261005359. Thus the r72 zero pilot/menu callbacks are consistent with no button press and the Dolby-stage frame; this run provides no pilot-screen callback evidence. No input was sent and the process was not changed.
