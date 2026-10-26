@@ -59,6 +59,9 @@ $traceExe = Join-Path $projectRoot 'local-tools\steel-battalion-game\build-xpp-s
 $generatedSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0015.c'
 $generatedDiagnosticSources = @(
     $generatedSource,
+    # Input snapshots and dispatch instrumentation live in this chunk. Include
+    # it in the freshness gate so a trace executable cannot silently omit them.
+    (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0001.c'),
     (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0004.c'),
     (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0008.c'),
     (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0000.c')
