@@ -36,6 +36,8 @@ param(
 
     [switch]$EnableFileIoDetailTrace,
 
+    [switch]$EnableFileCopyTrace,
+
     [switch]$EnableMmioTrace,
 
     [switch]$EnablePacketTimingTrace,
@@ -53,6 +55,11 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $traceExe = Join-Path $projectRoot 'local-tools\steel-battalion-game\build-xpp-seeded\ProducerTrace\Release\your_game_recomp_producer_trace.exe'
 $generatedSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0015.c'
+$generatedDiagnosticSources = @(
+    $generatedSource,
+    (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0004.c'),
+    (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0008.c')
+)
 $logRoot = Join-Path $projectRoot 'iso\local-analysis\logs'
 $saveRoot = (Resolve-Path -LiteralPath $SaveDirectory -ErrorAction Stop).Path
 $runDirectory = Join-Path $logRoot $RunName
@@ -65,7 +72,7 @@ if ($activeGames.Count -gt 0) {
     throw "A game process is still open (PID $ids). Close it naturally before starting ProducerTrace; this script will not stop it."
 }
 
-foreach ($path in @($traceExe, $generatedSource, $saveRoot)) {
+foreach ($path in (@($traceExe) + $generatedDiagnosticSources + @($saveRoot))) {
     if (-not (Test-Path -LiteralPath $path)) {
         throw "Required ProducerTrace input is missing: $path"
     }
@@ -76,8 +83,10 @@ if (-not (Test-Path -LiteralPath (Join-Path $saveRoot 'UserData') -PathType Cont
 if ((Get-Item -LiteralPath $traceExe).Length -lt 10MB) {
     throw "ProducerTrace executable is unexpectedly small: $traceExe"
 }
-if ((Get-Item -LiteralPath $traceExe).LastWriteTimeUtc -lt (Get-Item -LiteralPath $generatedSource).LastWriteTimeUtc) {
-    throw 'ProducerTrace executable is older than the current generated source. Build it before launching.'
+foreach ($source in $generatedDiagnosticSources) {
+    if ((Get-Item -LiteralPath $traceExe).LastWriteTimeUtc -lt (Get-Item -LiteralPath $source).LastWriteTimeUtc) {
+        throw "ProducerTrace executable is older than an instrumented generated source ($source). Build it before launching."
+    }
 }
 if (Test-Path -LiteralPath $runDirectory) {
     throw "Run directory already exists; choose a new name so earlier logs are preserved: $runDirectory"
@@ -186,6 +195,10 @@ if ($EnableFileIoDetailTrace) {
     $settings.RECOMP_FILE_IO_DETAIL_TRACE = '1'
 }
 
+if ($EnableFileCopyTrace) {
+    $settings.RECOMP_FILE_COPY_TRACE = '1'
+}
+
 if ($EnableMmioTrace) {
     $settings.RECOMP_MMIO_TRACE = '1'
 }
@@ -203,7 +216,7 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress)) {
     $settings.RECOMP_WATCH_NATIVE_RIP = '1'
 }
 
-$environmentNames = @($settings.Keys) + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + @(
+$environmentNames = @($settings.Keys) + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
     'RECOMP_FILE_OPEN_PATH_TRACE'
 )
@@ -227,6 +240,9 @@ try {
     if (-not $EnableFileIoDetailTrace) {
         Remove-Item Env:RECOMP_FILE_IO_DETAIL_TRACE -ErrorAction SilentlyContinue
     }
+    if (-not $EnableFileCopyTrace) {
+        Remove-Item Env:RECOMP_FILE_COPY_TRACE -ErrorAction SilentlyContinue
+    }
     if (-not $EnableMmioTrace) {
         Remove-Item Env:RECOMP_MMIO_TRACE -ErrorAction SilentlyContinue
     }
@@ -238,6 +254,9 @@ try {
     }
     if (-not $EnableFileIoDetailTrace) {
         $environmentSnapshot += 'RECOMP_FILE_IO_DETAIL_TRACE=<unset; opt-in>'
+    }
+    if (-not $EnableFileCopyTrace) {
+        $environmentSnapshot += 'RECOMP_FILE_COPY_TRACE=<unset; opt-in>'
     }
     if (-not $EnableMmioTrace) {
         $environmentSnapshot += 'RECOMP_MMIO_TRACE=<unset; opt-in>'
