@@ -58,7 +58,8 @@ $generatedSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generat
 $generatedDiagnosticSources = @(
     $generatedSource,
     (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0004.c'),
-    (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0008.c')
+    (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0008.c'),
+    (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0000.c')
 )
 $logRoot = Join-Path $projectRoot 'iso\local-analysis\logs'
 $saveRoot = (Resolve-Path -LiteralPath $SaveDirectory -ErrorAction Stop).Path

@@ -22,6 +22,7 @@ $generatedMenuSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-gen
 $generatedLoaderSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0005.c'
 $generatedAudioSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0016.c'
 $generatedFileCopySource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0008.c'
+$generatedPreloadSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0000.c'
 $kernelTraceSource = Join-Path $projectRoot 'local-tools\xboxrecomp\src\kernel\kernel_bridge.c'
 $msbuild = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
 $traceDir = Join-Path $buildRoot 'ProducerTrace\Release'
@@ -31,7 +32,7 @@ $traceExe = Join-Path $traceDir 'your_game_recomp_producer_trace.exe'
 $tracePdb = Join-Path $traceDir 'your_game_recomp_diag.pdb'
 $archiveDir = 'C:\Project\SteelBattalion-Delete-Later-20261024\workspace\local-tools\steel-battalion-game\build-xpp-seeded\ProducerTrace\Release'
 
-foreach ($path in @($projectFile, $kernelProject, $usbProject, $generatedSource, $generatedInputSource, $generatedMenuSource, $generatedLoaderSource, $generatedAudioSource, $generatedFileCopySource, $kernelTraceSource, $msbuild)) {
+foreach ($path in @($projectFile, $kernelProject, $usbProject, $generatedSource, $generatedInputSource, $generatedMenuSource, $generatedLoaderSource, $generatedAudioSource, $generatedFileCopySource, $generatedPreloadSource, $kernelTraceSource, $msbuild)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Required build input is missing: $path"
     }
@@ -104,6 +105,8 @@ foreach ($check in @(
     @{ Path = $generatedLoaderSource; Marker = '[LOAD-RENDER]' },
     @{ Path = $generatedFileCopySource; Marker = '[FILE-COPY-ENTER]' },
     @{ Path = $generatedFileCopySource; Marker = '[FILE-COPY-RETURN]' },
+    @{ Path = $generatedPreloadSource; Marker = '[FILE-PRELOAD-ENTER]' },
+    @{ Path = $generatedPreloadSource; Marker = '[FILE-PRELOAD-RETURN]' },
     @{ Path = $generatedAudioSource; Marker = '[SB-STREAM-STATE]' },
     @{ Path = $generatedMenuSource; Marker = 'tick_ms=%llu tid=%u site=000E18D8' }
 )) {
