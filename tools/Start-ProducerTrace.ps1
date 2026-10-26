@@ -401,14 +401,19 @@ if ($useAsyncTraceRelay) {
     if ($relayResult.WriterError) { "Log writer error: $($relayResult.WriterError)" }
 
     $traceMarkers = @(
-        '[PILOT-LIST-CB]', '[SB-SNAPSHOT]', '[SB-INPUT-DISPATCH]',
-        '[MENU-DISPATCH]', '[MENU-RESOURCE]', '[THREAD-START]',
+        '[PILOT-LIST-CB]', '[PILOT-ROW-POST]', '[SB-SNAPSHOT]',
+        '[SB-INPUT-DISPATCH]', '[SB-INPUT-PRED]', '[SB-EDGE-CONSUME]',
+        '[MENU-DISPATCH]', '[MENU-RESOURCE]', '[MENU-CALLBACK-GATE]',
+        '[MENU-OBJECT-GATE]', '[TITLE-ROUTE-QUERY]', '[THREAD-START]',
         '[PRELOAD-WORKER-ROUTE]', '[FILE-PRELOAD-ENTER]',
-        '[FILE-COPY-ENTER]', '[FILE-COPY-RETURN]', '[FILE-IO]',
+        '[FILE-PRELOAD-RETURN]', '[FILE-COPY-ENTER]', '[FILE-COPY-RETURN]',
+        '[FILE-IO]', '[FILE-CALL]',
         '[FILE-LIFECYCLE-OPEN-CAPPED]', '[FILE-LIFECYCLE-OPEN]',
-        '[FILE-LIFECYCLE-CLOSE]', '[LOAD-PASS-IN]', '[LOAD-PASS-OUT]',
-        '[LOAD-REPEAT]', '[DCF4-CB]', '[SB-DMA-PUBLISH]', '[SB-PFB-POLL]',
-        '[RASTER-PERF]', '[XID0]', '[XID-DMA0]'
+        '[FILE-LIFECYCLE-CLOSE]', '[LOAD-HELPER]', '[LOAD-HELPER-BRANCH]',
+        '[LOAD-HELPER-RET]', '[LOAD-STACK]', '[LOAD-RENDER]',
+        '[LOAD-PASS-IN]', '[LOAD-PASS-OUT]', '[LOAD-REPEAT]',
+        '[DCF4-CB]', '[SB-DMA-PUBLISH]', '[SB-PFB-POLL]', '[SYNC-PBSEM]',
+        '[NV2A-TICK]', '[RASTER-PERF]', '[XID0]', '[XID-DMA0]'
     )
     $markerPattern = ($traceMarkers | Sort-Object Length -Descending |
         ForEach-Object { [regex]::Escape($_) }) -join '|'
