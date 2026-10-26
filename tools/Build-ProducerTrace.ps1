@@ -14,11 +14,14 @@ if ($activeGames.Count -gt 0) {
 
 $buildRoot = Join-Path $projectRoot 'local-tools\steel-battalion-game\build-xpp-seeded'
 $projectFile = Join-Path $buildRoot 'your_game_recomp.vcxproj'
+$kernelProject = Join-Path $buildRoot 'xboxrecomp\src\kernel\xbox_kernel.vcxproj'
 $usbProject = Join-Path $buildRoot 'xboxrecomp\src\usb\xbox_usb.vcxproj'
 $generatedSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0015.c'
 $generatedInputSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0001.c'
 $generatedMenuSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0004.c'
 $generatedLoaderSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0005.c'
+$generatedAudioSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0016.c'
+$kernelTraceSource = Join-Path $projectRoot 'local-tools\xboxrecomp\src\kernel\kernel_bridge.c'
 $msbuild = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
 $traceDir = Join-Path $buildRoot 'ProducerTrace\Release'
 $stagedExe = Join-Path $traceDir 'your_game_recomp_diag.exe'
@@ -27,14 +30,13 @@ $traceExe = Join-Path $traceDir 'your_game_recomp_producer_trace.exe'
 $tracePdb = Join-Path $traceDir 'your_game_recomp_diag.pdb'
 $archiveDir = 'C:\Project\SteelBattalion-Delete-Later-20261024\workspace\local-tools\steel-battalion-game\build-xpp-seeded\ProducerTrace\Release'
 
-foreach ($path in @($projectFile, $usbProject, $generatedSource, $generatedInputSource, $generatedMenuSource, $generatedLoaderSource, $msbuild)) {
+foreach ($path in @($projectFile, $kernelProject, $usbProject, $generatedSource, $generatedInputSource, $generatedMenuSource, $generatedLoaderSource, $generatedAudioSource, $kernelTraceSource, $msbuild)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Required build input is missing: $path"
     }
 }
 
 $requiredLibraries = @(
-    'xboxrecomp\src\kernel\Release\xbox_kernel.lib',
     'xboxrecomp\src\audio\Release\xbox_dsound.lib',
     'xboxrecomp\src\usb\Release\xbox_usb.lib',
     'xboxrecomp\src\input\Release\xbox_input.lib',
@@ -69,13 +71,22 @@ foreach ($marker in $requiredTraceMarkers) {
 foreach ($check in @(
     @{ Path = $generatedInputSource; Marker = '[SB-INPUT-DISPATCH]' },
     @{ Path = $generatedInputSource; Marker = '[SB-INPUT-TABLE]' },
+    @{ Path = $generatedInputSource; Marker = '[SB-EDGE-CONSUME]' },
+    @{ Path = $generatedInputSource; Marker = 'pred_c == 0x1Au' },
+    @{ Path = $generatedInputSource; Marker = '[SB-SNAPSHOT]' },
     @{ Path = $generatedMenuSource; Marker = '[PILOT-LIST-CB]' },
     @{ Path = $generatedMenuSource; Marker = '[PILOT-ROW-POST]' },
+    @{ Path = $generatedMenuSource; Marker = '[SB-ROSTER-BRANCH]' },
+    @{ Path = $generatedMenuSource; Marker = '[SB-ROSTER-STATE]' },
     @{ Path = $generatedMenuSource; Marker = '[MENU-DISPATCH]' },
     @{ Path = $generatedMenuSource; Marker = '[MENU-RESOURCE]' },
     @{ Path = $generatedMenuSource; Marker = '[TITLE-ROUTE-RESULT]' },
     @{ Path = $generatedMenuSource; Marker = '[TITLE-ROUTE-ENTRY]' },
     @{ Path = $generatedMenuSource; Marker = '[TITLE-ROUTE-EXIT]' },
+    @{ Path = $generatedMenuSource; Marker = '[TITLE-OBJECT-TIMER-GATE]' },
+    @{ Path = $generatedMenuSource; Marker = '[TITLE-OBJECT-INPUT]' },
+    @{ Path = $generatedMenuSource; Marker = '[TITLE-OBJECT-STATE]' },
+    @{ Path = $generatedMenuSource; Marker = 'RECOMP_TITLE_OBJECT_GATE_TRACE' },
     @{ Path = $generatedMenuSource; Marker = '[MENU-OBJECT-GATE]' },
     @{ Path = $generatedMenuSource; Marker = '[MENU-CALLBACK-GATE]' },
     @{ Path = $generatedMenuSource; Marker = 'RECOMP_MENU_CALLBACK_GATE_TRACE' },
@@ -84,7 +95,12 @@ foreach ($check in @(
     @{ Path = $generatedMenuSource; Marker = 'GetCurrentThreadId()' },
     @{ Path = $generatedInputSource; Marker = 'GetCurrentThreadId()' },
     @{ Path = $generatedMenuSource; Marker = '[LOAD-HELPER]' },
+    @{ Path = $generatedMenuSource; Marker = '[LOAD-HELPER-RET]' },
+    @{ Path = $generatedMenuSource; Marker = '[LOAD-PASS-IN]' },
+    @{ Path = $generatedMenuSource; Marker = '[LOAD-PASS-OUT]' },
+    @{ Path = $generatedMenuSource; Marker = '[LOAD-STACK]' },
     @{ Path = $generatedLoaderSource; Marker = '[LOAD-RENDER]' },
+    @{ Path = $generatedAudioSource; Marker = '[SB-STREAM-STATE]' },
     @{ Path = $generatedMenuSource; Marker = 'tick_ms=%llu tid=%u site=000E18D8' }
 )) {
     if (-not (Select-String -LiteralPath $check.Path -SimpleMatch $check.Marker -Quiet)) {
@@ -92,7 +108,23 @@ foreach ($check in @(
     }
 }
 
+foreach ($marker in @(
+    'RECOMP_FILE_LIFECYCLE_TRACE',
+    '[FILE-LIFECYCLE-OPEN]',
+    '[FILE-LIFECYCLE-CLOSE]',
+    '[FILE-LIFECYCLE-OPEN-CAPPED]',
+    'RECOMP_FILE_IO_DETAIL_TRACE',
+    '[FILE-IO]'
+)) {
+    if (-not (Select-String -LiteralPath $kernelTraceSource -SimpleMatch $marker -Quiet)) {
+        throw "Kernel bridge is missing required lifecycle trace instrumentation: $marker"
+    }
+}
+
 New-Item -ItemType Directory -Path $traceDir -Force | Out-Null
+$kernelOutDirArg = '/p:OutDir=' + (Join-Path $buildRoot 'xboxrecomp\src\kernel\Release') + '\'
+& $msbuild $kernelProject '/nologo' '/m' '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' $kernelOutDirArg '/v:minimal'
+if ($LASTEXITCODE -ne 0) { throw "Kernel trace-library build failed with exit code $LASTEXITCODE" }
 $usbOutDirArg = '/p:OutDir=' + (Join-Path $buildRoot 'xboxrecomp\src\usb\Release') + '\'
 & $msbuild $usbProject '/nologo' '/m' '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' $usbOutDirArg '/v:minimal'
 if ($LASTEXITCODE -ne 0) { throw "USB trace-library build failed with exit code $LASTEXITCODE" }

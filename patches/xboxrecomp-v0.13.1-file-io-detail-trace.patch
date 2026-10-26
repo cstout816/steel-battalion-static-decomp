@@ -1,0 +1,214 @@
+diff --git a/src/kernel/kernel_bridge.c b/src/kernel/kernel_bridge.c
+index c65ba43..af71d7e 100644
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -3477,0 +4239,46 @@ static void bridge_NtReadFile(void)
++/* Opt-in bounded completion telemetry for copy-path diagnosis. Path mapping
++ * comes from the separate lifecycle trace; this records the result for the
++ * same guest handle token without changing the I/O call or completion path. */
++static void bridge_trace_file_io(const char *operation, uint32_t token,
++        HANDLE handle, uint32_t info_class, int offset_valid,
++        int64_t offset, uint32_t length, uint32_t information,
++        uint32_t ios_status, uint32_t native_status, uint32_t guest_status)
++{
++    static volatile LONG enabled = -1;
++    static volatile LONG trace_count;
++    LONG n;
++    const char *setting;
++
++    if (enabled < 0) {
++        setting = getenv("RECOMP_FILE_IO_DETAIL_TRACE");
++        InterlockedCompareExchange(&enabled,
++                setting && *setting && *setting != '0', -1);
++    }
++    if (!enabled)
++        return;
++
++    n = InterlockedIncrement(&trace_count);
++    if (n > 8192)
++        return;
++
++    if (offset_valid) {
++        fprintf(stderr,
++                "[FILE-IO] tick_ms=%llu tid=%u n=%ld op=%s token=%08X "
++                "host=%p caller=%08X class=%08X offset=%lld length=%u "
++                "info=%u ios=0x%08X nt=0x%08X guest=0x%08X\n",
++                (unsigned long long)GetTickCount64(),
++                (unsigned)GetCurrentThreadId(), n, operation, token, handle,
++                g_xbox_kernel_caller, info_class, (long long)offset, length,
++                information, ios_status, native_status, guest_status);
++    } else {
++        fprintf(stderr,
++                "[FILE-IO] tick_ms=%llu tid=%u n=%ld op=%s token=%08X "
++                "host=%p caller=%08X class=%08X offset=seq length=%u "
++                "info=%u ios=0x%08X nt=0x%08X guest=0x%08X\n",
++                (unsigned long long)GetTickCount64(),
++                (unsigned)GetCurrentThreadId(), n, operation, token, handle,
++                g_xbox_kernel_caller, info_class, length, information,
++                ios_status, native_status, guest_status);
++    }
++}
++
+@@ -3487,0 +4295 @@ static void bridge_NtWriteFile(void)
++    uint32_t native_status;
+@@ -3492,0 +4301,2 @@ static void bridge_NtWriteFile(void)
++        bridge_trace_file_io("write", STACK_ARG(0), handle, 0, 0, 0,
++                length, 0, 0xC0000005u, g_eax, g_eax);
+@@ -3501,0 +4312 @@ static void bridge_NtWriteFile(void)
++    native_status = g_eax;
+@@ -3504,0 +4316,3 @@ static void bridge_NtWriteFile(void)
++    bridge_trace_file_io("write", STACK_ARG(0), handle, 0, poff != NULL,
++            off.QuadPart, length, (uint32_t)ios.Information,
++            (uint32_t)ios.Status, native_status, g_eax);
+@@ -3515,0 +4330 @@ static void bridge_NtQueryInformationFile(void)
++    uint32_t native_status;
+@@ -3520,0 +4336,2 @@ static void bridge_NtQueryInformationFile(void)
++        bridge_trace_file_io("query", STACK_ARG(0), handle, infoclass,
++                0, 0, length, 0, 0xC0000005u, g_eax, g_eax);
+@@ -3525,0 +4343 @@ static void bridge_NtQueryInformationFile(void)
++    native_status = g_eax;
+@@ -3526,0 +4345,3 @@ static void bridge_NtQueryInformationFile(void)
++    bridge_trace_file_io("query", STACK_ARG(0), handle, infoclass,
++            0, 0, length, (uint32_t)ios.Information, (uint32_t)ios.Status,
++            native_status, g_eax);
+@@ -3537,0 +4359 @@ static void bridge_NtSetInformationFile(void)
++    uint32_t native_status;
+@@ -3542,0 +4365,2 @@ static void bridge_NtSetInformationFile(void)
++        bridge_trace_file_io("set-info", STACK_ARG(0), handle, infoclass,
++                0, 0, length, 0, 0xC0000005u, g_eax, g_eax);
+@@ -3547,0 +4372 @@ static void bridge_NtSetInformationFile(void)
++    native_status = g_eax;
+@@ -3548,0 +4374,3 @@ static void bridge_NtSetInformationFile(void)
++    bridge_trace_file_io("set-info", STACK_ARG(0), handle, infoclass,
++            0, 0, length, (uint32_t)ios.Information, (uint32_t)ios.Status,
++            native_status, g_eax);
+@@ -4466,0 +5295,2 @@ static void bridge_KeWaitForMultipleObjects(void)
++    uint32_t guest_events[BRIDGE_MAXIMUM_WAIT_OBJECTS] = {0};
++    int event_types[BRIDGE_MAXIMUM_WAIT_OBJECTS];
+@@ -4475,3 +5305,21 @@ static void bridge_KeWaitForMultipleObjects(void)
+-    for (i = 0; i < count; i++)
+-        handles[i] = bridge_resolve_handle(
+-            objects_va ? BRIDGE_MEM32(objects_va + i * 4) : 0);
++    for (i = 0; i < count; i++) {
++        uint32_t object = objects_va ? BRIDGE_MEM32(objects_va + i * 4) : 0;
++        int type;
++        HANDLE ge = ke_guest_event(object, &type);
++        if (ge) {
++            if (BRIDGE_MEM32(object + 4) == 0) {
++                ResetEvent(ge);
++                if (BRIDGE_MEM32(object + 4) != 0)
++                    SetEvent(ge);
++            } else {
++                SetEvent(ge);
++            }
++            handles[i] = ge;
++            guest_events[i] = object;
++            event_types[i] = type;
++        } else {
++            handles[i] = ke_shadow_lookup(object);
++            if (!handles[i])
++                handles[i] = bridge_resolve_handle(object);
++        }
++    }
+@@ -4483,0 +5332,7 @@ static void bridge_KeWaitForMultipleObjects(void)
++
++    for (i = 0; i < count; i++) {
++        if (guest_events[i] && event_types[i] == 1 &&
++            ((wait_type == 0 && g_eax == 0) ||
++             (wait_type != 0 && g_eax < count && g_eax == i)))
++            BRIDGE_MEM32(guest_events[i] + 4) = 0;
++    }
+@@ -9338,38 +10192,0 @@ static void kernel_thunk_dispatch_body(void);
+-/* The guest CPU lock (RECOMP_GUEST_LOCK=1).
+- *
+- * The Xbox has one CPU: two guest threads never run guest code at the same
+- * instant, and titles lean on that without knowing it -- a worker fills a
+- * buffer and sets a flag with plain stores, and the reader trusts the order.
+- * Here every guest thread runs on its own host core, and the lifted C gives
+- * no ordering either. T()NY crashes somewhere different on every run
+- * once its loader workers start.
+- *
+- * With the lock on, a guest thread holds it while it runs guest code and
+- * lets go for the length of every kernel call -- the waits, sleeps and I/O
+- * where the console's scheduler would switch threads anyway. Host threads
+- * that only run a guest callback (vblank, interrupts) never take it.
+- *
+- * ponytail: a guest thread that spins in guest code on a flag another guest
+- * thread sets, with no kernel call in the loop, deadlocks here. The console
+- * would preempt it on its quantum; the upgrade is a periodic yield point in
+- * the lifted code's backward branches. */
+-static CRITICAL_SECTION g_guest_cpu;
+-static int g_guest_cpu_on = -1;
+-static RECOMP_TLS int t_guest_thread;     /* this host thread runs a guest thread */
+-static RECOMP_TLS int t_guest_held;       /* and holds the guest CPU */
+-static RECOMP_TLS int t_dispatch_depth;
+-
+-static int guest_cpu_enabled(void)
+-{
+-    if (g_guest_cpu_on < 0) {
+-        const char *e = getenv("RECOMP_GUEST_LOCK");
+-        InitializeCriticalSection(&g_guest_cpu);
+-        g_guest_cpu_on = e && *e == '1';
+-        if (g_guest_cpu_on)
+-            fprintf(stderr, "  [KERNEL] guest CPU lock on: one guest thread runs at a time\n");
+-    }
+-    return g_guest_cpu_on;
+-}
+-
+-/* Called once on each host thread that runs a guest thread, before its first
+- * guest instruction. */
+@@ -9378,5 +10195 @@ void guest_cpu_join(void)
+-    t_guest_thread = 1;
+-    if (guest_cpu_enabled() && !t_guest_held) {
+-        EnterCriticalSection(&g_guest_cpu);
+-        t_guest_held = 1;
+-    }
++    xbox_GuestCpuJoin();
+@@ -9387,5 +10200 @@ void guest_cpu_part(void)
+-    if (t_guest_held) {
+-        t_guest_held = 0;
+-        LeaveCriticalSection(&g_guest_cpu);
+-    }
+-    t_guest_thread = 0;
++    xbox_GuestCpuPart();
+@@ -9394,2 +10202,0 @@ void guest_cpu_part(void)
+-/* A guest thread lets go of the guest CPU for the length of every kernel
+- * call. */
+@@ -9398,6 +10205,5 @@ static void kernel_thunk_dispatch(void)
+-    int held = t_guest_held;
+-    if (held) {                        /* let other guest threads run meanwhile */
+-        t_guest_held = 0;
+-        LeaveCriticalSection(&g_guest_cpu);
+-    }
+-    t_dispatch_depth++;
++    int slot = g_kernel_dispatch_slot;
++    int held = xbox_GuestCpuRelease(
++        XBOX_GUEST_CPU_KERNEL,
++        slot >= 0 && slot < XBOX_KERNEL_THUNK_TABLE_SIZE
++            ? g_slot_ordinals[slot] : 0);
+@@ -9405,9 +10211,2 @@ static void kernel_thunk_dispatch(void)
+-    t_dispatch_depth--;
+-    /* Back to guest code: take the CPU again. Only at the outermost call --
+-     * a guest callback a bridge runs (an APC) returns into the bridge, not to
+-     * the thread's own code -- and only if the thread still exists as one. */
+-    if (t_guest_thread && t_dispatch_depth == 0 && guest_cpu_enabled()) {
+-        EnterCriticalSection(&g_guest_cpu);
+-        t_guest_held = 1;
+-    }
+-    (void)held;
++    if (held)
++        xbox_GuestCpuAcquire();
+@@ -9421,0 +10221,4 @@ static void kernel_thunk_dispatch_body(void)
++    /* A guest kernel call is a safe point for a device ISR posted while the
++     * current thread held the DISPATCH gate. */
++    xbox_IrqSafePoint();
++
+@@ -9452 +10255,4 @@ static void kernel_thunk_dispatch_body(void)
+-        if (now - last_summary_tick >= 2000 && g_kernel_call_count > 200) {
++        /* A zero kernel log budget means all kernel logging is disabled,
++         * including the periodic summary that otherwise bypassed KERNEL_LOG_ON. */
++        if (kernel_log_budget() > 0 && now - last_summary_tick >= 2000
++                && g_kernel_call_count > 200) {
+@@ -9666,0 +10473,2 @@ void xbox_kernel_bridge_init(void)
++    nv2a_set_irq_line_callback(xbox_nv2a_irq_line_changed);
++
