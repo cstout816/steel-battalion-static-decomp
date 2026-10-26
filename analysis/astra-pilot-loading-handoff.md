@@ -1742,3 +1742,7 @@ Static current AOT source shows `sub_0001DAA0` writes its argument to `0x0034770
 ### 2026-10-26 trace-counter check against retained r72 log
 
 Checked the new one-pass marker-count logic against the existing r72 `stderr.log` while PID 91128 still held the file open, using a read-only `FileShare.ReadWrite` stream; no log bytes were written. Counts match previously measured records: `[DCF4-CB]` 153, `[SYNC-PBSEM]` 300, `[FILE-CALL]` 141, and `[TITLE-ROUTE-QUERY]` 63. The same pass found `[SB-INPUT-PRED]` 2, `[SB-EDGE-CONSUME]` 1, `[NV2A-TICK]` 27, `[XID0]` 1, `[XID-DMA0]` 1; pilot-list, snapshot/dispatch, loader, file-I/O/lifecycle, and raster markers were zero. This verifies marker matching/counting on a real held-open log; it does not verify the post-exit manifest rewrite or relay-finalization path, and r72 remained a Dolby-stage run. No game process was changed.
+
+### 2026-10-26 run-manifest serialization preflight
+
+Without launching ProducerTrace or writing into the project, exercised the manifest file-discovery, SHA-256 collection, JSON serialization, and JSON round-trip against the existing r76 candidate and current source inputs. The result parsed with 10 file identities: 112,347,136-byte candidate SHA-256 `C3AF14894E2733F76D584A9A963523653BB18F113A10296BAD6DB721BD0B97FF`, one PDB, seven generated C files, and `recomp_types.h`; all entries had nonzero size and a SHA-256. This validates the manifest data shape and source discovery only; the actual launcher and post-run update remain unverified. PID 91128 still exists and was not touched.
