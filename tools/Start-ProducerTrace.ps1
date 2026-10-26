@@ -38,6 +38,8 @@ param(
 
     [switch]$EnableFileCopyTrace,
 
+    [switch]$EnableThreadStartTrace,
+
     [switch]$EnableMmioTrace,
 
     [switch]$EnablePacketTimingTrace,
@@ -200,6 +202,10 @@ if ($EnableFileCopyTrace) {
     $settings.RECOMP_FILE_COPY_TRACE = '1'
 }
 
+if ($EnableThreadStartTrace) {
+    $settings.RECOMP_THREAD_START_TRACE = '1'
+}
+
 if ($EnableMmioTrace) {
     $settings.RECOMP_MMIO_TRACE = '1'
 }
@@ -217,7 +223,7 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress)) {
     $settings.RECOMP_WATCH_NATIVE_RIP = '1'
 }
 
-$environmentNames = @($settings.Keys) + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + @(
+$environmentNames = @($settings.Keys) + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
     'RECOMP_FILE_OPEN_PATH_TRACE'
 )
@@ -244,6 +250,9 @@ try {
     if (-not $EnableFileCopyTrace) {
         Remove-Item Env:RECOMP_FILE_COPY_TRACE -ErrorAction SilentlyContinue
     }
+    if (-not $EnableThreadStartTrace) {
+        Remove-Item Env:RECOMP_THREAD_START_TRACE -ErrorAction SilentlyContinue
+    }
     if (-not $EnableMmioTrace) {
         Remove-Item Env:RECOMP_MMIO_TRACE -ErrorAction SilentlyContinue
     }
@@ -258,6 +267,9 @@ try {
     }
     if (-not $EnableFileCopyTrace) {
         $environmentSnapshot += 'RECOMP_FILE_COPY_TRACE=<unset; opt-in>'
+    }
+    if (-not $EnableThreadStartTrace) {
+        $environmentSnapshot += 'RECOMP_THREAD_START_TRACE=<unset; opt-in>'
     }
     if (-not $EnableMmioTrace) {
         $environmentSnapshot += 'RECOMP_MMIO_TRACE=<unset; opt-in>'
