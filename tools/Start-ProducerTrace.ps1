@@ -399,4 +399,56 @@ if ($useAsyncTraceRelay) {
     "Dropped trace lines: stdout=$($relayResult.DroppedStdoutLines), stderr=$($relayResult.DroppedStderrLines)"
     "Log writer stopped: $($relayResult.WriterStopped)"
     if ($relayResult.WriterError) { "Log writer error: $($relayResult.WriterError)" }
+
+    $traceMarkers = @(
+        '[PILOT-LIST-CB]', '[SB-SNAPSHOT]', '[SB-INPUT-DISPATCH]',
+        '[MENU-DISPATCH]', '[MENU-RESOURCE]', '[THREAD-START]',
+        '[PRELOAD-WORKER-ROUTE]', '[FILE-PRELOAD-ENTER]',
+        '[FILE-COPY-ENTER]', '[FILE-COPY-RETURN]', '[FILE-IO]',
+        '[FILE-LIFECYCLE-OPEN-CAPPED]', '[FILE-LIFECYCLE-OPEN]',
+        '[FILE-LIFECYCLE-CLOSE]', '[LOAD-PASS-IN]', '[LOAD-PASS-OUT]',
+        '[LOAD-REPEAT]', '[DCF4-CB]', '[SB-DMA-PUBLISH]', '[SB-PFB-POLL]',
+        '[RASTER-PERF]', '[XID0]', '[XID-DMA0]'
+    )
+    $markerPattern = ($traceMarkers | Sort-Object Length -Descending |
+        ForEach-Object { [regex]::Escape($_) }) -join '|'
+    $markerRegex = [regex]::new(
+        $markerPattern,
+        [System.Text.RegularExpressions.RegexOptions]::Compiled)
+    $markerCounts = [ordered]@{}
+    foreach ($marker in $traceMarkers) { $markerCounts[$marker] = 0 }
+    if ($relayResult.WriterStopped) {
+        $reader = [IO.StreamReader]::new($stderrLog)
+        try {
+            while ($null -ne ($line = $reader.ReadLine())) {
+                foreach ($match in $markerRegex.Matches($line)) {
+                    $markerCounts[$match.Value]++
+                }
+            }
+        }
+        finally { $reader.Dispose() }
+    }
+    $countsComplete = $relayResult.WriterStopped -and
+        $relayResult.DroppedStderrLines -eq 0 -and
+        [string]::IsNullOrEmpty($relayResult.WriterError)
+    $resultManifest = Get-Content -LiteralPath (Join-Path $runDirectory 'run-manifest.json') -Raw |
+        ConvertFrom-Json
+    $resultManifest | Add-Member -NotePropertyName RunResult -NotePropertyValue ([ordered]@{
+        ProcessExitCode = $relayResult.ExitCode
+        DroppedStdoutLines = $relayResult.DroppedStdoutLines
+        DroppedStderrLines = $relayResult.DroppedStderrLines
+        LogWriterStopped = $relayResult.WriterStopped
+        LogWriterError = $relayResult.WriterError
+        NoRelayDrops = ($relayResult.DroppedStdoutLines -eq 0 -and
+            $relayResult.DroppedStderrLines -eq 0)
+        MarkerCountsComplete = $countsComplete
+        MarkerCounts = $markerCounts
+    }) -Force
+    $resultManifest | ConvertTo-Json -Depth 8 |
+        Set-Content -LiteralPath (Join-Path $runDirectory 'run-manifest.json') -Encoding UTF8
+    if ($relayResult.WriterStopped) {
+        $markerCounts.GetEnumerator() | ForEach-Object {
+            '{0} {1}' -f $_.Key, $_.Value
+        } | Set-Content -LiteralPath (Join-Path $runDirectory 'trace-counts.txt') -Encoding UTF8
+    }
 }
