@@ -107,6 +107,7 @@ foreach ($check in @(
     @{ Path = $generatedFileCopySource; Marker = '[FILE-COPY-RETURN]' },
     @{ Path = $generatedFileCopySource; Marker = '[THREAD-START]' },
     @{ Path = $generatedPreloadSource; Marker = '[FILE-PRELOAD-ENTER]' },
+    @{ Path = $generatedPreloadSource; Marker = '[PRELOAD-WORKER-ROUTE]' },
     @{ Path = $generatedPreloadSource; Marker = 'tex_index=%04X tex16_override=%08X' },
     @{ Path = $generatedPreloadSource; Marker = '[FILE-PRELOAD-RETURN]' },
     @{ Path = $generatedAudioSource; Marker = '[SB-STREAM-STATE]' },

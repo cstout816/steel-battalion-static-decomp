@@ -40,6 +40,8 @@ param(
 
     [switch]$EnableThreadStartTrace,
 
+    [switch]$EnablePreloadWorkerTrace,
+
     [switch]$EnableMmioTrace,
 
     [switch]$EnablePacketTimingTrace,
@@ -209,6 +211,10 @@ if ($EnableThreadStartTrace) {
     $settings.RECOMP_THREAD_START_TRACE = '1'
 }
 
+if ($EnablePreloadWorkerTrace) {
+    $settings.RECOMP_PRELOAD_WORKER_TRACE = '1'
+}
+
 if ($EnableMmioTrace) {
     $settings.RECOMP_MMIO_TRACE = '1'
 }
@@ -226,7 +232,7 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress)) {
     $settings.RECOMP_WATCH_NATIVE_RIP = '1'
 }
 
-$environmentNames = @($settings.Keys) + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + @(
+$environmentNames = @($settings.Keys) + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
     'RECOMP_FILE_OPEN_PATH_TRACE'
 )
@@ -256,6 +262,9 @@ try {
     if (-not $EnableThreadStartTrace) {
         Remove-Item Env:RECOMP_THREAD_START_TRACE -ErrorAction SilentlyContinue
     }
+    if (-not $EnablePreloadWorkerTrace) {
+        Remove-Item Env:RECOMP_PRELOAD_WORKER_TRACE -ErrorAction SilentlyContinue
+    }
     if (-not $EnableMmioTrace) {
         Remove-Item Env:RECOMP_MMIO_TRACE -ErrorAction SilentlyContinue
     }
@@ -273,6 +282,9 @@ try {
     }
     if (-not $EnableThreadStartTrace) {
         $environmentSnapshot += 'RECOMP_THREAD_START_TRACE=<unset; opt-in>'
+    }
+    if (-not $EnablePreloadWorkerTrace) {
+        $environmentSnapshot += 'RECOMP_PRELOAD_WORKER_TRACE=<unset; opt-in>'
     }
     if (-not $EnableMmioTrace) {
         $environmentSnapshot += 'RECOMP_MMIO_TRACE=<unset; opt-in>'
