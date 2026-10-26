@@ -6,9 +6,10 @@ Starts a separate current-source ProducerTrace run with screen-gated live input.
 Refuses to start beside any your_game_recomp process, requires an existing save
 directory, creates a fresh local log folder, and starts with an empty live-input
 file. It does not copy save data or send input. Append input only after checking
-the latest framebuffer and confirming the expected screen. Use -AsyncTraceRelay
-for verbose traces so child output is drained through a bounded queue instead of
-writing directly to log files; any dropped lines are reported after exit.
+the latest framebuffer and confirming the expected screen. Child output is
+drained through a bounded asynchronous queue by default; any dropped lines are
+reported after exit. Use -DirectTraceOutput only when direct file output is
+specifically needed.
 
 .EXAMPLE
 ./tools/Start-ProducerTrace.ps1 -RunName m3-producer-trace-screen-gated-20261024 -AsyncTraceRelay
@@ -48,6 +49,8 @@ param(
 
     [switch]$AsyncTraceRelay,
 
+    [switch]$DirectTraceOutput,
+
     [ValidateRange(256, 1048576)]
     [int]$AsyncTraceQueueCapacity = 32768,
 
@@ -55,6 +58,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($AsyncTraceRelay -and $DirectTraceOutput) {
+    throw 'Choose either the default asynchronous trace relay or -DirectTraceOutput, not both.'
+}
+$useAsyncTraceRelay = -not $DirectTraceOutput
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $traceExe = Join-Path $projectRoot 'local-tools\steel-battalion-game\build-xpp-seeded\ProducerTrace\Release\your_game_recomp_producer_trace.exe'
@@ -291,7 +299,7 @@ try {
     }
     $environmentSnapshot += 'RECOMP_FILE_FAIL_PATH_TRACE=<unset; lifecycle traces cover opens>'
     $environmentSnapshot += 'RECOMP_FILE_OPEN_PATH_TRACE=<unset; lifecycle traces cover opens>'
-    if ($AsyncTraceRelay) {
+    if ($useAsyncTraceRelay) {
         $environmentSnapshot += "TRACE_OUTPUT_MODE=bounded asynchronous relay; queue capacity $AsyncTraceQueueCapacity lines; overflow drops recorded"
     }
     else {
@@ -299,7 +307,7 @@ try {
     }
     $environmentSnapshot | Set-Content -LiteralPath (Join-Path $runDirectory 'environment.txt') -Encoding UTF8
 
-    if ($AsyncTraceRelay) {
+    if ($useAsyncTraceRelay) {
         $relaySource = Join-Path $PSScriptRoot 'ProducerTraceAsyncRelay.cs'
         if (-not (Test-Path -LiteralPath $relaySource -PathType Leaf)) {
             throw "Asynchronous trace relay source is missing: $relaySource"
@@ -333,7 +341,7 @@ finally {
 "Run logs: $runDirectory"
 "Existing saves: $saveRoot"
 "Screen-gated input file (created empty): $padLive"
-if ($AsyncTraceRelay) {
+if ($useAsyncTraceRelay) {
     'Waiting for the diagnostic game process to exit so the asynchronous log relay can finalize its files.'
     $relayResult = [ProducerTraceAsyncRelay]::WaitForExit($process, 5000)
     "Diagnostic process exit code: $($relayResult.ExitCode)"

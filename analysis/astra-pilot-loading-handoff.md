@@ -1600,3 +1600,7 @@ The direct `sub_0001DAA0` callsites also include `sub_00101A60` at `0x00101E63`,
 ### 2026-10-26 clean-checkout trace relay repair
 
 The current `Start-ProducerTrace.ps1 -AsyncTraceRelay` path requires `tools/ProducerTraceAsyncRelay.cs`, a small project-authored bounded stdout/stderr drain that keeps child trace writes off the game process's filesystem path. The source existed in the working directory but was untracked, so a clean Git checkout would fail the async-replay preparation. Added this source as project tooling (no Xbox/game-derived content) and committed it with the handoff note. The relay was reviewed but not compiled or executed; PID 91128 remains active. Keep using `-AsyncTraceRelay` for the next capture and retain its dropped-line report as evidence.
+
+### 2026-10-26 async output relay is now the diagnostic default
+
+`Start-ProducerTrace.ps1` previously defaulted to direct file redirection unless `-AsyncTraceRelay` was passed. r72's trace ended mid-write, with stack evidence supporting a synchronous logging stall candidate; therefore the default now uses the already bounded asynchronous relay, and `-DirectTraceOutput` is the explicit opt-out. Existing `-AsyncTraceRelay` calls remain accepted. The script records the chosen output mode and reports dropped lines after process exit. This changes only diagnostic output transport, not guest behavior. Source reviewed; no parser run, build, or runtime verification was performed because PID 91128 remains open.
