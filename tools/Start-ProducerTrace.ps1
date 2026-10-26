@@ -171,9 +171,9 @@ $settings = [ordered]@{
     RECOMP_SB_PRED_TRACE = '1'
     RECOMP_SB_ROSTER_TRACE = '1'
     RECOMP_SB_INPUT_SNAPSHOT_TRACE = '1'
-    # This AOT image calls the generic trace hook at many guest functions.
-    # The runtime defaults that stream to 400,000 fflush(stderr) rows; explicit
-    # XID/menu/file/loader/GPU traces above and below are independent.
+    # The current generated gen/recomp_types.h compiles generic function trace
+    # macros to no-ops. Keep this at zero as a guard if a trace-enabled header
+    # is substituted; the named XID/menu/file/loader/GPU probes are gated below.
     RECOMP_TRACE_BUDGET = '0'
     RECOMP_SYNC_TRACE = '1'
     RECOMP_TITLE_INPUT_TRACE = '1'
