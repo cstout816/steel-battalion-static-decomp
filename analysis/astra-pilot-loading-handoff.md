@@ -1616,3 +1616,9 @@ Keep `saves-m3-known-save-copy-20261023` preserved as an affected diagnostic art
 ### 2026-10-26 selected intact existing trace save root
 
 Hash comparison confirms that the source `media\\bgm\\STRM02.WAV` and three intact existing cache copies are byte-identical: each is 2,645,998 bytes with SHA-256 `A1813BDF712458B4693920A6D4278398D87D27C110F16D20EFE537CEFEE6A7AB`. The chosen `saves-m3-route-file-read-copy-20261023` has an empty `UserData` folder and the intact cache. Updated `Start-ProducerTrace.ps1` to use this existing root by default, so the next authorized new-pilot capture avoids the r72-affected cache without copying or altering the latter. No build or launch; PID 91128 is still open.
+
+### 2026-10-26 09:08 CDT — fresh r72 process snapshot
+
+Captured `r72-snapshot-20261026-0908.dmp` (879,265 bytes) from PID 91128 without terminating it. The process still maps the r72 executable SHA-256 `81877855BF91112C948C1C61F86688F062F2479A2F5281FD2A93366F981A3F08`; it has 33 threads, `Responding=False`, and window title `STEEL BATTALION | FPS: 0.0 | draws: 2`. Its `stderr.log` (547,897 bytes) is unchanged since 06:01:28 and `frame.bmp` (921,654 bytes) since 06:01:50.
+
+The new snapshot's TID 89212 is at an ntdll wait RIP. Heuristic stack-word scanning again finds `bridge_NtWaitForMultipleObjectsEx+0xA1` and `fprintf+0x3D`; TIDs 87724 and 92828 also contain `fprintf+0x3D` in their scanned stacks. TID 92476's stack contains raster worker routines, but there is no current raster timing window or synchronized framebuffer data. This repeats evidence consistent with r72's direct synchronous logging stall; the stack scan is not a native unwind and does not prove a CRT-lock deadlock. It supports the r72 instrumentation/startup-stall candidate only, not r69's NOW LOADING/TEX00 cause, the separate r71 DCF4 wait, or a raster backlog. No game input, code fix, build, relaunch, or process termination was performed. PID 91128 remains open.
