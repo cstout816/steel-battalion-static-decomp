@@ -1,0 +1,80 @@
+diff --git a/src/kernel/kernel_bridge.c b/src/kernel/kernel_bridge.c
+index c65ba43..e323884 100644
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -3223,20 +3957,75 @@ static void bridge_complete_file_io(uint32_t event_token, uint32_t apc_routine,
+ 
+ static void bridge_XeSection(int load)
+ {
++    static int trace_enabled = -1;
++    static volatile LONG trace_rows;
+     uint32_t section = STACK_ARG(0);
+     uint32_t count;
++    uint32_t count_before = 0;
++    uint32_t flags = 0, virtual_address = 0, virtual_size = 0;
++    uint32_t name_va = 0, stack0 = 0, stackm4 = 0;
++    char section_name[64];
++    size_t name_len = 0;
++    LONG trace_row = 0, trace_index = 0;
++
++    if (trace_enabled < 0)
++        trace_enabled = getenv("RECOMP_XBE_SECTION_TRACE") ? 1 : 0;
++    if (trace_enabled) {
++        trace_index = InterlockedIncrement(&trace_rows);
++    }
++    if (trace_index > 0 && trace_index <= 4096) {
++        trace_row = trace_index;
++        if (bridge_va_mapped(g_esp, 4))
++            stack0 = BRIDGE_MEM32(g_esp);
++        if (g_esp >= 4 && bridge_va_mapped(g_esp - 4, 4))
++            stackm4 = BRIDGE_MEM32(g_esp - 4);
++    }
++    section_name[0] = '\0';
+ 
+     if (!section) {
++        if (trace_row)
++            fprintf(stderr, "[XBE-SECTION] n=%ld tick_ms=%llu tid=%u action=%s section=00000000 result=C000000D\n",
++                    trace_row, (unsigned long long)GetTickCount64(),
++                    (unsigned)GetCurrentThreadId(), load ? "load" : "unload");
+         g_eax = 0xC000000Du;              /* STATUS_INVALID_PARAMETER */
+         return;
+     }
++    if (trace_row && bridge_va_mapped(section, 0x1C)) {
++        flags = BRIDGE_MEM32(section + 0x00);
++        virtual_address = BRIDGE_MEM32(section + 0x04);
++        virtual_size = BRIDGE_MEM32(section + 0x08);
++        name_va = BRIDGE_MEM32(section + 0x14);
++        if (name_va && bridge_va_mapped(name_va, 1)) {
++            while (name_len + 1 < sizeof(section_name) &&
++                   bridge_va_mapped(name_va + (uint32_t)name_len, 1)) {
++                unsigned char c = BRIDGE_MEM8(name_va + (uint32_t)name_len);
++                if (!c) break;
++                section_name[name_len++] = (c >= 0x20 && c <= 0x7E) ? (char)c : '?';
++            }
++            section_name[name_len] = '\0';
++        }
++    }
+     count = BRIDGE_MEM32(section + XBE_SECTION_REFCOUNT_OFFSET);
++    count_before = count;
+     if (load)
+         count++;
+     else if (count)
+         count--;
+     BRIDGE_MEM32(section + XBE_SECTION_REFCOUNT_OFFSET) = count;
+ 
++    if (trace_row) {
++        fprintf(stderr,
++                "[XBE-SECTION] n=%ld tick_ms=%llu tid=%u action=%s section=%08X "
++                "name=%s name_va=%08X flags=%08X va=%08X size=%08X "
++                "refcount=%u->%u stack0=%08X stackm4=%08X result=00000000\n",
++                trace_row, (unsigned long long)GetTickCount64(),
++                (unsigned)GetCurrentThreadId(), load ? "load" : "unload",
++                section, section_name[0] ? section_name : "<unavailable>", name_va,
++                flags, virtual_address, virtual_size, count_before, count,
++                stack0, stackm4);
++        fflush(stderr);
++    }
++
+     if (KERNEL_LOG_ON())
+         fprintf(stderr, "  [XBE] Xe%sSection(0x%08X) refcount=%u\n",
+                 load ? "Load" : "Unload", section, count);

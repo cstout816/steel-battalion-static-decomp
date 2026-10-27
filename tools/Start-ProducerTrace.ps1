@@ -54,6 +54,8 @@ param(
 
     [switch]$EnableDsoundWriteWatch,
 
+    [switch]$EnableXbeSectionTrace,
+
     [switch]$EnableMmioTrace,
 
     [switch]$EnablePacketTimingTrace,
@@ -108,6 +110,7 @@ $generatedDiagnosticSources = @(
 $diagnosticSupportSources = @(
     (Join-Path $projectRoot 'local-tools\steel-battalion-game\src\main.c'),
     (Join-Path $projectRoot 'local-tools\steel-battalion-game\src\dsound_write_watch.c'),
+    (Join-Path $projectRoot 'local-tools\xboxrecomp\src\kernel\kernel_bridge.c'),
     (Join-Path $projectRoot 'local-tools\steel-battalion-game\CMakeLists.txt')
 )
 $logRoot = Join-Path $projectRoot 'iso\local-analysis\logs'
@@ -145,6 +148,10 @@ foreach ($source in $diagnosticSupportSources) {
     if ($EnableDsoundWriteWatch -and
             (Get-Item -LiteralPath $traceExe).LastWriteTimeUtc -lt (Get-Item -LiteralPath $source).LastWriteTimeUtc) {
         throw "Write-watch executable is older than its diagnostic support source ($source). Build it before launching."
+    }
+    if ($EnableXbeSectionTrace -and $source -like '*xboxrecomp\src\kernel\kernel_bridge.c' -and
+            (Get-Item -LiteralPath $traceExe).LastWriteTimeUtc -lt (Get-Item -LiteralPath $source).LastWriteTimeUtc) {
+        throw "XBE-section-trace executable is older than the kernel bridge ($source). Build it before launching."
     }
 }
 if (Test-Path -LiteralPath $runDirectory) {
@@ -284,6 +291,12 @@ if ($EnableDsoundWriteWatch) {
     $settings.RECOMP_DSOUND_WRITE_WATCH_LOG = $dsoundWriteWatchLog
 }
 
+if ($EnableXbeSectionTrace) {
+    # Bounded per-call XeLoadSection/XeUnloadSection records. This identifies
+    # the selected XBE section and refcount without enabling broad kernel logs.
+    $settings.RECOMP_XBE_SECTION_TRACE = '1'
+}
+
 if ($EnableMmioTrace) {
     $settings.RECOMP_MMIO_TRACE = '1'
 }
@@ -306,7 +319,7 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
     $settings.RECOMP_WATCH2 = $GuestWatchAddress2
 }
 
-$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + @(
+$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
     'RECOMP_FILE_OPEN_PATH_TRACE'
 )
@@ -344,6 +357,9 @@ try {
     if (-not $EnableMmioTrace) {
         Remove-Item Env:RECOMP_MMIO_TRACE -ErrorAction SilentlyContinue
     }
+    if (-not $EnableXbeSectionTrace) {
+        Remove-Item Env:RECOMP_XBE_SECTION_TRACE -ErrorAction SilentlyContinue
+    }
     if ([string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
         Remove-Item Env:RECOMP_WATCH2 -ErrorAction SilentlyContinue
     }
@@ -371,6 +387,9 @@ try {
     }
     if (-not $EnableMmioTrace) {
         $environmentSnapshot += 'RECOMP_MMIO_TRACE=<unset; opt-in>'
+    }
+    if (-not $EnableXbeSectionTrace) {
+        $environmentSnapshot += 'RECOMP_XBE_SECTION_TRACE=<unset; opt-in>'
     }
     if ([string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
         $environmentSnapshot += 'RECOMP_WATCH2=<unset; opt-in second direct guest address>'

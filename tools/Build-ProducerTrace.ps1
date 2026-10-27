@@ -166,6 +166,17 @@ foreach ($marker in @(
     }
 }
 
+foreach ($marker in @(
+    'RECOMP_XBE_SECTION_TRACE',
+    '[XBE-SECTION]',
+    'XBE_SECTION_REFCOUNT_OFFSET',
+    'refcount=%u->%u'
+)) {
+    if (-not (Select-String -LiteralPath $kernelTraceSource -SimpleMatch $marker -Quiet)) {
+        throw "Kernel bridge is missing bounded XBE section tracing: $marker"
+    }
+}
+
 New-Item -ItemType Directory -Path $traceDir -Force | Out-Null
 $kernelOutDirArg = '/p:OutDir=' + (Join-Path $buildRoot 'xboxrecomp\src\kernel\Release') + '\'
 & $msbuild $kernelProject '/nologo' '/m' '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' $kernelOutDirArg '/v:minimal'
