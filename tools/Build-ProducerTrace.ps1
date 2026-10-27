@@ -130,6 +130,7 @@ foreach ($check in @(
     @{ Path = $generatedPreloadSource; Marker = '[PRELOAD-TEX00-CALL]' },
     @{ Path = $generatedPreloadSource; Marker = 'RECOMP_PRELOAD_TEX00_GATE_TRACE' },
     @{ Path = $generatedPreloadSource; Marker = '[PRELOAD-WORKER-SCHEDULE]' },
+    @{ Path = $generatedPreloadSource; Marker = '[LOAD-OBJECT-INIT]' },
     @{ Path = $generatedPreloadSource; Marker = 'RECOMP_PRELOAD_WORKER_SCHEDULE_TRACE' },
     @{ Path = $generatedMenuSource; Marker = '[PRELOAD-MODE-REQUEST]' },
     @{ Path = $generatedMenuSource; Marker = 'RECOMP_PRELOAD_MODE_REQUEST_TRACE' },
@@ -151,6 +152,8 @@ foreach ($check in @(
     @{ Path = $generatedLoaderSource; Marker = '[LOAD-RENDER]' },
     @{ Path = $generatedFileCopySource; Marker = '[FILE-COPY-ENTER]' },
     @{ Path = $generatedFileCopySource; Marker = '[FILE-COPY-RETURN]' },
+    @{ Path = $generatedFileCopySource; Marker = '[LOAD-HELPER-CALLBACK]' },
+    @{ Path = $generatedFileCopySource; Marker = '[LOAD-HELPER-STATE]' },
     @{ Path = $generatedFileCopySource; Marker = '[THREAD-START]' },
     @{ Path = $generatedPreloadSource; Marker = '[FILE-PRELOAD-ENTER]' },
     @{ Path = $generatedPreloadSource; Marker = '[PRELOAD-WORKER-ROUTE]' },
@@ -191,16 +194,16 @@ foreach ($marker in @(
 }
 
 New-Item -ItemType Directory -Path $traceDir -Force | Out-Null
-$kernelOutDirArg = '/p:OutDir=' + (Join-Path $buildRoot 'xboxrecomp\src\kernel\Release') + '\'
+$kernelOutDirArg = '/p:OutDir=' + (Join-Path $buildRoot 'xboxrecomp\src\kernel\Release') + '\\'
 & $msbuild $kernelProject '/nologo' '/m' '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' $kernelOutDirArg '/v:minimal'
 if ($LASTEXITCODE -ne 0) { throw "Kernel trace-library build failed with exit code $LASTEXITCODE" }
-$usbOutDirArg = '/p:OutDir=' + (Join-Path $buildRoot 'xboxrecomp\src\usb\Release') + '\'
+$usbOutDirArg = '/p:OutDir=' + (Join-Path $buildRoot 'xboxrecomp\src\usb\Release') + '\\'
 & $msbuild $usbProject '/nologo' '/m' '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' $usbOutDirArg '/v:minimal'
 if ($LASTEXITCODE -ne 0) { throw "USB trace-library build failed with exit code $LASTEXITCODE" }
-$outDirArg = '/p:OutDir=' + $traceDir + '\'
-# Some generated diagnostic chunks add bounded fprintf(stderr, ...) probes but
-# do not carry the CRT declaration themselves. Force-include stdio so a fresh
-# generated-source pass remains buildable without editing game semantics.
+$outDirArg = '/p:OutDir=' + $traceDir + '\\'
+# Generated diagnostic chunks use bounded fprintf(stderr, ...) probes but do
+# not all carry the stdio declaration. Force-include stdio without changing
+# game semantics; trace-only getenv use is declared by its generated chunk.
 & $msbuild $projectFile '/nologo' '/m' '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' '/p:ForcedIncludeFiles=stdio.h' $outDirArg '/v:minimal'
 if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
 if (-not (Test-Path -LiteralPath $stagedExe -PathType Leaf)) {
