@@ -424,7 +424,7 @@ try {
 
     $environmentSnapshot = @($settings.GetEnumerator() | ForEach-Object { "{0}={1}" -f $_.Key, $_.Value })
     $environmentSnapshot += "EXECUTABLE_PATH=$traceExe"
-    $environmentSnapshot += "AUTO_PLATEAU_STOP=$PlateauSeconds seconds; requires unchanged mode-2 loader signature and framebuffer hash"
+    $environmentSnapshot += "AUTO_PLATEAU_STOP=$PlateauSeconds seconds; requires unchanged mode-2 loader signature and framebuffer signature excluding the loading-indicator band"
     $environmentSnapshot += 'RECOMP_PAD_SCRIPT=<unset; screen-gated live input only>'
     if (-not $EnableFileCallerTrace) {
         $environmentSnapshot += 'RECOMP_FILE_CALLER_TRACE=<unset; opt-in>'
@@ -543,6 +543,43 @@ finally {
     }
 }
 
+function Get-PlateauFramebufferHash {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 54 -or $bytes[0] -ne 0x42 -or $bytes[1] -ne 0x4D) {
+        throw "Framebuffer capture is not a complete BMP: $Path"
+    }
+
+    $width = [BitConverter]::ToInt32($bytes, 18)
+    $height = [Math]::Abs([BitConverter]::ToInt32($bytes, 22))
+    $bitsPerPixel = [BitConverter]::ToInt16($bytes, 28)
+    if ($width -ne 640 -or $height -ne 480 -or $bitsPerPixel -ne 24) {
+        return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash
+    }
+
+    # The loading text and animated bars occupy this narrow band. Excluding
+    # it lets the watchdog see a static loading scene while still detecting a
+    # transition to a rendered mission frame or another screen.
+    $stride = [int][Math]::Ceiling(($width * 3) / 4.0) * 4
+    $stream = [IO.MemoryStream]::new()
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $stream.Write($bytes, 0, 54)
+        for ($rawRow = 0; $rawRow -lt $height; $rawRow++) {
+            $visibleY = $height - 1 - $rawRow
+            if ($visibleY -ge 220 -and $visibleY -lt 260) { continue }
+            $offset = 54 + $rawRow * $stride
+            $stream.Write($bytes, $offset, $stride)
+        }
+        return ([BitConverter]::ToString($sha.ComputeHash($stream.ToArray()))).Replace('-', '')
+    }
+    finally {
+        $sha.Dispose()
+        $stream.Dispose()
+    }
+}
+
 "Started ProducerTrace PID $($process.Id)"
 "Run logs: $runDirectory"
 "Existing saves: $saveRoot"
@@ -582,7 +619,7 @@ while (-not $process.WaitForExit(10000)) {
             'mode=(?<mode>[0-9A-F]+).*range=(?<range>[0-9]+\.\.[0-9]+).*last_index=(?<index>[0-9]+).*branch=(?<branch>[^ ]+).*result=(?<result>[0-9A-F]+).*pair=(?<pairA>[0-9A-F]+)/(?<pairB>[0-9A-F]+)')
         if ($passMatch.Success) {
             try {
-                $frameHash = (Get-FileHash -LiteralPath $framePath -Algorithm SHA256 -ErrorAction Stop).Hash
+                $frameHash = Get-PlateauFramebufferHash -Path $framePath
                 # Exclude tick and pass number so a normal polling loop does
                 # not look like forward loader progress on every iteration.
                 $currentPlateauSignature = 'mode={0}|range={1}|index={2}|branch={3}|result={4}|pair={5}/{6}|frame={7}' -f @(

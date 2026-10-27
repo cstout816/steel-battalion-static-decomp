@@ -120,6 +120,8 @@ foreach ($check in @(
     @{ Path = $generatedMenuSource; Marker = '[LOAD-HELPER]' },
     @{ Path = $generatedMenuSource; Marker = '[LOAD-HELPER-BRANCH]' },
     @{ Path = $generatedMenuSource; Marker = '[LOAD-HELPER-RET]' },
+    @{ Path = $generatedMenuSource; Marker = 'index=%08X path0=%08X path1=%08X' },
+    @{ Path = $generatedMenuSource; Marker = 'open1=%08X open2=%08X open3=%08X stage=%08X' },
     @{ Path = $generatedMenuSource; Marker = '[LOAD-PASS-IN]' },
     @{ Path = $generatedMenuSource; Marker = '[LOAD-PASS-OUT]' },
     @{ Path = $generatedMenuSource; Marker = '[LOAD-STACK]' },
