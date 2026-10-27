@@ -22,9 +22,11 @@ param(
     [string]$RunName,
 
     [ValidateRange(1800, 43200)]
-    [int]$WatchdogSeconds = 7200,
+    [int]$WatchdogSeconds = 1800,
 
     [string]$GuestWatchAddress,
+
+    [string]$GuestWatchAddress2,
 
     [switch]$EnableDcf4ProducerTrace,
 
@@ -296,8 +298,13 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress)) {
     $settings.RECOMP_WATCH_BLOCK = '1'
     $settings.RECOMP_WATCH_NATIVE_RIP = '1'
 }
+if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
+    # Optional second direct guest VA. Useful when a dynamic pointer-chain watch
+    # tracks a list head while a second watch follows a previously observed node.
+    $settings.RECOMP_WATCH2 = $GuestWatchAddress2
+}
 
-$environmentNames = @($settings.Keys) + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + @(
+$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
     'RECOMP_FILE_OPEN_PATH_TRACE'
 )
@@ -335,6 +342,9 @@ try {
     if (-not $EnableMmioTrace) {
         Remove-Item Env:RECOMP_MMIO_TRACE -ErrorAction SilentlyContinue
     }
+    if ([string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
+        Remove-Item Env:RECOMP_WATCH2 -ErrorAction SilentlyContinue
+    }
 
     $environmentSnapshot = @($settings.GetEnumerator() | ForEach-Object { "{0}={1}" -f $_.Key, $_.Value })
     $environmentSnapshot += "EXECUTABLE_PATH=$traceExe"
@@ -359,6 +369,9 @@ try {
     }
     if (-not $EnableMmioTrace) {
         $environmentSnapshot += 'RECOMP_MMIO_TRACE=<unset; opt-in>'
+    }
+    if ([string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
+        $environmentSnapshot += 'RECOMP_WATCH2=<unset; opt-in second direct guest address>'
     }
     if (-not $EnableFileFailurePathTrace) {
         $environmentSnapshot += 'RECOMP_FILE_FAIL_PATH_TRACE=<unset; opt-in sampled failure paths>'
