@@ -6092,3 +6092,7 @@ The run reached `NOW LOADING`, with 103 mode-2 scans returning zero and the trac
 ### r84 read-record correction — 2026-10-27
 
 A separate `[READ]` stream was overlooked in the first r84 summary and is now included in the report and README. It contains 5,587 read completions; every IOSB/native status is successful. Twenty-four async-handle calls return guest `STATUS_PENDING`, but this local HLE performs and completes the read synchronously before returning that status. The final recorded read is an 18,432-byte BGM02 stream read by TID 123364 at tick 354182953; there are no read records during the following ~2m56s of static loading. This rules out a currently pending `NtReadFile` as the observed sustained wait, but not another loader job, non-read wait, or state transition. Next capture native thread dumps and guest stacks during the repeated loading state.
+
+### Bounded diagnostic defaults — 2026-10-27
+
+R84's environment enabled producer-stage and per-store sync traces, which created high-volume `[SB-DMA-PUBLISH]`/`[SYNC-PBSEM]` logs. The trace launcher now clears inherited producer tracing unless the separate DCF4 producer option is explicitly enabled, and disables detailed PB semaphore/sync records by default. Periodic NV2A state and callback tracing remain available; high-volume synchronization history is opt-in. This keeps the next native-stack capture smaller and follows the instruction to investigate DCF4 producer stages only when the distinct DCF4 wait reproduces.

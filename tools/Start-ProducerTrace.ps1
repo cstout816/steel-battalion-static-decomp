@@ -32,6 +32,8 @@ param(
 
     [switch]$EnableDcf4ProducerTrace,
 
+    [switch]$EnableHighVolumeSyncTrace,
+
     [switch]$EnableLoadStateCallbackTrace,
 
     [switch]$EnableSbCallbackTargetTrace,
@@ -200,7 +202,6 @@ $settings = [ordered]@{
     RECOMP_PAD_LIVE = $padLive
     RECOMP_PB_EXEC = '1'
     RECOMP_PB_REPORT_MS = '30000'
-    RECOMP_PB_SEMAPHORE_TRACE = '1'
     RECOMP_RASTER_PERF_TRACE = '1'
     RECOMP_RASTER_THREADS = '4'
     RECOMP_SAVE_DIR = $saveRoot
@@ -211,7 +212,6 @@ $settings = [ordered]@{
     # macros to no-ops. Keep this at zero as a guard if a trace-enabled header
     # is substituted; the named XID/menu/file/loader/GPU probes are gated below.
     RECOMP_TRACE_BUDGET = '0'
-    RECOMP_SYNC_TRACE = '1'
     RECOMP_TITLE_INPUT_TRACE = '1'
     RECOMP_TITLE_ROUTE_TRACE = '1'
     RECOMP_TITLE_OBJECT_GATE_TRACE = '1'
@@ -234,6 +234,14 @@ if ($EnableDcf4ProducerTrace) {
     # The current executable contains bounded producer-stage instrumentation.
     # Enable it only for a run specifically investigating a reproduced DCF4 wait.
     $settings.RECOMP_SB_DCF4_PRODUCER_TRACE = '1'
+}
+
+if ($EnableHighVolumeSyncTrace) {
+    # Detailed PB semaphore/sync records can emit tens of thousands of rows.
+    # The default keeps periodic NV2A/DCF4 snapshots; opt in only for a run
+    # that specifically needs per-store synchronization history.
+    $settings.RECOMP_PB_SEMAPHORE_TRACE = '1'
+    $settings.RECOMP_SYNC_TRACE = '1'
 }
 
 if ($EnableLoadStateCallbackTrace) {
@@ -319,7 +327,7 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
     $settings.RECOMP_WATCH2 = $GuestWatchAddress2
 }
 
-$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + @(
+$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
     'RECOMP_FILE_OPEN_PATH_TRACE'
 )
@@ -360,6 +368,13 @@ try {
     if (-not $EnableXbeSectionTrace) {
         Remove-Item Env:RECOMP_XBE_SECTION_TRACE -ErrorAction SilentlyContinue
     }
+    if (-not $EnableDcf4ProducerTrace) {
+        Remove-Item Env:RECOMP_SB_DCF4_PRODUCER_TRACE -ErrorAction SilentlyContinue
+    }
+    if (-not $EnableHighVolumeSyncTrace) {
+        Remove-Item Env:RECOMP_SYNC_TRACE -ErrorAction SilentlyContinue
+        Remove-Item Env:RECOMP_PB_SEMAPHORE_TRACE -ErrorAction SilentlyContinue
+    }
     if ([string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
         Remove-Item Env:RECOMP_WATCH2 -ErrorAction SilentlyContinue
     }
@@ -390,6 +405,13 @@ try {
     }
     if (-not $EnableXbeSectionTrace) {
         $environmentSnapshot += 'RECOMP_XBE_SECTION_TRACE=<unset; opt-in>'
+    }
+    if (-not $EnableDcf4ProducerTrace) {
+        $environmentSnapshot += 'RECOMP_SB_DCF4_PRODUCER_TRACE=<unset; only enable for a reproduced DCF4 wait>'
+    }
+    if (-not $EnableHighVolumeSyncTrace) {
+        $environmentSnapshot += 'RECOMP_SYNC_TRACE=<unset; opt-in high-volume>'
+        $environmentSnapshot += 'RECOMP_PB_SEMAPHORE_TRACE=<unset; opt-in high-volume>'
     }
     if ([string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
         $environmentSnapshot += 'RECOMP_WATCH2=<unset; opt-in second direct guest address>'
