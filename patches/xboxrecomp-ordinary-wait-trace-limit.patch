@@ -1,0 +1,39 @@
+diff --git a/src/kernel/kernel_bridge.c b/src/kernel/kernel_bridge.c
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -1682,3 +1682,4 @@ static void bridge_trace_wait(uint32_t object, uint32_t wait_reason,
+ {
+     static unsigned count;
++    static unsigned all_count;
+     static unsigned dcf4_count;
+@@ -1695,9 +1696,13 @@ static void bridge_trace_wait(uint32_t object, uint32_t wait_reason,
+     int target_dce4 = object == 0x0021DCE4u;
+     int target_event = target_dcf4 || target_dce4;
+     unsigned n;
++    unsigned long all_limit = 0;
+     int emit;
++    const char *all_limit_env = getenv("RECOMP_WAIT_TRACE_ALL_LIMIT");
++    if (!target_event && all_limit_env && *all_limit_env)
++        all_limit = strtoul(all_limit_env, NULL, 10);
+     if (!path || !*path
+             || (target_dcf4 ? dcf4_count >= 4096
+                 : target_dce4 ? dce4_count >= 8192
+-                : count >= 64))
++                : (all_limit ? all_count >= all_limit : count >= 64)))
+         return;
+@@ -1707,6 +1710,8 @@ static void bridge_trace_wait(uint32_t object, uint32_t wait_reason,
+         n = target_dcf4 ? ++dcf4_count : ++dce4_count;
+     else {
+-        ++count;
+-        n = count;
++        if (all_limit)
++            n = ++all_count;
++        else
++            n = ++count;
+     }
+     emit = !target_dce4 || n <= 8 || (n % 64) == 0;
+@@ -1740,3 +1747,3 @@ static void bridge_trace_wait(uint32_t object, uint32_t wait_reason,
+             target_dcf4 ? "-DCF4" : target_dce4 ? "-DCE4"
+-                : "",
++                : all_limit ? "-ALL" : "",
+             n,

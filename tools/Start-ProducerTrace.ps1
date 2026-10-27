@@ -60,6 +60,8 @@ param(
 
     [switch]$EnableXbeSectionTrace,
 
+    [switch]$EnableAllWaitTrace,
+
     [switch]$EnableMmioTrace,
 
     [switch]$EnablePacketTimingTrace,
@@ -156,6 +158,10 @@ foreach ($source in $diagnosticSupportSources) {
     if ($EnableXbeSectionTrace -and $source -like '*xboxrecomp\src\kernel\kernel_bridge.c' -and
             (Get-Item -LiteralPath $traceExe).LastWriteTimeUtc -lt (Get-Item -LiteralPath $source).LastWriteTimeUtc) {
         throw "XBE-section-trace executable is older than the kernel bridge ($source). Build it before launching."
+    }
+    if ($EnableAllWaitTrace -and $source -like '*xboxrecomp\src\kernel\kernel_bridge.c' -and
+            (Get-Item -LiteralPath $traceExe).LastWriteTimeUtc -lt (Get-Item -LiteralPath $source).LastWriteTimeUtc) {
+        throw "All-wait-trace executable is older than the kernel bridge ($source). Build it before launching."
     }
 }
 if (Test-Path -LiteralPath $runDirectory) {
@@ -313,6 +319,12 @@ if ($EnableXbeSectionTrace) {
     $settings.RECOMP_XBE_SECTION_TRACE = '1'
 }
 
+if ($EnableAllWaitTrace) {
+    # Separate bounded capture for ordinary guest waits; keeps the historical
+    # 64-record default unchanged and records at most 4096 waits when enabled.
+    $settings.RECOMP_WAIT_TRACE_ALL_LIMIT = '4096'
+}
+
 if ($EnableMmioTrace) {
     $settings.RECOMP_MMIO_TRACE = '1'
 }
@@ -335,7 +347,7 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
     $settings.RECOMP_WATCH2 = $GuestWatchAddress2
 }
 
-$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + 'RECOMP_DS_LIST_TRACE' + @(
+$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_WAIT_TRACE_ALL_LIMIT' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + 'RECOMP_DS_LIST_TRACE' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
     'RECOMP_FILE_OPEN_PATH_TRACE'
 )
@@ -375,6 +387,9 @@ try {
     }
     if (-not $EnableXbeSectionTrace) {
         Remove-Item Env:RECOMP_XBE_SECTION_TRACE -ErrorAction SilentlyContinue
+    }
+    if (-not $EnableAllWaitTrace) {
+        Remove-Item Env:RECOMP_WAIT_TRACE_ALL_LIMIT -ErrorAction SilentlyContinue
     }
     if (-not $EnableDcf4ProducerTrace) {
         Remove-Item Env:RECOMP_SB_DCF4_PRODUCER_TRACE -ErrorAction SilentlyContinue
@@ -416,6 +431,9 @@ try {
     }
     if (-not $EnableXbeSectionTrace) {
         $environmentSnapshot += 'RECOMP_XBE_SECTION_TRACE=<unset; opt-in>'
+    }
+    if (-not $EnableAllWaitTrace) {
+        $environmentSnapshot += 'RECOMP_WAIT_TRACE_ALL_LIMIT=<unset; ordinary waits retain 64-record cap>'
     }
     if (-not $EnableDcf4ProducerTrace) {
         $environmentSnapshot += 'RECOMP_SB_DCF4_PRODUCER_TRACE=<unset; only enable for a reproduced DCF4 wait>'
