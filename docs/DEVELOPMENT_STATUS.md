@@ -1,3 +1,8 @@
+### 2026-10-26 — latest r78 loading readback
+
+**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first-level gameplay at verified frame `░ 0/1`.
+
+The active r78 run (`m3-dcf4-producer-r78-20261026`, PID 111756) remains responsive, displays `NOW LOADING`, and reports 0.0 FPS / 30 draws. Latest `[LOAD-PASS-OUT]` n=1549 at tick 319516578 returns 0 with `0x011E2E00/0` unchanged. The repeated scan calls `sub_000C2EB0` and checks `0x0066A508/0x0066A50C`; sampled progress remains zero. Both source `D:\media\bin\LSQ.BIN` and cache `Z:\LSQ.BIN` have successful open rows, so LSQ is a candidate pair only. File lifecycle traces are capped at 50,000 and r78 did not enable sampled failed-open paths. DCF4 callback rows continue through n=10653, and no contemporaneous raster worker sample was captured, so neither a terminal DCF4 wait nor raster backlog is established as the cause. PID 103904 is absent; PID 111756 was not stopped. r79 remains unlaunched until this run exits or receives exact-PID authorization. No fix or target seed; first mission frame and precise loading cause remain unverified. See the [r78 evidence report](../analysis/m3-dcf4-producer-r78-20261026.md).
 ### 2026-10-26 — current-source loader follow-up and callback trace candidate
 
 **Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first-level gameplay at verified frame `░ 0/1`.

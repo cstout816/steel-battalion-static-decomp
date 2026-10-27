@@ -1827,3 +1827,11 @@ Existing r79 already includes the loader callback-state probe and compiled kerne
 Latest observed r78 pass n=1445 at tick 319322703 still returns 0 with `0x011E2E00/0` unchanged. Loading cause and first mission frame remain unverified.
 
 Latest live capture at 22:13:53 CDT still shows NOW LOADING. r78 PID 111756 remains active; latest loader pass n=1482, tick 319391640, TID 68004, result 0 and pair `0x011E2E00/0` unchanged. The r79 callback + sampled failed-open trace run is prepared but not started while r78 uses the single-run/save slot. No mission frame or loader cause is verified.
+
+### Continued passive observation (2026-10-26, r78 PID 111756)
+
+PID 111756 remains responsive; PID 103904 is absent, and no process was stopped. Current display title reports 0.0 FPS / 30 draws. The framebuffer saved at 22:15:53 CDT still visibly says `NOW LOADING`. Latest `[LOAD-PASS-OUT]` is n=1549 at tick 319516578, TID 68004, return `0x000C32D6`, mode 2, scan range 2..11, last index 28, result 0, pair `0x011E2E00/0` unchanged. The AOT scan calls `sub_000C2EB0` and checks `0x0066A508/0x0066A50C` before this unchanged-state return; sampled progress fields remain zero. This confirms active repeated resource scanning, not the precise stalled dependency.
+
+Repeated lifecycle rows show successful opens for source `D:\media\bin\LSQ.BIN` and cache `Z:\LSQ.BIN` (327,168 bytes each). Treat this as a candidate pair only: lifecycle open/close traces hit 50,000 each near tick 318367218, and r78 did not enable `RECOMP_FILE_FAIL_PATH_TRACE`. The latest content read record remains n=6953/tick 316546750; the caps mean later misses or reads cannot be excluded. DCF4 callback rows continue through n=10653/tick319516515, so the historical terminal DCF4 condition is not reproduced. No synchronized raster-worker window was captured in this readback, so 0.0 FPS is not causally attributed to raster work.
+
+No fix or seed was made. r79 remains prepared but must not be started against the active process/save root. Next decisive step is the r79 callback-state + sampled file-miss trace after PID 111756 exits naturally or explicit authorization names that exact PID. The first mission frame and exact loader dependency remain unverified.
