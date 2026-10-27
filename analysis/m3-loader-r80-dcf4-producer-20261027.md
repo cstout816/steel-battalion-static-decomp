@@ -67,3 +67,13 @@ Progress bars use verified acceptance points rather than estimated effort:
 - Full controller coverage / audio / campaign completion / 60 FPS: **[░░░░░░] 0/4 verified**
 
 Next: leave PID `117004` and its save root alone, continue the current run, and stop diagnostic progression at the first verified mission frame. Do not make a code fix until one cause is supported by a trace chain.
+
+## Live follow-up — 2026-10-27 06:42 CDT
+
+PID `117004` remains responsive. The latest saved guest frame (`frame.bmp`, 06:42:26 CDT) still shows `NOW LOADING`; no first mission frame has appeared. Loader pass n=726 at tick `349901234` (TID `121864`) still takes the mode-2 scan/return `0x000C32D6`, result 0, pair `0x011E2E00/0`; callback samples before and after keep mode 0, phase 0, gates `1/1/0`, progress pair, and status pair unchanged. The source around `sub_000C3020` confirms this path iterates resource entries through `sub_000C2EB0` and paired metadata lookups, while the pass return 0 is the no-pair-change path. It is not evidence of a named mission-file failure.
+
+The file trace remains inconclusive for an exact dependency: no failed path has appeared after the expected empty-slot `user00.sav` probe; `[FILE-CALL]` remains capped at 6,000; `[READ]` has emitted no completion after n=5842 at tick `348735718`; the run lacks handle open/close lifecycle correlation. Thread snapshots are still the 06:26 and 06:28 captures, so they do not show a later loader wait chain.
+
+Rendering cost remains independently measurable and severe. The tick `349900593` raster sample processed 49 batches / 102 triangles in 2,733.26 ms batch wall time, with 10,421.05 ms summed worker-active time and a 1,061.19 ms maximum batch; the UI is still 0–1 FPS / 30 draws. During the same interval DCF4 marker writes and PFB-flush returns repeat, the frame/counter/semaphore advance, and DMA PUT=GET was `0x0001534C`. This separates active graphics/event progress from the unchanged loader state, but does not establish that raster work is the loader gate or identify a missing dependency. The historical r79 menu DCF4 wait remains a separate condition and is not reproduced here.
+
+Current conclusion: a first stalled loader dependency is still **unidentified**. No seed, source fix, rebuild, or synchronization change is justified by this evidence. Keep PID `117004` and its save root untouched; continue until a first mission frame is visibly verified or stronger synchronized evidence identifies the gate.
