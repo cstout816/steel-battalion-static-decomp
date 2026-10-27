@@ -42,23 +42,15 @@ At indirect call site `0x00217029`, guest slot `0x0025D1E8` consistently resolve
 
 Raster telemetry shows severe work cost: recent two-second windows report 27–49 batches and 56–102 triangles, about 2.0–3.2 s batch wall time and 7.8–12.2 s summed raster-active time across four workers. These counters demonstrate expensive raster work, but there is no per-worker identity or pending-queue depth. They cannot establish that rendering backlog causes the loader's unchanged resource state. The traces distinguish continuing DCF4/frame progress and severe raster cost from the repeated loader scan, but causal interaction remains open. The 60 FPS target is not met; the window has reported 0.0 FPS.
 
-## Trace counts, caps, and limitations (latest observed scan)
+## Trace counts, caps, and limitations (live r78 readback)
 
-- `DCF4-CB`: 7,947 rows at the previous scan, source guard 100,000; no cap hit.
-- `SB-DCF4-MARKER`: 7,744 rows; source guard 100,000; no cap hit.
-- `SB-DCF4-THRESHOLD`: 3,872 rows; still advancing; no evidence of cap exhaustion.
-- `LOAD-PASS-IN/OUT`: 220 each; source guard 8,192; no cap hit.
-- `LOAD-HELPER-BRANCH`: 3,528 at previous scan; source guard 8,192; no cap hit.
-- `FILE-CALL`: exactly 6,000; source emits only while `n <= 6000`, so this cap is reached and later call rows are absent.
-- `FILE-LIFECYCLE-OPEN/CLOSE`: 10,538 / 10,325 at previous scan; 50,000 per-type cap; no cap hit.
-- `FILE-IO`: 6,421; 8,192 cap; no cap hit at that scan.
-- `[READ]`: 6,953 emitted; all-reads mode logs each request through 30,000 then every 1,000; no evidence the sampling cap is reached.
-- `PILOT-LIST-CB` 389 / cap 512; `PILOT-ROW-POST` 1.
-- `SB-CB-TARGET`: sampled records, call cap 1,000; 14 rows emitted through sampled logging.
-- `FILE-COPY-ENTER/RETURN`: 21/21; these do not carry path names and cannot be attributed to TEX00.
-- `[GUEST-FRAME] kind=wait-DCF4`: 3,895 rows; emitted as repeated wait/callback frame evidence, not proof of a terminal wait.
-- `[SB-SNAPSHOT]`: 0 rows; raw-to-snapshot stage remains unverified.
-- Latest trace directory contains a ~61 MB stderr log and periodic 0.92 MB framebuffer BMPs. Keep the run evidence until diagnosis is complete; no cleanup was performed.
+The active executable is `local-tools/steel-battalion-game/build-xpp-seeded/ProducerTrace-Candidates/r78-low-overhead-dsound-watch-20261026/Release/your_game_recomp.exe`, SHA-256 `A726F81957B2EEADF23DC42D3EFDB402B9B7D816EA5AA129EAE3A279BD17B254`. It was built from the ignored AOT source directory `iso/local-analysis/xboxrecomp-generated-xpp-untraced-current/gen`; save root is `iso/local-analysis/saves-m3-known-save-copy-20261023`. Effective `environment.txt` enables `RECOMP_LOAD_PASS_TRACE`, `RECOMP_LOAD_REPEAT_TRACE`, `RECOMP_FILE_LIFECYCLE_TRACE`, `RECOMP_FILE_CALLER_TRACE`, `RECOMP_FILE_IO_DETAIL_TRACE`, `RECOMP_FILE_READ_TRACE`, `RECOMP_FILE_READ_TRACE_ALL`, `RECOMP_SB_DCF4_PRODUCER_TRACE`, `RECOMP_SB_CALLBACK_TARGET_TRACE`, and `RECOMP_RASTER_PERF_TRACE`; generic function tracing is disabled (`RECOMP_TRACE_BUDGET=0`). Output uses a bounded asynchronous relay with 32,768-line capacity; no relay-drop marker was found in the inspected logs.
+
+At readback, the log had 1,316 `[LOAD-PASS-IN/OUT]` pairs (source cap 8,192; not reached); the latest later line was pass n=1,329 at tick 319109687, still branch `scan`, result 0, and pair `0x011E2E00/0` unchanged. `[LOAD-HELPER-BRANCH]` reached its 8,192-row cap at n=8192/tick 317451781, so later selector/branch labels are absent. `[LOAD-HELPER]` and `-RET` are sampled (first 64 and every 128th); the helper source returns literal 1, which is not evidence that the outer pass progressed.
+
+File visibility is materially bounded: `[FILE-CALL]` emitted exactly 6,000 rows and its source cap is reached. `[FILE-LIFECYCLE-OPEN]` and `-CLOSE` each emitted 50,000 rows; open cap marker is present at tick 318367218. Path/status correlation after those caps is unavailable. `[FILE-IO]` had 7,536 rows at one readback, below its 8,192 cap; recent emitted rows were metadata queries (`class=0x22`) with status success, but handle-to-path mapping is no longer reliable after lifecycle logging stopped. `[READ]` emitted 6,953 records, the last at tick 316546750; `RECOMP_FILE_READ_TRACE_ALL=1`, and the trace source samples every request through 30,000 before periodic sampling, so no later content-read completion is evidenced in this log. This does not rule out later file opens/failures hidden by the lifecycle cap.
+
+The wait log emitted 4,096 `wait-DCF4` entries and then stopped logging new entries at that cap; later sampled `return-DCF4` records still show successful returns, and DCF4 callbacks/threshold/reset counters continue advancing. A sampled native stack can therefore show a recurring wait without establishing a terminal one. `PILOT-LIST-CB` remains 389/cap 512, `PILOT-ROW-POST` 1, `SB-CB-TARGET` 14 sampled rows/call cap 1,000, and `[SB-SNAPSHOT]` 0. The latter leaves the input snapshot stage unverified. The live log directory continues to grow; no cleanup was performed.
 
 ## Current result and next diagnostic step
 
@@ -125,3 +117,11 @@ r79 remains built but not launched because PID 111756 remains open and the run h
 ### Continued passive readback
 
 After the synchronized update above, the same PID 111756 remained alive and the harness was not bypassed. Latest `[LOAD-PASS-OUT]` is n=1145 at tick 318763062, TID 68004, mode 2, branch `scan`, result 0, pair `0x011E2E00/0` unchanged. `frame.bmp` again visibly shows `NOW LOADING`; first mission frame remains unverified. Latest sampled raster window at tick 318761171 is 29 batches / 60 triangles, 2,018.69 ms batch wall and 7,815.28 ms aggregate worker-active. No branch/target/state callback trace exists yet because r79 has not run. PID 111756 was not terminated under the user's explicit PID 103904-only direction.
+
+## Trace-cap correction and native thread snapshot (2026-10-26)
+
+Correction to earlier wording that no later file failure was observed: that statement covered only emitted records before the lifecycle cap. The effective run environment enabled file lifecycle, caller, I/O detail, and all-read tracing, but actual emitted counts reached `[FILE-CALL]`=6,000 (source cap), `[FILE-LIFECYCLE-OPEN]`=50,000 and `[FILE-LIFECYCLE-CLOSE]`=50,000 (per-type caps). The open cap marker occurs at tick 318367218. After those limits, a later open or failure may be invisible and cannot be excluded. `[LOAD-HELPER-BRANCH]` likewise reached its 8,192 cap at n=8192/tick 317451781. `[FILE-IO]` remained below its 8,192 cap (7,536 at a counted readback); latest rows in that readback were successful metadata queries without reliable path correlation. With `RECOMP_FILE_READ_TRACE_ALL=1`, the last emitted content-read record is n=6953 at tick 316546750; no later content-read completion is present, but that absence alone does not identify the pending dependency.
+
+A low-overhead thread-info minidump was captured from PID 111756 at 2026-10-26 22:07:02 CDT, outside the project: `%TEMP%\steel-battalion-r78-thread-snapshot-20261026-1010.dmp`, 1,048,860 bytes, SHA-256 `2C7D47E4B1B9E3206D6CE1B1EDCDB6BDEBF2F2A04E35B4B5EC479F3459F8E50F`. It matches the active r78 image SHA above and its exact map/PDB. TID 68004's native unwind reaches `xbox_KeWaitForSingleObject+0x29` (image RVA `0x64A68E9`) through KERNELBASE, then stops at non-module address `0xE2C` at the custom guest/kernel bridge. Raw stack slots include candidates `sub_00211E10+0xDD2` and `sub_00101A60+0x163E`; these are not unwind-validated frames and do not prove an exact guest call chain or wait object. The wait trace had already hit its 4,096 `wait-DCF4` entry cap, but its sampled returns and continuing DCF4 callback/threshold/reset rows demonstrate recurring progress. The dump therefore records a wait at one instant, not a terminal DCF4 stall.
+
+A later same-run readback reached `[LOAD-PASS-OUT]` n=1329 at tick 319109687, TID 68004, mode 2, branch `scan`, result 0, pair `0x011E2E00/0` unchanged. It confirms the scan continues after earlier snapshots; an earlier apparent gap in quick tail queries was a stale read, not evidence the loader stopped polling. The framebuffer last visually inspected in this pass still showed `NOW LOADING`. No mission frame, exact loader dependency, or fix is verified. r79 callback-state instrumentation remains built but unrun while PID 111756 occupies the harness.
