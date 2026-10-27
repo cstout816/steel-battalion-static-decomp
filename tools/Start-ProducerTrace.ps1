@@ -14,6 +14,8 @@ diagnostic process at the configured watchdog limit, even if its internal
 watchdog fails. A plateau watchdog also stops only that child after the
 configured interval with no change in the mode-2 loader signature or captured
 framebuffer; it verifies the live executable path before stopping.
+The UI plateau watchdog also stops only that child when the captured UI and
+live-input transcript remain unchanged, including stalls before loading.
 -EnableFileFailurePathTrace adds a low-volume sampled path
 record for failed NtCreateFile calls, useful when lifecycle traces reach their cap.
 
@@ -31,6 +33,9 @@ param(
 
     [ValidateRange(120, 3600)]
     [int]$PlateauSeconds = 300,
+
+    [ValidateRange(120, 3600)]
+    [int]$UiPlateauSeconds = 300,
 
     [ValidateRange(4096, 32768)]
     [int]$WaitTraceAllLimit = 16384,
@@ -82,6 +87,12 @@ param(
     [switch]$EnableMmioTrace,
 
     [switch]$EnablePacketTimingTrace,
+
+    [switch]$EnableGuestWriteBreakpoint,
+
+    [string]$GuestWriteBreakpointAddress = '0x00311CC8',
+
+    [string]$GuestMemoryOffset = '0x10000',
 
     [switch]$AsyncTraceRelay,
 
@@ -139,6 +150,7 @@ $diagnosticSupportSources = @(
 $logRoot = Join-Path $projectRoot 'iso\local-analysis\logs'
 $saveRoot = (Resolve-Path -LiteralPath $SaveDirectory -ErrorAction Stop).Path
 $runDirectory = Join-Path $logRoot $RunName
+$guestWriteBreakpointExe = Join-Path $projectRoot 'local-tools\GuestWriteBreakpoint.exe'
 
 $activeGames = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
     $_.ProcessName -like 'your_game_recomp*'
@@ -152,6 +164,9 @@ foreach ($path in (@($traceExe) + $generatedDiagnosticSources + @($saveRoot))) {
     if (-not (Test-Path -LiteralPath $path)) {
         throw "Required ProducerTrace input is missing: $path"
     }
+}
+if ($EnableGuestWriteBreakpoint -and -not (Test-Path -LiteralPath $guestWriteBreakpointExe -PathType Leaf)) {
+    throw "Guest hardware-breakpoint helper is missing: $guestWriteBreakpointExe"
 }
 if (-not (Test-Path -LiteralPath (Join-Path $saveRoot 'UserData') -PathType Container)) {
     throw "The selected save directory has no UserData folder: $saveRoot"
@@ -611,15 +626,50 @@ function Get-PlateauFramebufferHash {
     }
 }
 
+$guestWriteBreakpoint = $null
+if ($EnableGuestWriteBreakpoint) {
+    $watchLog = Join-Path $runDirectory 'guest-write-breakpoint.log'
+    $watchArguments = @(
+        [string]$process.Id,
+        $GuestWriteBreakpointAddress,
+        $GuestMemoryOffset,
+        ('"{0}"' -f $watchLog)
+    )
+    $guestWriteBreakpoint = Start-Process -FilePath $guestWriteBreakpointExe `
+        -ArgumentList $watchArguments -PassThru -WindowStyle Hidden `
+        -RedirectStandardOutput (Join-Path $runDirectory 'guest-write-breakpoint.stdout.log') `
+        -RedirectStandardError (Join-Path $runDirectory 'guest-write-breakpoint.stderr.log')
+    $attachDeadline = [DateTime]::UtcNow.AddSeconds(10)
+    $watchArmed = $false
+    while ([DateTime]::UtcNow -lt $attachDeadline -and -not $guestWriteBreakpoint.HasExited) {
+        if (Test-Path -LiteralPath $watchLog -PathType Leaf) {
+            $watchArmed = Select-String -LiteralPath $watchLog -Pattern '^ARMED ' -Quiet
+            if ($watchArmed) { break }
+        }
+        Start-Sleep -Milliseconds 100
+        $guestWriteBreakpoint.Refresh()
+    }
+    if (-not $watchArmed) {
+        Write-Warning "Hardware breakpoint did not arm within 10 seconds. See $watchLog; the game run will continue without it."
+        if (-not $guestWriteBreakpoint.HasExited) {
+            Stop-Process -Id $guestWriteBreakpoint.Id -Force -ErrorAction SilentlyContinue
+        }
+        $guestWriteBreakpoint = $null
+    }
+}
+
 "Started ProducerTrace PID $($process.Id)"
 "Run logs: $runDirectory"
 "Existing saves: $saveRoot"
 "Screen-gated input file (created empty): $padLive"
 $externalWatchdogTriggered = $false
 $plateauWatchdogTriggered = $false
+$uiPlateauWatchdogTriggered = $false
 $plateauSignatureAtStop = $null
 $lastPlateauSignature = $null
 $plateauStableSince = $null
+$lastUiSignature = $null
+$uiStableSince = $null
 $watchdogTimer = [Diagnostics.Stopwatch]::StartNew()
 while (-not $process.WaitForExit(10000)) {
     if ($watchdogTimer.Elapsed.TotalSeconds -ge $WatchdogSeconds) {
@@ -706,8 +756,61 @@ while (-not $process.WaitForExit(10000)) {
         $lastPlateauSignature = $null
         $plateauStableSince = $null
     }
+
+    # Catch screen/menu stalls before the mode-2 loader starts. Each accepted
+    # live-input line changes the transcript length; each screen transition
+    # changes the framebuffer signature. Only the child launched above can be
+    # stopped, after its current executable path has been revalidated.
+    if ($frameExists) {
+        try {
+            $uiFrameHash = Get-PlateauFramebufferHash -Path $framePath
+            $padLength = (Get-Item -LiteralPath $padLive).Length
+            $uiSignature = '{0}|input-bytes={1}' -f $uiFrameHash, $padLength
+            $now = [DateTime]::UtcNow
+            if ($uiSignature -ne $lastUiSignature) {
+                $lastUiSignature = $uiSignature
+                $uiStableSince = $now
+            }
+            elseif ($null -ne $uiStableSince -and
+                    ($now - $uiStableSince).TotalSeconds -ge $UiPlateauSeconds) {
+                $liveProcess = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
+                $livePath = if ($liveProcess) { $liveProcess.Path } else { $null }
+                if ($liveProcess -and $livePath -and
+                        [string]::Equals(
+                            [IO.Path]::GetFullPath($livePath),
+                            [IO.Path]::GetFullPath($traceExe),
+                            [StringComparison]::OrdinalIgnoreCase)) {
+                    $uiPlateauWatchdogTriggered = $true
+                    @(
+                        "Stopped diagnostic PID $($process.Id) at $($now.ToString('o')) after $UiPlateauSeconds seconds without a framebuffer or live-input change.",
+                        "Verified executable: $livePath",
+                        "Signature: $uiSignature"
+                    ) | Set-Content -LiteralPath (Join-Path $runDirectory 'ui-plateau-stop.txt') -Encoding UTF8
+                    Write-Warning "UI plateau watchdog verified PID $($process.Id) belongs to this diagnostic run and is stopping it after $UiPlateauSeconds seconds without screen or input progress."
+                    $process.Kill()
+                    $process.WaitForExit()
+                    break
+                }
+                else {
+                    Write-Warning "UI plateau detected, but the live process path did not verify as this run's executable. Leaving it untouched."
+                    $uiStableSince = $now
+                }
+            }
+        }
+        catch { }
+    }
+    else {
+        $lastUiSignature = $null
+        $uiStableSince = $null
+    }
 }
 $watchdogTimer.Stop()
+if ($guestWriteBreakpoint) {
+    try { $guestWriteBreakpoint.WaitForExit(5000) | Out-Null } catch { }
+    if (-not $guestWriteBreakpoint.HasExited) {
+        Stop-Process -Id $guestWriteBreakpoint.Id -Force -ErrorAction SilentlyContinue
+    }
+}
 if ($useAsyncTraceRelay) {
     'Finalizing the asynchronous log relay after the diagnostic process exited.'
     $relayResult = [ProducerTraceAsyncRelay]::WaitForExit($process, 5000)
@@ -762,7 +865,9 @@ if ($useAsyncTraceRelay) {
         ProcessExitCode = $relayResult.ExitCode
         ExternalWatchdogTriggered = $externalWatchdogTriggered
         PlateauWatchdogTriggered = $plateauWatchdogTriggered
+        UiPlateauWatchdogTriggered = $uiPlateauWatchdogTriggered
         PlateauSeconds = $PlateauSeconds
+        UiPlateauSeconds = $UiPlateauSeconds
         PlateauSignatureAtStop = $plateauSignatureAtStop
         DroppedStdoutLines = $relayResult.DroppedStdoutLines
         DroppedStderrLines = $relayResult.DroppedStderrLines
