@@ -47,6 +47,10 @@ param(
 
     [switch]$EnableLoadPairOutputTrace,
 
+    [switch]$EnablePreloadTex00GateTrace,
+
+    [switch]$EnablePreloadWorkerScheduleTrace,
+
     [switch]$EnableSbCallbackTargetTrace,
 
     [switch]$EnableStreamTrace,
@@ -277,6 +281,17 @@ if ($EnableLoadPairOutputTrace) {
     $settings.RECOMP_LOAD_PAIR_OUTPUT_TRACE = '1'
 }
 
+if ($EnablePreloadTex00GateTrace) {
+    # Observe the preload gate and special resource-index 0x1E call without
+    # changing the guest branch or copy behavior.
+    $settings.RECOMP_PRELOAD_TEX00_GATE_TRACE = '1'
+}
+
+if ($EnablePreloadWorkerScheduleTrace) {
+    # Record requested worker modes at their guest scheduling callsites.
+    $settings.RECOMP_PRELOAD_WORKER_SCHEDULE_TRACE = '1'
+}
+
 if ($EnableSbCallbackTargetTrace) {
     # Record the indirect target used by the Steel Battalion DCF4 callback
     # without changing the target or its dispatch behavior.
@@ -375,7 +390,9 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
 $environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_PRELOAD_ASSET_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_WAIT_TRACE_ALL_LIMIT' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + 'RECOMP_DS_LIST_TRACE' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
     'RECOMP_FILE_OPEN_PATH_TRACE',
-    'RECOMP_LOAD_PAIR_OUTPUT_TRACE'
+    'RECOMP_LOAD_PAIR_OUTPUT_TRACE',
+    'RECOMP_PRELOAD_TEX00_GATE_TRACE',
+    'RECOMP_PRELOAD_WORKER_SCHEDULE_TRACE'
 )
 $previousEnvironment = @{}
 foreach ($name in $environmentNames) {
