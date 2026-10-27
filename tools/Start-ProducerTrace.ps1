@@ -23,8 +23,8 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')]
     [string]$RunName,
 
-    [ValidateRange(1800, 43200)]
-    [int]$WatchdogSeconds = 1800,
+    [ValidateRange(300, 43200)]
+    [int]$WatchdogSeconds = 900,
 
     [string]$GuestWatchAddress,
 
