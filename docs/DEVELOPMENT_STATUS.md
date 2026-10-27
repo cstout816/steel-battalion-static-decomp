@@ -1,3 +1,15 @@
+### 2026-10-27 — r92 loader file-lifecycle trace
+
+**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader dependency tracing `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`.
+
+Run `m3-loader-file-lifecycle-r92-20261027` used the AOT executable SHA-256 `D9647479FF7ACB95CC5113818A3AE8E73B77C78543D3261A3EA3CD493E528A81`, PID 116744, and the existing empty-save new-pilot route. The route reached visible `NOW LOADING`; the exact-child watchdog ended only that diagnostic PID after 900 seconds (10:11:37 CDT, exit 3; external watchdog false). No mission frame or behavior fix was verified.
+
+The visible `LIST AS NEW` press reached XID/DMA byte 2, guest edge/predicate and row callback `0x000E18D8` / branch `0x000E193B`; action `0x83` at `0x000E19CF` changed item `0x002E4C34+0x28` from `0x3F800000` to 0. The next frame showed name entry. During loading, 259 mode-2 scans repeated a missing cache open for `Z:\TEX00.BIN`, beginning at tick 361941796, caller `0x0018E758`, returning through `0x000C2F3E -> 0x00102063`, then scan return `0x000C32D6` with pair `0x011E2E00/0`. The source `D:\media\BIN\TEX00.BIN` was metadata-queried and closed without recorded content read/copy. The AOT helper's paired-open miss branch returns at `0x000C300D`. This supports an unresolved missing cache dependency, not why it was not produced nor that TEX00 alone prevents mission entry; r78's controlled cache copy did not advance loading.
+
+DCF4 wait-entry trace capped at 4,096 before mode-2 loading. Later sampled successful DCF4 returns and callback/counter activity do not exclude every later wait. Late rendering remained costly (27 batches / 56 triangles, about 2,028 ms batch wall and 7,847 ms aggregate worker-active over four workers), but no queue depth or causal loader gate was shown. Two main-thread dumps did not unwind to a validated guest file wait. No indirect target was seeded, and AOT, controller mapping, guest fences, and rasterizer `1ea1871` remain unchanged. Full evidence: [r92 report](../analysis/m3-loader-file-lifecycle-r92-20261027.md).
+
+Next: trace cache population for the mode-2 resource set, tying source and cache opens/writes/completions to a guest resource index. Keep wait logging bounded but ensure its cap covers the loading interval. Preserve the same execution architecture and stop at a verified first mission frame or watchdog. No files were deleted; seven duplicate r92 BMPs were moved with hashes to the delete-later review folder.
+
 ### 2026-10-27 — current milestone and r81 crash evidence
 
 **Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`.
