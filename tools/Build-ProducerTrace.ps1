@@ -156,6 +156,8 @@ foreach ($marker in @(
     '[FILE-LIFECYCLE-OPEN]',
     '[FILE-LIFECYCLE-CLOSE]',
     '[FILE-LIFECYCLE-OPEN-CAPPED]',
+    'RECOMP_FILE_FAIL_PATH_TRACE',
+    '[FILE-MISS-PATH]',
     'RECOMP_FILE_IO_DETAIL_TRACE',
     '[FILE-IO]'
 )) {

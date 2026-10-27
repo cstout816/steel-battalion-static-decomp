@@ -9,7 +9,8 @@ file. It does not copy save data or send input. Append input only after checking
 the latest framebuffer and confirming the expected screen. Child output is
 drained through a bounded asynchronous queue by default; any dropped lines are
 reported after exit. Use -DirectTraceOutput only when direct file output is
-specifically needed.
+specifically needed. -EnableFileFailurePathTrace adds a low-volume sampled path
+record for failed NtCreateFile calls, useful when lifecycle traces reach their cap.
 
 .EXAMPLE
 ./tools/Start-ProducerTrace.ps1 -RunName m3-producer-trace-screen-gated-20261024 -AsyncTraceRelay
@@ -34,6 +35,8 @@ param(
     [switch]$EnableStreamTrace,
 
     [switch]$EnableFileLifecycleTrace,
+
+    [switch]$EnableFileFailurePathTrace,
 
     [switch]$EnableFileCallerTrace,
 
@@ -244,6 +247,12 @@ if ($EnableFileLifecycleTrace) {
     $settings.RECOMP_FILE_LIFECYCLE_TRACE = '1'
 }
 
+if ($EnableFileFailurePathTrace) {
+    # The kernel bridge samples failed-create paths (first 64, then every 4096)
+    # independently of the bounded lifecycle open/close trace.
+    $settings.RECOMP_FILE_FAIL_PATH_TRACE = '1'
+}
+
 if ($EnableFileCallerTrace) {
     $settings.RECOMP_FILE_CALLER_TRACE = '1'
 }
@@ -301,9 +310,11 @@ try {
     foreach ($name in $settings.Keys) {
         Set-Item -Path ("Env:{0}" -f $name) -Value $settings[$name]
     }
-    # Lifecycle rows already contain path and status. Disable duplicate path-only
-    # fprintf probes, which blocked an earlier startup under concurrent opens.
-    Remove-Item Env:RECOMP_FILE_FAIL_PATH_TRACE -ErrorAction SilentlyContinue
+    # Keep duplicate path-only probes off by default. The failure-only probe is
+    # low-volume and can be enabled explicitly after lifecycle traces hit a cap.
+    if (-not $EnableFileFailurePathTrace) {
+        Remove-Item Env:RECOMP_FILE_FAIL_PATH_TRACE -ErrorAction SilentlyContinue
+    }
     Remove-Item Env:RECOMP_FILE_OPEN_PATH_TRACE -ErrorAction SilentlyContinue
     Remove-Item Env:RECOMP_PAD_SCRIPT -ErrorAction SilentlyContinue
     if (-not $EnableFileCallerTrace) {
@@ -349,7 +360,9 @@ try {
     if (-not $EnableMmioTrace) {
         $environmentSnapshot += 'RECOMP_MMIO_TRACE=<unset; opt-in>'
     }
-    $environmentSnapshot += 'RECOMP_FILE_FAIL_PATH_TRACE=<unset; lifecycle traces cover opens>'
+    if (-not $EnableFileFailurePathTrace) {
+        $environmentSnapshot += 'RECOMP_FILE_FAIL_PATH_TRACE=<unset; opt-in sampled failure paths>'
+    }
     $environmentSnapshot += 'RECOMP_FILE_OPEN_PATH_TRACE=<unset; lifecycle traces cover opens>'
     if ($useAsyncTraceRelay) {
         $environmentSnapshot += "TRACE_OUTPUT_MODE=bounded asynchronous relay; queue capacity $AsyncTraceQueueCapacity lines; overflow drops recorded"
@@ -440,7 +453,7 @@ if ($useAsyncTraceRelay) {
         '[MENU-OBJECT-GATE]', '[TITLE-ROUTE-QUERY]', '[THREAD-START]',
         '[PRELOAD-WORKER-ROUTE]', '[FILE-PRELOAD-ENTER]',
         '[FILE-PRELOAD-RETURN]', '[FILE-COPY-ENTER]', '[FILE-COPY-RETURN]',
-        '[FILE-IO]', '[FILE-CALL]',
+        '[FILE-IO]', '[FILE-CALL]', '[FILE-MISS-PATH]',
         '[FILE-LIFECYCLE-OPEN-CAPPED]', '[FILE-LIFECYCLE-OPEN]',
         '[FILE-LIFECYCLE-CLOSE]', '[LOAD-HELPER]', '[LOAD-HELPER-BRANCH]',
         '[LOAD-HELPER-RET]', '[LOAD-STACK]', '[LOAD-RENDER]',
