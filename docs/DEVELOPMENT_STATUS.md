@@ -6078,3 +6078,13 @@ A read-only search of r78 stderr through the current scan pass found no [ICALL] 
 The already-built r79 candidate remains SHA-256 1E4912C18306EA8F105C7DB656F140473750ED945CAFCFC6A19A368FDEE21541. Its opt-in AOT probe records target, result, and before/after loader state at guest sites 0x00102017, 0x0010203A, 0x0010205A, 0x0010206B, and 0x0010208A. Pair these rows with the direct [ICALL] runtime failures, then validate any observed target against XBE section membership, instruction boundaries, control-flow ownership, and kernel-thunk classification before considering a seed or rebuild. This trace is prepared only; no r79 runtime evidence exists.
 
 Current r78 readback remains scan pass 2162/tick 320653250 with pair 0x011E2E00/0 unchanged and visible NOW LOADING. The first mission frame and loader dependency remain unverified.
+
+### 2026-10-27 — r84 screen-gated input and loading trace
+
+Run `m3-pilot-loading-r84-xbe-section-20261027` used diagnostic PID 124596 and executable SHA-256 `14F962A5BC54AE7A21E671DA53FD4DC60680030AC731A451513F39A0E6FD24CB`. The user authorized stopping it; only that diagnostic process was terminated. Its external watchdog remains enabled at 1,800 seconds for future runs. The relay finalized with zero dropped lines.
+
+A screen-gated XID press reached buffer `0x01081763`, was copied to `0x004AFC08`, passed the guest predicate, and entered the pilot-list callback at `0x000E18D8` / branch `0x000E193B`. Row action `0x83` at `0x000E19CF` changed the `LIST AS NEW` item `0x002E4C34` field `+0x28` from `0x3F800000` to zero. The XBE string is at `0x0026AF04`. This confirms the callback/input path; `sub_000E0870` remains unrelated/unconfirmed.
+
+The run reached `NOW LOADING`, with 103 mode-2 scans returning zero and the tracked pair unchanged at `0x011E2E00/0`. XBE `seg00` loaded successfully. DCF4, DMA, and semaphore samples advanced. Repeated raster windows measured 27 batches / 56 triangles, ~2.1–2.25s wall and ~8.3–8.9s summed worker-active time, supporting severe raster cost but not a growing backlog or a causal loader diagnosis. Empty save-slot misses are expected on this new-pilot route. No file-read completion/IOSB records or native thread stacks were present; first stalled dependency and first mission frame remain unknown. No game behavior was changed. Full run identity and trace limitations are in [`analysis/m3-pilot-loading-r84-xbe-section-20261027.md`](../analysis/m3-pilot-loading-r84-xbe-section-20261027.md).
+
+**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; graphics/performance `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission frame `░ 0/1`.
