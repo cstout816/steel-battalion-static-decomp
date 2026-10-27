@@ -173,6 +173,20 @@ for ($i = 0; $i -lt $threadCount; $i++) {
     }
 }
 if (-not $thread) { throw "Thread $ThreadId is not present in the dump." }
+if ($streams.ContainsKey([uint32]6)) {
+    $exceptionStream = $streams[[uint32]6]
+    $exceptionThreadId = Read-U32 ([int]$exceptionStream.Rva)
+    if ($exceptionThreadId -eq $ThreadId -and $exceptionStream.Size -ge 168) {
+        $exceptionContextSize = Read-U32 ([int]$exceptionStream.Rva + 160)
+        $exceptionContextRva = Read-U32 ([int]$exceptionStream.Rva + 164)
+        if ($exceptionContextSize -ge 256 -and
+                ($exceptionContextRva + $exceptionContextSize) -le $dump.Length) {
+            $thread.ContextSize = $exceptionContextSize
+            $thread.ContextRva = $exceptionContextRva
+            'Using the exception-time context for the faulting thread.'
+        }
+    }
+}
 if ($thread.ContextSize -lt 256 -or ($thread.ContextRva + $thread.ContextSize) -gt $dump.Length -or
     ($thread.StackRva + $thread.StackSize) -gt $dump.Length) { throw 'Thread context or stack data is truncated.' }
 

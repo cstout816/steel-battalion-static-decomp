@@ -56,6 +56,8 @@ param(
 
     [switch]$EnableDsoundWriteWatch,
 
+    [switch]$EnableDsoundListTrace,
+
     [switch]$EnableXbeSectionTrace,
 
     [switch]$EnableMmioTrace,
@@ -299,6 +301,12 @@ if ($EnableDsoundWriteWatch) {
     $settings.RECOMP_DSOUND_WRITE_WATCH_LOG = $dsoundWriteWatchLog
 }
 
+if ($EnableDsoundListTrace) {
+    # Generated insert/unlink probes are capped and behavior-neutral. Use them
+    # to capture list mutations before a later DirectSound invalid-node fault.
+    $settings.RECOMP_DS_LIST_TRACE = '1'
+}
+
 if ($EnableXbeSectionTrace) {
     # Bounded per-call XeLoadSection/XeUnloadSection records. This identifies
     # the selected XBE section and refcount without enabling broad kernel logs.
@@ -327,7 +335,7 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
     $settings.RECOMP_WATCH2 = $GuestWatchAddress2
 }
 
-$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + @(
+$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + 'RECOMP_DS_LIST_TRACE' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
     'RECOMP_FILE_OPEN_PATH_TRACE'
 )
@@ -399,6 +407,9 @@ try {
     }
     if ($EnableDsoundWriteWatch) {
         $environmentSnapshot += "RECOMP_DSOUND_WRITE_WATCH=1; log=$dsoundWriteWatchLog"
+    }
+    if (-not $EnableDsoundListTrace) {
+        $environmentSnapshot += 'RECOMP_DS_LIST_TRACE=<unset; opt-in bounded list mutation records>'
     }
     if (-not $EnableMmioTrace) {
         $environmentSnapshot += 'RECOMP_MMIO_TRACE=<unset; opt-in>'
