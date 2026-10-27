@@ -1,3 +1,19 @@
+### 2026-10-27 — r95 loader-state and automatic plateau stop
+
+**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader dependency tracing `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`; stable 60-FPS mission performance `░ 0/1`.
+
+The AOT r95 diagnostic used PID 127580 and executable SHA-256 `3C298BB7880DB89D11318D9C2CDC614F9136399AC2EE2F77020F6939DAAB58BF`. The screen-gated `AA` new-pilot route reached `NOW LOADING`, but not the first mission frame. The corrected five-minute plateau guard was validated: it verified the child executable path and stopped only PID 127580 after 300 seconds with unchanged mode-2 state and framebuffer signature. The external watchdog did not fire, marker counts completed, and the relay dropped zero lines.
+
+The `LIST AS NEW` A press is correlated through XID DMA buffer `0x01081763`, guest edge/predicate caller `0x000C8064`, active pilot callback `0x000E18D8` branch `0x000E193B`, and row action `0x83` at `0x000E19CF`, which changes item `0x002E4C34+0x28` from `0x3F800000` to 0. The runtime resource lookup resolves the selected label to `0x0026AF04`. Candidate callback `0x000E0870` was not selected for this event.
+
+The strongest unresolved dependency candidate remains the repeated `Z:\TEX00.BIN` cache miss at helper index `0x1E`; the source media file opens only for metadata and has no recorded content read/copy. All 177 mode-2 passes still return normally at `0x000C32D6` while the pair stays `0x011E2E00/0`. The 708 callback-state rows show no further mode, phase, gate, status, object, or progress transition. This identifies the repeated cache operation, not a proven sole blocker; the earlier controlled cache copy did not advance loading.
+
+The only traced preload routine, `sub_00013D70`, completed 21 copies for indices `0x00–0x0A`, `0x14–0x1B`, `0x36`, and `0x37`; it was never invoked for `0x1E`. Whether another producer should create that cache entry remains open.
+
+Raster workers remain expensive (late windows about 2.07–2.15 seconds wall and 8.10–8.42 seconds summed active across four workers), with no queue-depth evidence tying that cost to the loader gate. DCF4 callbacks and NV2A frame/counter/fence values advanced, but the wait trace hit 4,096 before loading, so a later wait is not exhaustively ruled out. No producer-stage trace, fix, cache seed, indirect-target seed, or rebuild was made. AOT, controller mapping, guest fences, and rasterizer `1ea1871` are unchanged. Full evidence: [r95 report](../analysis/m3-loader-state-callback-r95-20261027.md).
+
+**Next:** trace the producer and completion/state-update path for resource index `0x1E`; keep raster backlog, file/cache work, and DCF4 synchronization separate. Automatically stop an exact diagnostic child after the validated plateau, and stop immediately at the first verified mission frame.
+
 ### 2026-10-27 — r92 loader file-lifecycle trace
 
 **Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader dependency tracing `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`.
