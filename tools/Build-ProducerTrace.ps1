@@ -124,6 +124,8 @@ foreach ($check in @(
     @{ Path = $generatedMenuSource; Marker = 'open1=%08X open2=%08X open3=%08X stage=%08X' },
     @{ Path = $generatedMenuSource; Marker = '[LOAD-PASS-IN]' },
     @{ Path = $generatedMenuSource; Marker = '[LOAD-PASS-OUT]' },
+    @{ Path = $generatedMenuSource; Marker = '[LOAD-PAIR-OUTPUT]' },
+    @{ Path = $generatedMenuSource; Marker = 'RECOMP_LOAD_PAIR_OUTPUT_TRACE' },
     @{ Path = $generatedMenuSource; Marker = '[LOAD-STACK]' },
     @{ Path = $generatedLoaderSource; Marker = '[LOAD-STATE-CB]' },
     @{ Path = $generatedLoaderSource; Marker = 'RECOMP_LOAD_STATE_CALLBACK_TRACE' },

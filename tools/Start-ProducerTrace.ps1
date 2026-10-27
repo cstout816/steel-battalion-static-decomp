@@ -45,6 +45,8 @@ param(
 
     [switch]$EnableLoadStateCallbackTrace,
 
+    [switch]$EnableLoadPairOutputTrace,
+
     [switch]$EnableSbCallbackTargetTrace,
 
     [switch]$EnableStreamTrace,
@@ -269,6 +271,12 @@ if ($EnableLoadStateCallbackTrace) {
     $settings.RECOMP_LOAD_STATE_CALLBACK_TRACE = '1'
 }
 
+if ($EnableLoadPairOutputTrace) {
+    # Capture the mode-2 helper's output pair and selected resource index at
+    # the scan's final comparison, without changing the guest state update.
+    $settings.RECOMP_LOAD_PAIR_OUTPUT_TRACE = '1'
+}
+
 if ($EnableSbCallbackTargetTrace) {
     # Record the indirect target used by the Steel Battalion DCF4 callback
     # without changing the target or its dispatch behavior.
@@ -366,7 +374,8 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
 
 $environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_PRELOAD_ASSET_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_WAIT_TRACE_ALL_LIMIT' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + 'RECOMP_DS_LIST_TRACE' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
-    'RECOMP_FILE_OPEN_PATH_TRACE'
+    'RECOMP_FILE_OPEN_PATH_TRACE',
+    'RECOMP_LOAD_PAIR_OUTPUT_TRACE'
 )
 $previousEnvironment = @{}
 foreach ($name in $environmentNames) {
