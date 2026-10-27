@@ -41,7 +41,7 @@ for($i=0;$i -lt $moduleCount;$i++){
     $o=[int]$modStream.Rva+4+($i*108)
     $modules += [pscustomobject]@{Base=(U64 $o);Size=(U32 ($o+8));Name=(MapString (U32 ($o+20)))}
 }
-$exe=$modules|Where-Object {$_.Name -match 'your_game_recomp_producer_trace\.exe$'}|Select-Object -First 1
+$exe=$modules|Where-Object {$_.Name -match 'your_game_recomp(?:_producer_trace)?\.exe$'}|Select-Object -First 1
 if(-not $exe){throw 'ProducerTrace image was not found in the dump module list.'}
 $symbols=@()
 $preferredBase=[uint64]0x140000000

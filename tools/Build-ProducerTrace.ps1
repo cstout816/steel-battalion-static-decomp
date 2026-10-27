@@ -48,9 +48,9 @@ $generatedFileCopySource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp
 $generatedPreloadSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0000.c'
 $kernelTraceSource = Join-Path $projectRoot 'local-tools\xboxrecomp\src\kernel\kernel_bridge.c'
 $msbuild = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
-$stagedExe = Join-Path $traceDir 'your_game_recomp_diag.exe'
-$stagedPdb = Join-Path $buildRoot 'Release\your_game_recomp_diag.pdb'
-$tracePdb = Join-Path $traceDir 'your_game_recomp_diag.pdb'
+$stagedExe = Join-Path $traceDir 'your_game_recomp.exe'
+$stagedPdb = Join-Path $buildRoot 'Release\your_game_recomp.pdb'
+$tracePdb = Join-Path $traceDir 'your_game_recomp_producer_trace.pdb'
 $archiveDir = 'C:\Project\SteelBattalion-Delete-Later-20261024\workspace\local-tools\steel-battalion-game\build-xpp-seeded\ProducerTrace\Release'
 
 foreach ($path in @($projectFile, $kernelProject, $usbProject, $generatedSource, $generatedInputSource, $generatedMenuSource, $generatedLoaderSource, $generatedAudioSource, $generatedFileCopySource, $generatedPreloadSource, $kernelTraceSource, $msbuild)) {
@@ -123,6 +123,18 @@ foreach ($check in @(
     @{ Path = $generatedMenuSource; Marker = '[LOAD-PASS-IN]' },
     @{ Path = $generatedMenuSource; Marker = '[LOAD-PASS-OUT]' },
     @{ Path = $generatedMenuSource; Marker = '[LOAD-STACK]' },
+    @{ Path = $generatedLoaderSource; Marker = '[LOAD-STATE-CB]' },
+    @{ Path = $generatedLoaderSource; Marker = 'RECOMP_LOAD_STATE_CALLBACK_TRACE' },
+    @{ Path = $generatedLoaderSource; Marker = '0x00101E6Bu' },
+    @{ Path = $generatedLoaderSource; Marker = '0x00101E8Bu' },
+    @{ Path = $generatedLoaderSource; Marker = '0x00101F70u' },
+    @{ Path = $generatedLoaderSource; Marker = '0x00101F90u' },
+    @{ Path = $generatedLoaderSource; Marker = '0x00101FF6u' },
+    @{ Path = $generatedLoaderSource; Marker = '0x00102017u' },
+    @{ Path = $generatedLoaderSource; Marker = '0x0010203Au' },
+    @{ Path = $generatedLoaderSource; Marker = '0x0010205Au' },
+    @{ Path = $generatedLoaderSource; Marker = '0x0010206Bu' },
+    @{ Path = $generatedLoaderSource; Marker = '0x0010208Au' },
     @{ Path = $generatedLoaderSource; Marker = '[LOAD-RENDER]' },
     @{ Path = $generatedFileCopySource; Marker = '[FILE-COPY-ENTER]' },
     @{ Path = $generatedFileCopySource; Marker = '[FILE-COPY-RETURN]' },

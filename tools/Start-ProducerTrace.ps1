@@ -27,6 +27,8 @@ param(
 
     [switch]$EnableDcf4ProducerTrace,
 
+    [switch]$EnableLoadStateCallbackTrace,
+
     [switch]$EnableSbCallbackTargetTrace,
 
     [switch]$EnableStreamTrace,
@@ -42,6 +44,8 @@ param(
     [switch]$EnableThreadStartTrace,
 
     [switch]$EnablePreloadWorkerTrace,
+
+    [switch]$EnableDsoundWriteWatch,
 
     [switch]$EnableMmioTrace,
 
@@ -94,6 +98,11 @@ $generatedDiagnosticSources = @(
     (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0005.c'),
     (Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0016.c')
 )
+$diagnosticSupportSources = @(
+    (Join-Path $projectRoot 'local-tools\steel-battalion-game\src\main.c'),
+    (Join-Path $projectRoot 'local-tools\steel-battalion-game\src\dsound_write_watch.c'),
+    (Join-Path $projectRoot 'local-tools\steel-battalion-game\CMakeLists.txt')
+)
 $logRoot = Join-Path $projectRoot 'iso\local-analysis\logs'
 $saveRoot = (Resolve-Path -LiteralPath $SaveDirectory -ErrorAction Stop).Path
 $runDirectory = Join-Path $logRoot $RunName
@@ -122,6 +131,15 @@ foreach ($source in $generatedDiagnosticSources) {
         throw "ProducerTrace executable is older than an instrumented generated source ($source). Build it before launching."
     }
 }
+foreach ($source in $diagnosticSupportSources) {
+    if (-not (Test-Path -LiteralPath $source)) {
+        throw "Required diagnostic support source is missing: $source"
+    }
+    if ($EnableDsoundWriteWatch -and
+            (Get-Item -LiteralPath $traceExe).LastWriteTimeUtc -lt (Get-Item -LiteralPath $source).LastWriteTimeUtc) {
+        throw "Write-watch executable is older than its diagnostic support source ($source). Build it before launching."
+    }
+}
 if (Test-Path -LiteralPath $runDirectory) {
     throw "Run directory already exists; choose a new name so earlier logs are preserved: $runDirectory"
 }
@@ -133,6 +151,7 @@ $stderrLog = Join-Path $runDirectory 'stderr.log'
 $framePath = Join-Path $runDirectory 'frame.bmp'
 $crashPath = Join-Path $runDirectory 'crash.dmp'
 $waitTrace = Join-Path $runDirectory 'wait-trace.log'
+$dsoundWriteWatchLog = Join-Path $runDirectory 'dsound-write-watch.log'
 $null = New-Item -ItemType File -Path $padLive
 
 $settings = [ordered]@{
@@ -203,6 +222,12 @@ if ($EnableDcf4ProducerTrace) {
     $settings.RECOMP_SB_DCF4_PRODUCER_TRACE = '1'
 }
 
+if ($EnableLoadStateCallbackTrace) {
+    # Bounded before/after snapshots for indirect callbacks in sub_00101A60.
+    # This helps distinguish loader-state callback progress from file or GPU waits.
+    $settings.RECOMP_LOAD_STATE_CALLBACK_TRACE = '1'
+}
+
 if ($EnableSbCallbackTargetTrace) {
     # Record the indirect target used by the Steel Battalion DCF4 callback
     # without changing the target or its dispatch behavior.
@@ -239,6 +264,11 @@ if ($EnableThreadStartTrace) {
 
 if ($EnablePreloadWorkerTrace) {
     $settings.RECOMP_PRELOAD_WORKER_TRACE = '1'
+}
+
+if ($EnableDsoundWriteWatch) {
+    $settings.RECOMP_DSOUND_WRITE_WATCH = '1'
+    $settings.RECOMP_DSOUND_WRITE_WATCH_LOG = $dsoundWriteWatchLog
 }
 
 if ($EnableMmioTrace) {
@@ -313,6 +343,9 @@ try {
     if (-not $EnablePreloadWorkerTrace) {
         $environmentSnapshot += 'RECOMP_PRELOAD_WORKER_TRACE=<unset; opt-in>'
     }
+    if ($EnableDsoundWriteWatch) {
+        $environmentSnapshot += "RECOMP_DSOUND_WRITE_WATCH=1; log=$dsoundWriteWatchLog"
+    }
     if (-not $EnableMmioTrace) {
         $environmentSnapshot += 'RECOMP_MMIO_TRACE=<unset; opt-in>'
     }
@@ -331,7 +364,7 @@ try {
     # to identify the historical r69/r72 diagnostic images after replacement.
     $pdbPaths = @(Get-ChildItem -LiteralPath (Split-Path -Parent $traceExe) -File -Filter '*.pdb' |
         Select-Object -ExpandProperty FullName)
-    $provenancePaths = @($traceExe) + $pdbPaths + $generatedDiagnosticSources
+    $provenancePaths = @($traceExe) + $pdbPaths + $generatedDiagnosticSources + $diagnosticSupportSources
     $provenanceFiles = @(
         foreach ($path in ($provenancePaths | Select-Object -Unique)) {
             $file = Get-Item -LiteralPath $path
@@ -401,7 +434,7 @@ if ($useAsyncTraceRelay) {
     if ($relayResult.WriterError) { "Log writer error: $($relayResult.WriterError)" }
 
     $traceMarkers = @(
-        '[PILOT-LIST-CB]', '[PILOT-ROW-POST]', '[SB-SNAPSHOT]',
+        '[PILOT-LIST-CB]', '[PILOT-ROW-POST]', '[SB-SNAPSHOT]', '[LOAD-STATE-CB]',
         '[SB-INPUT-DISPATCH]', '[SB-INPUT-PRED]', '[SB-EDGE-CONSUME]',
         '[MENU-DISPATCH]', '[MENU-RESOURCE]', '[MENU-CALLBACK-GATE]',
         '[MENU-OBJECT-GATE]', '[TITLE-ROUTE-QUERY]', '[THREAD-START]',
