@@ -288,8 +288,11 @@ if ($EnablePreloadTex00GateTrace) {
 }
 
 if ($EnablePreloadWorkerScheduleTrace) {
-    # Record requested worker modes at their guest scheduling callsites.
+    # Record requested modes, the mode-selection inputs, and the loader's
+    # alternate scheduler gate without changing either guest branch.
     $settings.RECOMP_PRELOAD_WORKER_SCHEDULE_TRACE = '1'
+    $settings.RECOMP_PRELOAD_MODE_REQUEST_TRACE = '1'
+    $settings.RECOMP_LOAD_SCHED_GATE_TRACE = '1'
 }
 
 if ($EnableSbCallbackTargetTrace) {
@@ -392,7 +395,9 @@ $environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TR
     'RECOMP_FILE_OPEN_PATH_TRACE',
     'RECOMP_LOAD_PAIR_OUTPUT_TRACE',
     'RECOMP_PRELOAD_TEX00_GATE_TRACE',
-    'RECOMP_PRELOAD_WORKER_SCHEDULE_TRACE'
+    'RECOMP_PRELOAD_WORKER_SCHEDULE_TRACE',
+    'RECOMP_PRELOAD_MODE_REQUEST_TRACE',
+    'RECOMP_LOAD_SCHED_GATE_TRACE'
 )
 $previousEnvironment = @{}
 foreach ($name in $environmentNames) {
@@ -718,6 +723,7 @@ if ($useAsyncTraceRelay) {
         '[MENU-DISPATCH]', '[MENU-RESOURCE]', '[MENU-CALLBACK-GATE]',
         '[MENU-OBJECT-GATE]', '[TITLE-ROUTE-QUERY]', '[THREAD-START]',
         '[PRELOAD-WORKER-ROUTE]', '[FILE-PRELOAD-ENTER]',
+        '[PRELOAD-MODE-REQUEST]', '[PRELOAD-WORKER-SCHEDULE]', '[LOAD-SCHED-GATE]',
         '[FILE-PRELOAD-RETURN]', '[FILE-COPY-ENTER]', '[FILE-COPY-RETURN]',
         '[FILE-IO]', '[FILE-CALL]', '[FILE-MISS-PATH]',
         '[FILE-LIFECYCLE-OPEN-CAPPED]', '[FILE-LIFECYCLE-OPEN]',

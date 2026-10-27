@@ -6216,3 +6216,13 @@ Detailed evidence: `analysis/m3-loader-producer-gate-r97-r99-20261027.md`. r99 f
 
 
 Completed r96–r98 diagnostic build folders were moved out of the workspace to C:\Project\SteelBattalion-Delete-Later\m3-diagnostic-builds-r96-r98-20261027 (509,937,943 bytes total), preserved for later review. Logs, reports, source traces, and r98 crash dump remain. Future stalled diagnostic runs use automatic exact-process plateau termination; unrelated/user game processes are never targeted.
+
+### 2026-10-27 — r100–r102 scheduler-input trace and DirectSound retries
+
+**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader dependency tracing `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`; stable 60-FPS mission performance `░ 0/1`.
+
+The isolated AOT candidate `m3-mode-state-r100-20261027` (SHA-256 `B1FD7121E4442587A7485F9B23251C08B9C1E06F077275406A19C925A39FE68E`) added bounded trace-only records for the `0x000E0109` preload-mode input and the alternate load scheduler gate at `0x00101FC0`. r100/r101 each emitted one requested mode 0 from `0x000E0109`; no alternate load scheduler gate was reached. Both runs crashed before NOW LOADING in the DirectSound deferred-list path with invalid node 0, predecessor `0x8038C098`, guest fault VA `0xFFFFFFF4`, exit `0xC0000005`. r101 captured the live XID edge through callback `0x000E18D8`, selected branch `0x000E193B`, and row action `0x83` at `0x000E19CF`; the saved frame shows pilot-name entry.
+
+r102 enabled the existing DirectSound write watch and list trace, which armed 54 observed thread IDs but logged zero writes to words `0x8038C098`, `0x8038C09C`, or `0x8038C08C`. It remained at name entry without reaching the loader and was stopped only after verifying the exact launched PID and executable path. This does not prove all writers or allocations were covered. No behavior, controller, fence, or rasterizer changes were made. Exact paths, run IDs, trace limits, and evidence: [r100–r102 report](../analysis/m3-preload-mode-input-r100-r102-20261027.md).
+
+Next: determine whether DirectSound’s malformed node can be traced to its originating guest object write, then retry the new-pilot route to exercise the alternate scheduler and resume the loader dependency trace. Do not force mode 1, seed TEX00, or conflate this audio crash with the separate loading plateau.
