@@ -133,3 +133,7 @@ The r79 candidate already contains the `[LOAD-STATE-CB]` callback-state instrume
 Once PID 111756 exits naturally (or the user authorizes that exact PID to stop), the prepared new-pilot replay is: `./tools/Start-ProducerTrace.ps1 -RunName m3-r79-load-state-file-miss-20261026 -ExecutablePath local-tools/steel-battalion-game/build-xpp-seeded/ProducerTrace-Candidates/r79-load-state-callbacks-20261026/Release/your_game_recomp_producer_trace.exe -SaveDirectory iso/local-analysis/saves-m3-known-save-copy-20261023 -EnableLoadStateCallbackTrace -EnableFileFailurePathTrace -EnableFileIoDetailTrace`. Lifecycle tracing stays off by default to avoid the 50,000-row cap/flood; the existing all-read trace and bounded I/O detail remain on. This is prepared only, not launched. The active r78 process remains untouched.
 
 Latest r78 poll at observation time: pass n=1445, tick 319322703, TID 68004, result 0, unchanged pair `0x011E2E00/0`; no cause or mission frame verified.
+
+## Latest live capture after follow-up preparation
+
+PID 111756 remained alive/responding and was left untouched. At 2026-10-26 22:13:53 CDT the framebuffer was captured showing `NOW LOADING`; no mission frame. Latest `[LOAD-PASS-OUT]` n=1482 at tick 319391640, TID 68004, mode 2 / branch `scan`, returned 0 with `0x011E2E00/0` unchanged. The r79 replay remains prepared, not launched. No file-failure cause, callback branch/target, or first mission frame has been verified.
