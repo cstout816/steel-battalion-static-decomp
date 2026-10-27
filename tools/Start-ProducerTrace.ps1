@@ -9,7 +9,9 @@ file. It does not copy save data or send input. Append input only after checking
 the latest framebuffer and confirming the expected screen. Child output is
 drained through a bounded asynchronous queue by default; any dropped lines are
 reported after exit. Use -DirectTraceOutput only when direct file output is
-specifically needed. -EnableFileFailurePathTrace adds a low-volume sampled path
+specifically needed. An external supervisor also terminates only the launched
+diagnostic process at the configured watchdog limit, even if its internal
+watchdog fails. -EnableFileFailurePathTrace adds a low-volume sampled path
 record for failed NtCreateFile calls, useful when lifecycle traces reach their cap.
 
 .EXAMPLE
@@ -451,10 +453,24 @@ finally {
 "Run logs: $runDirectory"
 "Existing saves: $saveRoot"
 "Screen-gated input file (created empty): $padLive"
+$externalWatchdogTriggered = $false
+$watchdogTimer = [Diagnostics.Stopwatch]::StartNew()
+while (-not $process.WaitForExit(10000)) {
+    if ($watchdogTimer.Elapsed.TotalSeconds -ge $WatchdogSeconds) {
+        $externalWatchdogTriggered = $true
+        Write-Warning "External watchdog reached $WatchdogSeconds seconds; terminating diagnostic PID $($process.Id)."
+        try { $process.Kill() }
+        catch [InvalidOperationException] { }
+        $process.WaitForExit()
+        break
+    }
+}
+$watchdogTimer.Stop()
 if ($useAsyncTraceRelay) {
-    'Waiting for the diagnostic game process to exit so the asynchronous log relay can finalize its files.'
+    'Finalizing the asynchronous log relay after the diagnostic process exited.'
     $relayResult = [ProducerTraceAsyncRelay]::WaitForExit($process, 5000)
     "Diagnostic process exit code: $($relayResult.ExitCode)"
+    "External watchdog terminated process: $externalWatchdogTriggered"
     "Dropped trace lines: stdout=$($relayResult.DroppedStdoutLines), stderr=$($relayResult.DroppedStderrLines)"
     "Log writer stopped: $($relayResult.WriterStopped)"
     if ($relayResult.WriterError) { "Log writer error: $($relayResult.WriterError)" }
@@ -499,6 +515,7 @@ if ($useAsyncTraceRelay) {
         ConvertFrom-Json
     $resultManifest | Add-Member -NotePropertyName RunResult -NotePropertyValue ([ordered]@{
         ProcessExitCode = $relayResult.ExitCode
+        ExternalWatchdogTriggered = $externalWatchdogTriggered
         DroppedStdoutLines = $relayResult.DroppedStdoutLines
         DroppedStderrLines = $relayResult.DroppedStderrLines
         LogWriterStopped = $relayResult.WriterStopped
