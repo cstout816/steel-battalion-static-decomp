@@ -12,13 +12,19 @@
 
 The run manifest hashes the executable, PDB, generated sources, and runtime source files. `environment.txt` confirms XID/input, pilot-list/menu, file read/lifecycle/failure/I/O detail, load-pass/state callback, thread-start/preload-worker, XBE section, DCF4 callback/producer, NV2A, and raster traces were enabled. `RECOMP_SB_DCF4_PRODUCER_TRACE=1`; high-volume `RECOMP_SYNC_TRACE`, `RECOMP_PB_SEMAPHORE_TRACE`, and scripted pad input were unset. The async relay queue capacity was 32,768 lines; zero lines were dropped. The runtime watchdog was 1,800 seconds; this run ended earlier by user request.
 
-The final marker counts include 35 XID and 35 XID-DMA rows, 29 input predicates, 18 edge-consume rows, 368 pilot-list callbacks, one pilot-row post, 419 load-pass inputs and outputs, 1,676 load-state callbacks, 22,972 lifecycle opens, 22,919 closes, 5,205 file-I/O rows, 25 failed paths, 15,129 DCF4 callbacks, 300,000 DMA-publish marker rows, 433 NV2A ticks, and 621 raster windows. No trace cap was reported as reached. The dedicated `[SB-SNAPSHOT]`, `[SB-INPUT-DISPATCH]`, `[MENU-DISPATCH]`, `[FILE-CALL]`, `[FILE-PRELOAD]`, `[FILE-COPY]`, `[SB-PFB-POLL]`, and `[SYNC-PBSEM]` records were absent; their absence does not show those stages executed.
+The final marker counts include 35 XID and 35 XID-DMA rows, 29 input predicates, 18 edge-consume rows, 368 pilot-list callback rows, one pilot-row post, 419 load-pass inputs and outputs, 1,676 load-state instrumentation rows, 22,972 lifecycle opens, 22,919 closes, 5,205 file-I/O rows, 25 failed paths, 15,129 DCF4 callbacks, 300,000 DMA-publish marker rows, 433 NV2A ticks, and 621 raster windows. No trace cap was reported as reached. The dedicated `[SB-SNAPSHOT]`, `[SB-INPUT-DISPATCH]`, `[MENU-DISPATCH]`, `[FILE-CALL]`, `[FILE-PRELOAD]`, `[FILE-COPY]`, `[SB-PFB-POLL]`, and `[SYNC-PBSEM]` records were absent; their absence does not show those stages executed.
 
 ## Screen-gated pilot route
 
 Captured route: title → campaign → pilot list showing `LIST AS NEW` → name `A` → date `01/01/2002` → `YES` → Normal difficulty → visible `NOW LOADING`.
 
 The active pilot-list callback is correlated with the visible row and input. XID/DMA, guest edge/predicate, and menu-resource traces emitted; `[MENU-RESOURCE]` identifies text VA `0x0026AF04`; `[PILOT-LIST-CB]` emitted 368 records and `[PILOT-ROW-POST]` one. Handler `0x000E18D8` selected branch `0x000E193B`; row object `0x002E4C34`, field `+0x28`, changed from `0x3F800000` to zero at `0x000E19CF`. This confirms the runtime callback for the displayed `LIST AS NEW` item. It does not support treating `sub_000E0870` as the handler.
+
+### Interpretation correction: lock thunks, not load callbacks
+
+The label `[LOAD-STATE-CB]` came from the local probe name, not a verified guest callback. The four emitted site/target pairs each occur exactly 419 times: `0x0010203A -> 0xFE000004`, `0x0010205A -> 0xFE000000`, `0x0010206B -> 0xFE000004`, and `0x0010208A -> 0xFE000000`. Reading the original XBE thunk table at VA `0x0025D0E0` shows slot 0 contains ordinal 294 (`0x80000126`) and slot 1 ordinal 277 (`0x80000115`). The local ordinal archive and `kernel_thunks.c` map these to `RtlLeaveCriticalSection` and `RtlEnterCriticalSection`; `RECOMP_ICALL_SAFE_AT` resolves the synthetic addresses through the kernel bridge. The bridge invokes the corresponding critical-section wrapper, which returns zero. Thus these 1,676 rows are two enter/leave pairs around the repeated scan, not missing game-code callbacks or unresolved targets. No function seed or rebuild is justified by these targets.
+
+Likewise, the observed `0x0066A508/0x0066A50C` pair is read and conditionally updated by `sub_000C3020` after paired resource open/metadata comparisons in `sub_000C2EB0`. Its role as a loader percentage or completion counter has not been established. The r88 facts are that its values stabilize after the first scan and that the scan continues; these facts do not show that a loader-progress counter is stuck. The first dependency remains unidentified.
 
 ## Loading evidence and cause status
 
