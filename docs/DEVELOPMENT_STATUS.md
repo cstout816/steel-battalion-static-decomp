@@ -1,3 +1,12 @@
+### 2026-10-27 — current milestone and r81 crash evidence
+
+**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`.
+
+The r80 AOT run reached NOW LOADING but remained there without a first mission frame or identified loader dependency. Its DCF4 producer trace showed repeated producer/flush activity and sampled successful signals; this does not prove a terminal fence failure. PID117004 was later stopped under exact user authorization.
+
+A bounded r81 AOT capture reused the same save root and screen-gated the new-pilot route through the name editor. It crashed before birth-date confirmation or NOW LOADING (exit `0xC0000005`). The trace and generated source correlate the fault with `sub_0021FE7C` traversing an invalid DirectSound deferred-settings list: a node pointer `0xFF000000` was followed by NULL, and the guest fault was at `0xFFFFFFF4`. The underlying list corruption/initialization cause is still unverified. This early audio crash is separate from the r80 loading stall; no runtime fix was made. Full evidence: [r81 report](../analysis/m3-loader-r81-lifecycle-dcf4-20261027.md).
+
+Latest repository audit: 113 tracked paths, zero XBE/ISO/game-media/generated-code candidates, Git object store 96.04 MiB. Nine non-ignored local documents/scripts remain untracked and were not staged. The ordinal CSV and Java annotator/verifier remain in both the project tooling and `C:\Project\GhidraAnalysis\scripts`; names are provisional for XDK build 4627. Exact public projects named XbeTripper and xberewrite remain unverified. Continue with XboxRecomp ahead-of-time output. Do not run Cxbx as the game's solution, change architecture, or seed/fix guest behavior from this crash alone. No diagnostic process is currently active; future diagnostic runs use a bounded watchdog and are stopped early on a crash or unproductive stall.
 ### 2026-10-26 — latest r78 loading readback
 
 **Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first-level gameplay at verified frame `░ 0/1`.
