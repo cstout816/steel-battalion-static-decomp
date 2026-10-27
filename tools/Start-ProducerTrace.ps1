@@ -46,6 +46,8 @@ param(
 
     [switch]$EnableDcf4ProducerTrace,
 
+    [switch]$EnableKeyboardInput,
+
     [switch]$EnableHighVolumeSyncTrace,
 
     [switch]$EnableLoadStateCallbackTrace,
@@ -79,6 +81,8 @@ param(
     [switch]$EnableDsoundWriteWatch,
 
     [switch]$EnableDsoundListTrace,
+
+    [switch]$EnableTextureSampleTrace,
 
     [switch]$EnableXbeSectionTrace,
 
@@ -276,6 +280,19 @@ if ($EnableDcf4ProducerTrace) {
     $settings.RECOMP_SB_DCF4_PRODUCER_TRACE = '1'
 }
 
+if ($EnableKeyboardInput) {
+    # The host keyboard overlay is opt-in so a real XInput pad remains the
+    # default. It also lets screen-gated diagnostics navigate text entry.
+    $settings.RECOMP_KEYBOARD = '1'
+    $settings.RECOMP_KEY_TRACE = '1'
+}
+
+if ($EnableTextureSampleTrace) {
+    # Log a bounded sample of decoded guest texture descriptors and mark
+    # out-of-range base addresses before the renderer performs its read.
+    $settings.RECOMP_TEX_SAMPLE_TRACE = '1'
+}
+
 if ($EnableHighVolumeSyncTrace) {
     # Detailed PB semaphore/sync records can emit tens of thousands of rows.
     # The default keeps periodic NV2A/DCF4 snapshots; opt in only for a run
@@ -405,7 +422,7 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
     $settings.RECOMP_WATCH2 = $GuestWatchAddress2
 }
 
-$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_PRELOAD_ASSET_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_WAIT_TRACE_ALL_LIMIT' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + 'RECOMP_DS_LIST_TRACE' + @(
+$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_PRELOAD_ASSET_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_WAIT_TRACE_ALL_LIMIT' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + 'RECOMP_DS_LIST_TRACE' + 'RECOMP_KEYBOARD' + 'RECOMP_KEY_TRACE' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
     'RECOMP_FILE_OPEN_PATH_TRACE',
     'RECOMP_LOAD_PAIR_OUTPUT_TRACE',
@@ -459,6 +476,10 @@ try {
     }
     if (-not $EnableDcf4ProducerTrace) {
         Remove-Item Env:RECOMP_SB_DCF4_PRODUCER_TRACE -ErrorAction SilentlyContinue
+    }
+    if (-not $EnableKeyboardInput) {
+        Remove-Item Env:RECOMP_KEYBOARD -ErrorAction SilentlyContinue
+        Remove-Item Env:RECOMP_KEY_TRACE -ErrorAction SilentlyContinue
     }
     if (-not $EnableHighVolumeSyncTrace) {
         Remove-Item Env:RECOMP_SYNC_TRACE -ErrorAction SilentlyContinue
