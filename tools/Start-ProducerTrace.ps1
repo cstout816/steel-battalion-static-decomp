@@ -11,7 +11,10 @@ drained through a bounded asynchronous queue by default; any dropped lines are
 reported after exit. Use -DirectTraceOutput only when direct file output is
 specifically needed. An external supervisor also terminates only the launched
 diagnostic process at the configured watchdog limit, even if its internal
-watchdog fails. -EnableFileFailurePathTrace adds a low-volume sampled path
+watchdog fails. A plateau watchdog also stops only that child after the
+configured interval with no change in the mode-2 loader signature or captured
+framebuffer; it verifies the live executable path before stopping.
+-EnableFileFailurePathTrace adds a low-volume sampled path
 record for failed NtCreateFile calls, useful when lifecycle traces reach their cap.
 
 .EXAMPLE
@@ -25,6 +28,9 @@ param(
 
     [ValidateRange(300, 43200)]
     [int]$WatchdogSeconds = 900,
+
+    [ValidateRange(120, 3600)]
+    [int]$PlateauSeconds = 300,
 
     [ValidateRange(4096, 32768)]
     [int]$WaitTraceAllLimit = 16384,
@@ -418,6 +424,7 @@ try {
 
     $environmentSnapshot = @($settings.GetEnumerator() | ForEach-Object { "{0}={1}" -f $_.Key, $_.Value })
     $environmentSnapshot += "EXECUTABLE_PATH=$traceExe"
+    $environmentSnapshot += "AUTO_PLATEAU_STOP=$PlateauSeconds seconds; requires unchanged mode-2 loader signature and framebuffer hash"
     $environmentSnapshot += 'RECOMP_PAD_SCRIPT=<unset; screen-gated live input only>'
     if (-not $EnableFileCallerTrace) {
         $environmentSnapshot += 'RECOMP_FILE_CALLER_TRACE=<unset; opt-in>'
@@ -541,6 +548,10 @@ finally {
 "Existing saves: $saveRoot"
 "Screen-gated input file (created empty): $padLive"
 $externalWatchdogTriggered = $false
+$plateauWatchdogTriggered = $false
+$plateauSignatureAtStop = $null
+$lastPlateauSignature = $null
+$plateauStableSince = $null
 $watchdogTimer = [Diagnostics.Stopwatch]::StartNew()
 while (-not $process.WaitForExit(10000)) {
     if ($watchdogTimer.Elapsed.TotalSeconds -ge $WatchdogSeconds) {
@@ -550,6 +561,82 @@ while (-not $process.WaitForExit(10000)) {
         catch [InvalidOperationException] { }
         $process.WaitForExit()
         break
+    }
+
+    # Begin plateau detection only after the mode-2 loading scan is active and
+    # a framebuffer capture exists. A stop requires both the loader's stable
+    # branch/pair signature and the visible frame hash to remain unchanged.
+    $latestPass = $null
+    if (Test-Path -LiteralPath $stderrLog -PathType Leaf) {
+        try {
+            $latestPass = Get-Content -LiteralPath $stderrLog -Tail 2000 -ErrorAction Stop |
+                Where-Object { $_ -match '\[LOAD-PASS-OUT\].*mode=0002.*branch=scan' } |
+                Select-Object -Last 1
+        }
+        catch { $latestPass = $null }
+    }
+    $frameExists = Test-Path -LiteralPath $framePath -PathType Leaf
+    if ($latestPass -and $frameExists) {
+        $passMatch = [regex]::Match(
+            $latestPass,
+            'mode=(?<mode>[0-9A-F]+).*range=(?<range>[0-9]+\.\.[0-9]+).*last_index=(?<index>[0-9]+).*branch=(?<branch>[^ ]+).*result=(?<result>[0-9A-F]+).*pair=(?<pairA>[0-9A-F]+)/(?<pairB>[0-9A-F]+)')
+        if ($passMatch.Success) {
+            try {
+                $frameHash = (Get-FileHash -LiteralPath $framePath -Algorithm SHA256 -ErrorAction Stop).Hash
+                # Exclude tick and pass number so a normal polling loop does
+                # not look like forward loader progress on every iteration.
+                $currentPlateauSignature = 'mode={0}|range={1}|index={2}|branch={3}|result={4}|pair={5}/{6}|frame={7}' -f @(
+                    $passMatch.Groups['mode'].Value,
+                    $passMatch.Groups['range'].Value,
+                    $passMatch.Groups['index'].Value,
+                    $passMatch.Groups['branch'].Value,
+                    $passMatch.Groups['result'].Value,
+                    $passMatch.Groups['pairA'].Value,
+                    $passMatch.Groups['pairB'].Value,
+                    $frameHash)
+                $now = [DateTime]::UtcNow
+                if ($currentPlateauSignature -ne $lastPlateauSignature) {
+                    $lastPlateauSignature = $currentPlateauSignature
+                    $plateauStableSince = $now
+                }
+                elseif ($null -ne $plateauStableSince -and
+                        ($now - $plateauStableSince).TotalSeconds -ge $PlateauSeconds) {
+                    $liveProcess = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
+                    $livePath = if ($liveProcess) { $liveProcess.Path } else { $null }
+                    if ($liveProcess -and $livePath -and
+                            [string]::Equals(
+                                [IO.Path]::GetFullPath($livePath),
+                                [IO.Path]::GetFullPath($traceExe),
+                                [StringComparison]::OrdinalIgnoreCase)) {
+                        $plateauWatchdogTriggered = $true
+                        $plateauSignatureAtStop = $currentPlateauSignature
+                        $stopRecord = @(
+                            "Stopped diagnostic PID $($process.Id) at $($now.ToString('o')) after $PlateauSeconds seconds with unchanged mode-2 loader state and framebuffer hash.",
+                            "Verified executable: $livePath",
+                            "Signature: $currentPlateauSignature"
+                        )
+                        $stopRecord | Set-Content -LiteralPath (Join-Path $runDirectory 'plateau-stop.txt') -Encoding UTF8
+                        Write-Warning "Plateau watchdog verified PID $($process.Id) belongs to this diagnostic run and is stopping it after $PlateauSeconds seconds without loader or framebuffer progress."
+                        $process.Kill()
+                        $process.WaitForExit()
+                        break
+                    }
+                    else {
+                        Write-Warning "Plateau detected, but the live process path did not verify as this run's executable. Leaving it untouched."
+                        $plateauStableSince = $now
+                    }
+                }
+            }
+            catch { }
+        }
+        else {
+            $lastPlateauSignature = $null
+            $plateauStableSince = $null
+        }
+    }
+    else {
+        $lastPlateauSignature = $null
+        $plateauStableSince = $null
     }
 }
 $watchdogTimer.Stop()
@@ -603,6 +690,9 @@ if ($useAsyncTraceRelay) {
     $resultManifest | Add-Member -NotePropertyName RunResult -NotePropertyValue ([ordered]@{
         ProcessExitCode = $relayResult.ExitCode
         ExternalWatchdogTriggered = $externalWatchdogTriggered
+        PlateauWatchdogTriggered = $plateauWatchdogTriggered
+        PlateauSeconds = $PlateauSeconds
+        PlateauSignatureAtStop = $plateauSignatureAtStop
         DroppedStdoutLines = $relayResult.DroppedStdoutLines
         DroppedStderrLines = $relayResult.DroppedStderrLines
         LogWriterStopped = $relayResult.WriterStopped
