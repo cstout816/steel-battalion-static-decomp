@@ -1,0 +1,45 @@
+# r93 new-pilot loading and preload trace — 2026-10-27
+
+## Result
+
+The screen-gated new-pilot route reached the visible `NOW LOADING` screen for `HAI SHI DAO 2080 [NORMAL]`. The screen remained `NOW LOADING` in the final capture. No first-mission frame was verified. I stopped only diagnostic PID `126780` before its 900-second watchdog because the loading state and loader result had repeated without change for several minutes. The manifest finalized with process exit `-1`, external watchdog `false`, zero dropped relay lines, and complete marker counts.
+
+The strongest current dependency candidate is the TEX00 cache/source pair, but the trace does **not** establish it as the sole blocker: the source asset exists and opens successfully for a metadata query; the cache open repeatedly fails; no TEX00 content read or copy occurs; and the prior r78 controlled cache copy did not advance loading. The trace proves the observed preload worker did not call `sub_00013D70` for table index `0x1C` (the TEX prefix entry); it does not prove that worker was the required producer. No behavior fix, cache seed, indirect-target seed, or architecture change was made.
+
+## Run identity and configuration
+
+- Run: `m3-preload-item-r93-20261027`, started `2026-10-27 10:23:56 CDT`, stopped at approximately `10:38:48 CDT`, before the configured 900-second watchdog. Diagnostic PID `126780` was verified against its executable path before it was stopped. No unrelated game process was touched.
+- Executable: `local-tools/steel-battalion-game/build-xpp-seeded/ProducerTrace-Candidates/m3-preload-asset-r93b-20261027/Release/your_game_recomp_producer_trace.exe`, SHA-256 `53B704BE993BF5911C783A47DAE4734ECBDFD5E04AA3A9FB1C3DE8FB8355209D`.
+- Generated source: ignored local directory `iso/local-analysis/xboxrecomp-generated-xpp-untraced-current/gen`. Trace-only edits were in `recomp_0000.c`, `sub_00013D70` at original VA `0x00013D70`, adding bounded records for entry, probe, metadata, comparison, copy input/output, and cache check. The guest branches and copy decisions were not changed. The compiler output contains 21 `[PRELOAD-ASSET-ENTER]` rows and 21 corresponding successful copy returns.
+- Environment: AOT executable; `RECOMP_PRELOAD_ASSET_TRACE=1` (counter limit 2,048); file lifecycle, all file-read, I/O detail, file-copy, caller, thread-start, preload-worker, load-helper/pass, pilot, XID/DMA, DCF4 callback, and four-thread raster performance traces enabled. `RECOMP_TRACE_BUDGET=0`; generic function tracing was not enabled. `RECOMP_WAIT_TRACE_ALL_LIMIT=16384`; the wait logger nevertheless reached its separate 4,096 `wait-DCF4` entry cap. DCF4 producer, high-volume sync, and PB-semaphore traces were unset because the terminal producer wait was not reproduced.
+- Final counts: 121 loader pass entries and returns; 2,178 helper-branch rows; 6,638 lifecycle opens and 6,464 closes; 5,727 `[READ]` completions; 5,119 I/O rows; 21 file-copy enter/return pairs; 21 preload-asset entries; 19,864 DCF4 callback rows; 9,692 DCF4 resets; 149 DCF4 returns; 4,096 wait-DCF4 entries; 379 raster windows. The async relay recorded zero drops and reported complete marker counts. `FILE-CALL` reached its 6,000-row cap; `FILE-MISS-PATH` reached its 64-row cap. The lifecycle-open trace did not reach its own cap.
+
+## Screen-gated route
+
+The visible route was title prompt → Campaign → pilot list (`LIST AS NEW`) → name editor → birth date `01/01/2002` → `OK? YES` → `HAI SHI DAO 2080 [NORMAL]` → `NOW LOADING`. One name entry (`AA`) was used. On the `LIST AS NEW` action, the records show XID report byte 2 set to `1`, guest edge cell `0x004AFC08` changing from 0 to 1, predicate caller `0x000C8064` under parent `0x000E18D8` returning true, and row callback `0x000E19CF` applying action `0x83` to item `0x002E4C34` (field `+0x28`: `0x3F800000 → 0`). The next captures showed the name editor. The trace does not directly observe the internal input snapshot/dispatch stage; `sub_000E0870` remains uncorrelated with the visible list callback.
+
+## File and loader evidence
+
+- The active run's extracted source file exists at `iso/local-analysis/game_files/Media/BIN/TEX00.bin`, size `702,976` bytes. At tick `363760843`, guest TID `127648`, caller `0x0018E758`, `NtCreateFile` opened guest path `D:\media\BIN\TEX00.BIN` successfully (`STATUS_SUCCESS`), resolving to that local file. The returned host file object was queried once for 56-byte metadata (`class=0x22`) and closed at the same tick. No TEX00 data read was correlated to that handle.
+- The same caller then attempted `Z:\TEX00.BIN` in the save cache. All 121 logged cache opens returned `STATUS_OBJECT_NAME_NOT_FOUND` (`0xC0000034`), beginning at tick `363761015`. `FILE-MISS-PATH` was capped at 64, but the lifecycle trace continued to capture cache opens. No TEX00-specific `[READ]` or file-copy completion was emitted.
+- The 21 observed `sub_00013D70` preload entries used indices `0`, `1`, `0x36`, `0x37`, `2..10`, and `0x14..0x1B`. All 21 file-copy helper calls returned success. No entry used index `0x1C` (the XBE resource-table `TEX` prefix) or copied TEX00. This is a trace of the observed worker activity, not proof that this is the only producer path.
+- The mode-2 loader ran on guest TID `127648`. All 121 `[LOAD-PASS-IN]` rows have matching `[LOAD-PASS-OUT]` rows through return `0x000C32D6`; the last was tick `363966921`, scan range `2..11`, last index `28`, return value 0, tracked pair `0x011E2E00/0` unchanged. Source inspection shows this return path sets `EAX=0`; do not treat that value or pair as verified failure/progress state.
+- Helper samples show `sub_000C2EB0` using paired-open/compare calls, including `ret=0x000C32A1` with index-like argument `0x1E`. Guest stacks were emitted at bounded intervals; the sample at helper n=1280 retains stack return `0x000C319A` into the repeated scan. This does not show a thread blocked inside a file read. No native Windows thread stack was captured in r93, so the full host-side worker relationship remains unverified.
+
+## Rendering and synchronization
+
+The late raster window at tick `363966312` reported 27 batches, 56 triangles, 2,046.98 ms batch wall time, 7,974.42 ms summed active time across four raster workers, and a 1,333.15 ms longest single batch. That is severe CPU raster cost and can explain slow screen updates; r93 has no queue-depth evidence showing an accumulating rendering backlog or proving raster time blocks the loader transition.
+
+DCF4 callbacks and reset/counter telemetry continued. At tick `363966921`, reset record 9,692 showed frame sequence `0x27B8`, counter `0x4795F`, target `0x47955`, and semaphore `0x47951`. DCF4 returns were also observed. The ordinary wait log reached its configured 4,096 entry cap, so this trace does not exhaustively rule out every later wait; however, it did not reproduce a terminal unsignaled DCF4 stop. Producer-stage tracing remains unnecessary until such a distinct wait is reproduced.
+
+## Findings, candidates, and limits
+
+**Verified:** AOT route to `NOW LOADING`; the source TEX00 metadata open succeeds; cache TEX00 open repeatedly fails; the observed preload worker copies other entries but not TEX00; the mode-2 scan keeps returning through `0x000C32D6`; screen remains on `NOW LOADING`; high CPU raster cost; DCF4 counters continue advancing. Empty-save `T:` probes are separate expected new-pilot setup behavior.
+
+**Not established:** that TEX00 alone blocks mission entry; why its cache producer was not called or completed; whether the stable pair `0x011E2E00/0` represents a true progress value; whether CPU raster time is causal to the loader; all native worker stacks; audible output; or a first mission frame. Earlier r78 cache population did not advance loading, so do not “fix” r93 by copying TEX00 again.
+
+**Next diagnostic:** keep AOT, the current controller mapping, guest fences, and rasterizer baseline `1ea1871`. Trace the actual mode-2 source/cache open-comparison return path and any separate producer that consumes table index `0x1C`; record its guest resource identity, sizes, branch, content read/write completion, and state update. Keep logs bounded and use the exact-child watchdog. Stop the run immediately once the first mission frame is visibly verified; otherwise stop only that diagnostic process when the screen and loader state have demonstrably plateaued.
+
+## Storage
+
+Two byte-identical numbered captures (`frame.bmp00022.bmp`, `frame.bmp00024.bmp`) were moved—not deleted—to `iso/local-analysis/obsolete-for-user-review/m3-preload-item-r93-duplicate-frames/`; `manifest.json` records their hash and original paths. One copy per hash and the final `frame.bmp` remain with the run. The original ISO, extracted assets, and save images were not modified.

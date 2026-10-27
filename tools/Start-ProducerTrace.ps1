@@ -26,6 +26,9 @@ param(
     [ValidateRange(300, 43200)]
     [int]$WatchdogSeconds = 900,
 
+    [ValidateRange(4096, 32768)]
+    [int]$WaitTraceAllLimit = 16384,
+
     [string]$GuestWatchAddress,
 
     [string]$GuestWatchAddress2,
@@ -53,6 +56,8 @@ param(
     [switch]$EnableThreadStartTrace,
 
     [switch]$EnablePreloadWorkerTrace,
+
+    [switch]$EnablePreloadAssetTrace,
 
     [switch]$EnableDsoundWriteWatch,
 
@@ -302,6 +307,12 @@ if ($EnablePreloadWorkerTrace) {
     $settings.RECOMP_PRELOAD_WORKER_TRACE = '1'
 }
 
+if ($EnablePreloadAssetTrace) {
+    # Trace per-entry preload eligibility, metadata comparison, and copy result
+    # in generated sub_00013D70 without changing its guest decisions.
+    $settings.RECOMP_PRELOAD_ASSET_TRACE = '1'
+}
+
 if ($EnableDsoundWriteWatch) {
     $settings.RECOMP_DSOUND_WRITE_WATCH = '1'
     $settings.RECOMP_DSOUND_WRITE_WATCH_LOG = $dsoundWriteWatchLog
@@ -321,8 +332,8 @@ if ($EnableXbeSectionTrace) {
 
 if ($EnableAllWaitTrace) {
     # Separate bounded capture for ordinary guest waits; keeps the historical
-    # 64-record default unchanged and records at most 4096 waits when enabled.
-    $settings.RECOMP_WAIT_TRACE_ALL_LIMIT = '4096'
+    # 64-record default unchanged and records at most the selected cap.
+    $settings.RECOMP_WAIT_TRACE_ALL_LIMIT = [string]$WaitTraceAllLimit
 }
 
 if ($EnableMmioTrace) {
@@ -347,7 +358,7 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
     $settings.RECOMP_WATCH2 = $GuestWatchAddress2
 }
 
-$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_WAIT_TRACE_ALL_LIMIT' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + 'RECOMP_DS_LIST_TRACE' + @(
+$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_PRELOAD_ASSET_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_WAIT_TRACE_ALL_LIMIT' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + 'RECOMP_DS_LIST_TRACE' + @(
     'RECOMP_FILE_FAIL_PATH_TRACE',
     'RECOMP_FILE_OPEN_PATH_TRACE'
 )
@@ -381,6 +392,9 @@ try {
     }
     if (-not $EnablePreloadWorkerTrace) {
         Remove-Item Env:RECOMP_PRELOAD_WORKER_TRACE -ErrorAction SilentlyContinue
+    }
+    if (-not $EnablePreloadAssetTrace) {
+        Remove-Item Env:RECOMP_PRELOAD_ASSET_TRACE -ErrorAction SilentlyContinue
     }
     if (-not $EnableMmioTrace) {
         Remove-Item Env:RECOMP_MMIO_TRACE -ErrorAction SilentlyContinue
@@ -419,6 +433,9 @@ try {
     }
     if (-not $EnablePreloadWorkerTrace) {
         $environmentSnapshot += 'RECOMP_PRELOAD_WORKER_TRACE=<unset; opt-in>'
+    }
+    if (-not $EnablePreloadAssetTrace) {
+        $environmentSnapshot += 'RECOMP_PRELOAD_ASSET_TRACE=<unset; opt-in per-entry preload decisions>'
     }
     if ($EnableDsoundWriteWatch) {
         $environmentSnapshot += "RECOMP_DSOUND_WRITE_WATCH=1; log=$dsoundWriteWatchLog"
