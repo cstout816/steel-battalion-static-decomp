@@ -589,9 +589,9 @@ function Get-PlateauFramebufferHash {
         return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash
     }
 
-    # The loading text and animated bars occupy this narrow band. Excluding
-    # it lets the watchdog see a static loading scene while still detecting a
-    # transition to a rendered mission frame or another screen.
+    # The loading text and progress bar occupy this vertical band. Excluding
+    # both prevents animation of the bar from resetting the plateau timer,
+    # while the remaining screen still detects a mission frame or screen change.
     $stride = [int][Math]::Ceiling(($width * 3) / 4.0) * 4
     $stream = [IO.MemoryStream]::new()
     $sha = [Security.Cryptography.SHA256]::Create()
@@ -599,7 +599,7 @@ function Get-PlateauFramebufferHash {
         $stream.Write($bytes, 0, 54)
         for ($rawRow = 0; $rawRow -lt $height; $rawRow++) {
             $visibleY = $height - 1 - $rawRow
-            if ($visibleY -ge 220 -and $visibleY -lt 260) { continue }
+            if ($visibleY -ge 215 -and $visibleY -lt 295) { continue }
             $offset = 54 + $rawRow * $stride
             $stream.Write($bytes, $offset, $stride)
         }
