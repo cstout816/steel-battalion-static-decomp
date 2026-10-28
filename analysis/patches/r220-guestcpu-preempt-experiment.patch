@@ -1,0 +1,14 @@
+# Compact source-delta manifest for the r220-r222 preemption experiment.
+# Target: iso/local-analysis/xboxrecomp-generated-xpp-untraced-current/gen/recomp_0015.c
+# Current hook-free source SHA256/length: A9633ADB53429483EAEDC768F0A5E3DF2EE47474DEBCA2FD905459A3852F4365 / 2,220,651
+# Historical r219 source SHA256/length: AC13517F2EDCB8FE10001B7F74DF72718038F4ECBA4AF77B935FA2864B1D4DC7 / 2,220,633
+# To reconstruct the exact r220-r222 experimental source, make these two insertions:
+# 1. Immediately after `extern volatile uint32_t g_sb_dcf4_callback_count;` add:
+#    extern void xbox_GuestCpuPreempt(uint32_t guest_va);
+# 2. Inside `if (CMP_B(_fa, _fb)) {` immediately before the `goto loc_00211F10;` add:
+#            xbox_GuestCpuPreempt(0x00211F10u);
+# Reconstructed SHA256/length: 5761C8A783C34CD5D8429241166292D37C4B9B637BD6923B76C94E1C4E96EE86 / 2,220,749
+# The reconstruction was performed in memory and matched the experimental SHA exactly.
+# The hook-free current source is the exact inverse of those two insertions. Its 18-byte length difference
+# from the r219 snapshot predates/does not belong to this two-line experiment and remains unexplained.
+# Result: r220 exited in the distinct DirectSound path; r221/r222 reached the mode-2 plateau. No first mission frame.
