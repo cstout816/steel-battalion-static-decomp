@@ -10,7 +10,7 @@
 
 </div>
 
-> **For players:** there is no game to download yet. The latest bounded AOT new-pilot diagnostic (r179) reached a black post-title/loading transition, created a preload worker, and recorded seven mode-2 loader scans. The saved framebuffer is black; no mission frame or playable boot is verified. The traces do not establish whether loading, graphics, or synchronization is responsible. Audio and physical-controller support remain unverified. There is no installer or launcher. Please do not send game files.
+> **For players:** there is no playable build to download yet. The latest bounded AOT run (r348) reached the new-pilot and Normal-difficulty screens, then stopped progressing before a visible loading transition. No first mission frame, complete audio, or physical-controller support is verified. A separate Campaign-stage run (r340) captured a DirectSound-list corruption, whose active render surface is still unknown. There is no installer or launcher. Please do not send game files.
 
 ## The game and its controller
 
@@ -33,7 +33,7 @@ These externally hosted images show the original hardware and game. They are not
 
 The goal is to translate the original Xbox version of *Steel Battalion* (2002) ahead of time into a Windows application and recreate the Xbox services it needs. This is called **static recompilation**. The project is not an emulator packaged under another name.
 
-The translated Windows program builds, but it is not reliable or playable. In r179, the new-pilot route returned 39/39 file-copy callbacks, created worker 6, and completed seven mode-2 scans with result 0 before the screen and activity plateaued. The final captured frame is black. Earlier runs identified incomplete copies and cache misses, but those did not establish a single cause, and later runs completed the observed copies. DMA-ACK sampling filled its cap before the loading interval, and the dump's last AOT program counter is only a candidate; the evidence does not prove a graphics backlog, file dependency, or unsignaled DCF4 wait. The separate DirectSound list crash remains unresolved. Audio, physical-controller support, and campaign completion remain unverified. See the [r173–r179 loading evidence](analysis/m3-pilot-loader-r159-r160-report-20261028.md) and [loader handoff](analysis/astra-pilot-loading-handoff.md).
+The translated Windows program builds, but it is not reliable or playable. r340 directly captured `put_pixel` writing into three guest DirectSound-list fields before the list walk crashed; the active surface state at those exact stores remains unknown, so no runtime repair is justified. r348 used the surface probe and did not reproduce that write. It reached the name editor, confirmed `01/01/2002` and Normal difficulty, and began mode-2 readiness scans, but the saved frame stayed on the difficulty menu and NV2A progress later stopped. The 4 MiB reserve fallback to 2 MiB returned success; it is not established as the cause. No missing loader dependency or first mission frame is proven. Keep this run separate from title DCF4 waits, the r340 audio-list corruption, and raster performance. See the [r348 report](analysis/m3-r348-mode2-plateau-and-storage-20261029.md) and [project status index](docs/PROJECT_STATUS.md).
 
 ## Controller compatibility
 
@@ -51,21 +51,21 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3 remains active. r340 confirmed a renderer pixel store corrupting DirectSound list fields at the Campaign menu; its active surface state still needs correlation. The Campaign route remains intermittent, and no first mission frame is verified. See the [r340–r345 report](analysis/m3-r340-r344-surface-and-storage-20261029.md). |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3 remains active. r348 reached the new-pilot Normal-difficulty route, then stopped before a visible loading transition; first mission frame remains unverified. The separate r340 Campaign list corruption still lacks active-surface correlation. See the [r340–r348 report](analysis/m3-r340-r344-surface-and-storage-20261029.md). |
 | Research and architecture | [####################] 3/3 | Approach and technical limits documented. |
 | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
 | Initial code translation | [####################] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [####################] 100% | A local build completes. |
 | Boot and compatibility | [########------------] 4/5 | r342 reached Campaign; r343–r345 stalled at a black title-stage frame before Campaign. No first mission frame or loader dependency is verified. |
-| Loader dependency tracing | [##########----------] 2/4 | r340–r344 did not reach the mission loader. The first stalled mission dependency remains unknown; title DCF4, the Campaign audio-list crash, rendering cost, and later loading plateaus remain separate. |
+| Loader dependency tracing | [##########----------] 2/4 | r348 emitted 19 mode-2 readiness scans after the new-pilot route, but no visible `NOW LOADING` frame or missing dependency was captured. The first mission blocker remains unknown; title DCF4, the Campaign audio-list crash, rendering cost, and loading plateaus stay separate. |
 | First mission frame | [--------------------] 0/1 | No in-mission framebuffer has been verified. |
 | 60-FPS mission performance | [--------------------] 0/1 | No playable mission frame or gameplay frame-time sample has been verified; startup/loading measurements do not count. |
-| Startup rendering performance | [##########----------] 2/4 | r340 recorded raster work near the Campaign crash, but no evidence ties a growing render backlog to the title freeze or mission loading. |
+| Startup rendering performance | [##########----------] 2/4 | r348's sampled NV2A progress stopped after mode-2 scans; no evidence ties the separate r340 list corruption or older title/loading plateaus to a shared render backlog. |
 | CPU raster throughput | [##########----------] 2/4 | Four workers remain the measured default; a synthetic sweep found no benefit from 8–16 workers. The local clipping fast path and raster regression harness have synthetic-only evidence; mission frame time and 1% lows are unverified. |
 | GPU scene rendering | [#####---------------] 1/4 | A narrow splash-render path is verified; general NV2A scene rendering, mission GPU use, and image parity remain unverified. |
 | Virtual controller input | [#############-------] 2/3 | Earlier screen-gated captures correlated XID/DMA, guest edge handling, pilot callback `0x000E18D8` / branch `0x000E193B`, and row action `0x83`. Physical adapter compatibility and the full original controller mapping/outputs remain unverified. |
-| Guest DSP and audio | [█-------------------] 1/2 | r340 confirmed `put_pixel` writing into the DirectSound list before its invalid-node crash. The active render target and safe fix remain unverified; audible output is not verified. |
-| Storage and incremental builds | [##############------] 3/4 | The workspace is 49.860 GiB allocated / 1.261 TiB logical after sparse-file accounting. Closed diagnostic logs were compressed with hash checks; the warm build cache remains intact. |
+| Guest DSP and audio | [█-------------------] 1/2 | r340 confirmed `put_pixel` writing into the DirectSound list before its invalid-node crash. The active render target and safe fix remain unverified; r348 reproduced no watched write and audible output is not verified. |
+| Storage and incremental builds | [##############------] 3/4 | The latest scan is 48.983 GiB allocated / 1,290.154 GiB logical. Verified lossless compression reclaimed 945,311,744 bytes from 41 reproducible historical motion-cache copies; the warm build cache and unique saves remain intact. See the [cleanup manifest](analysis/current-cleanup-manifest-20261029.md). |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
 These bars describe engineering work, not playable features or campaign completion. See the [detailed tracker](docs/DEVELOPMENT_STATUS.md) for field-by-field evidence.

@@ -1,0 +1,17 @@
+Loaded module images: 94
+
+Path
+----
+local-tools\steel-battalion-game\build-xpp-seeded\Prod...
+C:\Windows\System32\ntdll.dll
+
+
+Dump=iso\local-analysis\logs\m3-dsound-surface-target-r348-20261029\nv2a-progress-stall.dmp TID=160244 StackStart=0x8D161AF018 StackBytes=4072
+#00 ntdll.dll+0x1659C4 SP=0x8D161AF018 FP=0x8D161AF0B9
+#02 ntdll.dll+0x1A61D SP=0x8D161AF020 FP=0x8D161AF110
+#03 ntdll.dll+0x1BD1F SP=0x8D161AF120 FP=0x8D161AF190
+#04 ntdll.dll+0x1CF92 SP=0x8D161AF1A0 FP=0x8D161AF1D0
+#05 ucrtbase.dll+0x31478 SP=0x8D161AF1E0 FP=0x8D161AF200
+#06 your_game_recomp_producer_trace.exe+0x4E94BCA SP=0x8D161AF210 FP=0x8D161AF208
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=222 readFailures=0 functionTables=32 modules=10 lastRead=0x8D161AF210+8

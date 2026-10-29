@@ -1,4 +1,4 @@
-# Steel Battalion AOT surface overlap and storage follow-up — r340–r345
+# Steel Battalion AOT surface overlap and storage follow-up — r340–r348
 
 ## Scope and protected state
 
@@ -37,15 +37,25 @@ Added opt-in `[DS-SURFACE-PIXEL]` trace in `local-tools/xboxrecomp/src/kernel/nv
 
 r342/r343/r344/r345 relay logs recorded no dropped lines and drained cleanly. The 64 MiB per-run evidence cap remained enabled. The r341 compile-failure log and candidate directory contain no executable and are not part of the active build. r345's closed 10-file evidence set reclaimed 3,994 allocated bytes by compression with all 10 SHA-256 hashes matching; see `analysis/r345-evidence-compression-20261029.csv`.
 
+## r347: reproducible historical cache compaction
+
+The workspace contained 41 closed historical-run `Cache\MOTION.BIN` files. Each is 39,424,000 bytes and SHA-256 `05130BC706985EF7794CE06AC6792E507FE5F4D59350E5636819D9ED639EC8C4`, matching the other 40 copies and `iso/local-analysis/game_files/Media/BIN/MOTION.BIN`. None is in the current route-save root. NTFS compression preserved all 41 files and hashes while reducing their combined allocated size from **1,616,384,000** to **671,072,256 bytes**: **945,311,744 bytes (901.3 MiB) reclaimed**. The audit is `analysis/r347-motion-cache-compression-20261029.csv`. No save image, unique save, diagnostic executable/symbol bundle, or build input was altered.
+
+This is storage-only; there was no rebuild, so build time is unchanged and the warm incremental cache remains intact. The prior r342 build measured about 10 seconds. The post-r348 workspace inventory is recorded in `analysis/current-cleanup-manifest-20261029.md`.
+
 ## Storage and build efficiency
+
+### Current post-r348 inventory
+
+The fresh scan is `C:\Project\sb-inventory-r348-final3-20261029.csv`; exact allocated and logical totals are in the [current cleanup manifest](current-cleanup-manifest-20261029.md). It counted 76,831 files with 13 reparse paths skipped. Allocated size is 48.983 GiB; logical size is 1,290.154 GiB. Top-level `iso` uses 35.420 GiB and `local-tools` 13.354 GiB allocated. Gross measured closed-file compression savings total 947,347,787 bytes; the difference from net change reflects retained runs, bundles and reports. The warm incremental build cache remains 6,701,008,794 bytes (6.241 GiB); canonical generated AOT source is 155,885,489 bytes; current route saves use 952,898,778 allocated bytes (5,422,128,858 logical). No compiler/Cargo cache was purged.
 
 Fresh post-r345 allocated-versus-logical inventory: `C:\Project\sb-inventory-post-r345-20261029.csv` (76,803 ordinary files; 13 reparse entries skipped; zero allocation query failures). Path-summed workspace total is **53,538,836,988 allocated bytes (49.862 GiB)** and **1,385,287,806,147 logical bytes (1,290.150 GiB)**. Logical size is dominated by sparse saves and is not the disk-use figure.
 
-The closed r338–r343 run folders were losslessly NTFS-compressed; 56 file hashes matched before and after a compression/uncompression integrity cycle. Compared with the pre-compression per-file inventory, those folders reclaimed **2,032,049 allocated bytes**. r344's closed evidence is also compressed and recorded in `analysis/r344-evidence-compression-20261029.csv`; r345's 10 closed files reclaimed **3,994 allocated bytes**, with all SHA-256 hashes matching. No files were deleted or moved. The overall footprint is about 71.5 MiB larger than the r337 inventory because the required r342 EXE/PDB/MAP candidate and additional traces/source manifests were retained; workspace growth and compression savings are reported separately.
+The closed r338–r343 run folders were losslessly NTFS-compressed; 56 file hashes matched before and after an uncompress/recompress integrity cycle. Compared with the pre-compression per-file inventory, those folders reclaimed **2,032,049 allocated bytes**. r344's closed evidence is also compressed and recorded in `analysis/r344-evidence-compression-20261029.csv`; r345's 10 closed files reclaimed **3,994 allocated bytes**, with all SHA-256 hashes matching. The 40 exact `TEXOBJ.BIN` historical cache copies were revalidated against the retained source asset/current route cache, then NTFS-compressed; all hashes matched but allocation did not fall. Exact-path deletion was blocked by automatic file-action review before execution, so none was removed. The overall footprint is about 71.5 MiB larger than the r337 inventory because the required r342 EXE/PDB/MAP candidate and additional traces/source manifests were retained; workspace growth and compression savings are reported separately.
 
 Retained working-set slices: warm `build-xpp-seeded` **6,701,008,794 allocated bytes (6.240 GiB)**; canonical generated AOT source **155,885,489 bytes**; current route save **952,898,778 allocated / 5,422,128,858 logical bytes**. The new r342 EXE/PDB/MAP bundle uses about 69.3 MiB allocated and is retained for the unresolved diagnostic. No hot compiler/Cargo cache was cleared; the successful isolated build took roughly 10 seconds. C: free space is a volume-wide figure and is not attributed to this project.
 
-The exact current cleanup scan, compression audit, and source patches are indexed in `analysis/current-cleanup-manifest-20261029.md` and `analysis/source-preservation-manifest-20261029.md`. No verified duplicate was deleted because the available duplicate screenshot CSV has no removable-path rows; all unique evidence and source copies remain.
+The exact current cleanup scan, compression audit, and source patches are indexed in `analysis/current-cleanup-manifest-20261029.md` and `analysis/source-preservation-manifest-20261029.md`. No files were deleted or moved. The 40 verified duplicate caches still occupy **1,396,080,640 allocated bytes**; the automatic deletion review blocked their removal, and no alternate deletion path was used.
 
 ## Current conclusion and next discriminating test
 
