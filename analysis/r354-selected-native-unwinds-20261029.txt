@@ -1,0 +1,130 @@
+=== TID 155416 ===
+Loaded module images: 94
+Microsoft.PowerShell.Commands.Internal.Format.FormatStartData
+Microsoft.PowerShell.Commands.Internal.Format.GroupStartData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.GroupEndData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEndData
+Dump=iso\local-analysis\logs\m3-loading-handoff-snapshot-r354-20261029\loading-stall-external.dmp TID=155416 StackStart=0x5BD70FF658 StackBytes=2472
+#00 ntdll.dll+0x1659C4 SP=0x5BD70FF658 FP=0x5BD70FF6F9
+#02 ntdll.dll+0x1A61D SP=0x5BD70FF660 FP=0x5BD70FF750
+#03 ntdll.dll+0x1BD1F SP=0x5BD70FF760 FP=0x5BD70FF7D0
+#04 ntdll.dll+0x1CF92 SP=0x5BD70FF7E0 FP=0x5BD70FF810
+#05 ucrtbase.dll+0x31478 SP=0x5BD70FF820 FP=0x5BD70FF840
+#06 your_game_recomp_producer_trace.exe+0x4E94BCA SP=0x5BD70FF850 FP=0x5BD70FF848
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=222 readFailures=0 functionTables=32 modules=10 lastRead=0x5BD70FF850+8
+
+
+=== TID 172592 ===
+Loaded module images: 94
+Microsoft.PowerShell.Commands.Internal.Format.FormatStartData
+Microsoft.PowerShell.Commands.Internal.Format.GroupStartData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.GroupEndData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEndData
+Dump=iso\local-analysis\logs\m3-loading-handoff-snapshot-r354-20261029\loading-stall-external.dmp TID=172592 StackStart=0x5BD76FEE58 StackBytes=4520
+#00 ntdll.dll+0x1659C4 SP=0x5BD76FEE58 FP=0x5BD76FEEF9
+#02 ntdll.dll+0x1A61D SP=0x5BD76FEE60 FP=0x5BD76FEF50
+#03 ntdll.dll+0x1BD1F SP=0x5BD76FEF60 FP=0x5BD76FEFD0
+#04 ntdll.dll+0x1CF92 SP=0x5BD76FEFE0 FP=0x5BD76FF010
+#05 ucrtbase.dll+0x31478 SP=0x5BD76FF020 FP=0x5BD76FF040
+#06 your_game_recomp_producer_trace.exe+0x64BC242 SP=0x5BD76FF050 FP=0x5BD76FF048
+Stop: unwind reached non-module address 0x10000.
+Callbacks: reads=446 readFailures=0 functionTables=69 modules=20 lastRead=0x5BD76FF060+32
+
+
+=== TID 182444 ===
+Loaded module images: 94
+Microsoft.PowerShell.Commands.Internal.Format.FormatStartData
+Microsoft.PowerShell.Commands.Internal.Format.GroupStartData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.GroupEndData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEndData
+Dump=iso\local-analysis\logs\m3-loading-handoff-snapshot-r354-20261029\loading-stall-external.dmp TID=182444 StackStart=0x5BD71FDDF0 StackBytes=8720
+#00 ucrtbase.dll+0x315D7 SP=0x5BD71FDDF0 FP=0x0
+#02 ucrtbase.dll+0x31481 SP=0x5BD71FDE20 FP=0x5BD71FDE40
+#03 your_game_recomp_producer_trace.exe+0x6495487 SP=0x5BD71FDE50 FP=0x5BD71FDE48
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=549 readFailures=0 functionTables=83 modules=24 lastRead=0x5BD71FDE50+8
+
+
+=== TID 177936 ===
+Loaded module images: 94
+Microsoft.PowerShell.Commands.Internal.Format.FormatStartData
+Microsoft.PowerShell.Commands.Internal.Format.GroupStartData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.GroupEndData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEndData
+Dump=iso\local-analysis\logs\m3-loading-handoff-snapshot-r354-20261029\loading-stall-external.dmp TID=177936 StackStart=0x5BD88FFBC8 StackBytes=1080
+#00 ntdll.dll+0x1659C4 SP=0x5BD88FFBC8 FP=0x7FF6EF1AF7B0
+#02 ntdll.dll+0x1BA2B SP=0x5BD88FFBD0 FP=0x5BD88FFC30
+#03 KERNELBASE.dll+0x23AC8 SP=0x5BD88FFC40 FP=0x5BD88FFC60
+#04 your_game_recomp_producer_trace.exe+0x649AFC1 SP=0x5BD88FFC70 FP=0x5BD88FFC68
+#05 your_game_recomp_producer_trace.exe+0x6B4F9A0 SP=0x5BD88FFC78 FP=0x5BD88FFC70
+#06 KERNELBASE.dll+0xB30F1 SP=0x5BD88FFC80 FP=0x5BD88FFCB0
+#07 your_game_recomp_producer_trace.exe+0x6B63E80 SP=0x5BD88FFCC0 FP=0x5BD88FFCB8
+Stop: unwind reached non-module address 0x10264.
+Callbacks: reads=714 readFailures=0 functionTables=128 modules=32 lastRead=0x5BD88FFCD0+32
+
+
+=== TID 173196 ===
+Loaded module images: 94
+Microsoft.PowerShell.Commands.Internal.Format.FormatStartData
+Microsoft.PowerShell.Commands.Internal.Format.GroupStartData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.GroupEndData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEndData
+Dump=iso\local-analysis\logs\m3-loading-handoff-snapshot-r354-20261029\loading-stall-external.dmp TID=173196 StackStart=0x5BD8CFF3F8 StackBytes=3080
+#00 ntdll.dll+0x1659C4 SP=0x5BD8CFF3F8 FP=0x5BD8CFF499
+#02 ntdll.dll+0x1A61D SP=0x5BD8CFF400 FP=0x5BD8CFF4F0
+#03 ntdll.dll+0x1BD1F SP=0x5BD8CFF500 FP=0x5BD8CFF570
+#04 ntdll.dll+0x1CF92 SP=0x5BD8CFF580 FP=0x5BD8CFF5B0
+#05 ucrtbase.dll+0x31478 SP=0x5BD8CFF5C0 FP=0x5BD8CFF5E0
+#06 your_game_recomp_producer_trace.exe+0x64BC242 SP=0x5BD8CFF5F0 FP=0x5BD8CFF5E8
+Stop: unwind reached non-module address 0x10000.
+Callbacks: reads=938 readFailures=0 functionTables=165 modules=42 lastRead=0x5BD8CFF600+32
+
+
+=== TID 153948 ===
+Loaded module images: 94
+Microsoft.PowerShell.Commands.Internal.Format.FormatStartData
+Microsoft.PowerShell.Commands.Internal.Format.GroupStartData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.GroupEndData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEndData
+Dump=iso\local-analysis\logs\m3-loading-handoff-snapshot-r354-20261029\loading-stall-external.dmp TID=153948 StackStart=0x5BD89FF378 StackBytes=3208
+#00 ntdll.dll+0x1659C4 SP=0x5BD89FF378 FP=0x5BD89FF419
+#02 ntdll.dll+0x1A61D SP=0x5BD89FF380 FP=0x5BD89FF470
+#03 ntdll.dll+0x1BD1F SP=0x5BD89FF480 FP=0x5BD89FF4F0
+#04 ntdll.dll+0x1CF92 SP=0x5BD89FF500 FP=0x5BD89FF530
+#05 ucrtbase.dll+0x31478 SP=0x5BD89FF540 FP=0x5BD89FF560
+#06 your_game_recomp_producer_trace.exe+0x64BC242 SP=0x5BD89FF570 FP=0x5BD89FF568
+Stop: unwind reached non-module address 0x10000.
+Callbacks: reads=1162 readFailures=0 functionTables=202 modules=52 lastRead=0x5BD89FF580+32
+
+
+=== TID 25104 ===
+Loaded module images: 94
+Microsoft.PowerShell.Commands.Internal.Format.FormatStartData
+Microsoft.PowerShell.Commands.Internal.Format.GroupStartData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+Microsoft.PowerShell.Commands.Internal.Format.GroupEndData
+Microsoft.PowerShell.Commands.Internal.Format.FormatEndData
+Dump=iso\local-analysis\logs\m3-loading-handoff-snapshot-r354-20261029\loading-stall-external.dmp TID=25104 StackStart=0x5BD7DFF5C8 StackBytes=2616
+#00 ntdll.dll+0x1659C4 SP=0x5BD7DFF5C8 FP=0x5BD7DFF669
+#02 ntdll.dll+0x1A61D SP=0x5BD7DFF5D0 FP=0x5BD7DFF6C0
+#03 ntdll.dll+0x1BD1F SP=0x5BD7DFF6D0 FP=0x5BD7DFF740
+#04 ntdll.dll+0x1CF92 SP=0x5BD7DFF750 FP=0x5BD7DFF780
+#05 ucrtbase.dll+0x31478 SP=0x5BD7DFF790 FP=0x5BD7DFF7B0
+#06 your_game_recomp_producer_trace.exe+0x6497EF2 SP=0x5BD7DFF7C0 FP=0x5BD7DFF7B8
+#07 your_game_recomp_producer_trace.exe+0x6AC3090 SP=0x5BD7DFF7C8 FP=0x5BD7DFF7C0
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=1387 readFailures=0 functionTables=240 modules=62 lastRead=0x5BD7DFF7C8+8

@@ -1,6 +1,17 @@
 # Steel Battalion project status
 
-## Current verified state — r340–r348, 2026-10-29
+## Current verified state — r349–r354, 2026-10-29
+
+**Milestone 3 remains active.** The new-pilot route again reached a visibly verified `NOW LOADING` screen, but no first mission frame. r354 combined file completion, mode-2 loader, raster/DMA/DCF4 telemetry, and an external minidump using the exact r342 EXE/PDB/MAP bundle. It recorded 34 successful mode-2 scans, successful reads/open activity, advancing raster batches, and paired DCF4 wait returns; the validated stacks do not identify a missing loader producer. Rendering work is heavy but not established as the cause. Do not merge this plateau with title-stage DCF4 waits or the separate DirectSound list crash, and do not change runtime behavior yet. Full findings and the single next test are in the [r349–r354 loading and storage report](../analysis/m3-r349-r354-loading-cause-and-storage-20261029.md).
+
+Fresh inventory: **38.005 GiB allocated / 1,290.166 GiB logical** across 76,944 files; 13 reparse paths skipped. The reduction from the post-r348 baseline is **11,787,252,252 allocated bytes**. Fourteen inactive unique save images and one historical run-save image were NTFS-compressed with byte hashes preserved; the canonical route save remains uncompressed. Closed-log and lossless screenshot conversion reclaimed another **5,723,425 bytes**. The warm build tree remains **6.241 GiB allocated**; no build ran, so incremental build time was not measured. See the [cleanup manifest](../analysis/current-cleanup-manifest-20261029.md), [retention audit](../analysis/r349-r354-evidence-retention-20261029.csv), and [save-image audit](../analysis/r354-save-image-compression-20261029.csv).
+
+Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `███░ 3/4` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
+
+**Current milestone:** 3 — boot and compatibility.
+**Next acceptance point:** first visually verified mission frame.
+
+## Prior verified state — r340–r348
 
 **Milestone 3 remains active.** First visually verified mission frame: **0/1**.
 

@@ -1,6 +1,15 @@
-# Current cleanup manifest — post-r348 cleanup scan (2026-10-29)
+# Current cleanup manifest — post-r354 cleanup scan (2026-10-29)
 
-## Authoritative current state — post-r348
+## Authoritative current state — post-r354
+
+- Fresh post-compression inventory: `C:\Project\sb-inventory-r354-postsavecompression-20261029.csv`; **76,944 files**, **40,807,884,606 bytes allocated (38.005 GiB)** and **1,385,305,361,547 bytes logical (1,290.166 GiB)**; 13 reparse entries skipped. Against the post-r348 baseline, actual allocated space is down **11,787,252,252 bytes**. Sparse files explain the large logical total; allocation is the disk-use measure.
+- Current retained workset: warm `build-xpp-seeded` **6,701,008,794 allocated bytes (6.241 GiB)**; canonical generated AOT source **155,885,489 bytes / 27 files**; canonical route saves **952,898,778 allocated / 5,422,128,858 logical bytes / 29 files**; full `iso/local-analysis/logs` tree **2,932,436,160 allocated / 1,035,732,616,187 logical bytes**. The r342 EXE/PDB/MAP bundle remains in the warm tree for unresolved dumps.
+- The previous Partition5 audit covered 16 hash-unique images. Fourteen inactive save-root images plus one historical run-save image were losslessly NTFS-compressed in place; all original hashes and 11,796,480,000 logical bytes were preserved. They now use 11,796,357,120 fewer allocated bytes. The canonical route save stayed uncompressed; no save was deleted or hard-linked. See `analysis/r354-save-image-compression-20261029.csv`. Closed r349–r354 logs plus pixel-verified BMP→PNG conversion reclaimed **5,723,425 bytes**; see `analysis/r349-r354-evidence-retention-20261029.csv`. Total gross allocated reclaimed this turn: **11,802,080,545 bytes**.
+- All r349–r354 traces used the retained r342 EXE/PDB/MAP bundle. No build or benchmark ran; the build-cache footprint is unchanged and incremental build-time impact was not measured. Full loading findings are in `analysis/m3-r349-r354-loading-cause-and-storage-20261029.md`. First mission frame remains unverified.
+
+Older r348 and earlier measurements follow for historical comparison.
+
+## Prior state — post-r348
 
 - Post-r348 inventory: `C:\Project\sb-inventory-final-r348-20261029.csv`; **76,851 files**, **52,595,136,858 bytes allocated (48.983 GiB)** and **1,385,292,627,353 bytes logical (1,290.154 GiB)**; 13 reparse entries skipped. Sparse saves explain much of the logical length; allocated bytes are the project footprint measure.
 - Retained working set: warm `build-xpp-seeded` **6,701,008,794 allocated bytes (6.241 GiB)**; canonical generated AOT source **155,885,489 bytes / 27 files**; current route saves **952,898,778 allocated / 5,422,128,858 logical bytes / 29 files**; r338–r345 diagnostic folders **5,765,381 allocated / 18,769,867 logical bytes / 76 files**; r348 folder **868,857 allocated / 4,078,449 logical bytes / 12 files**. The r342 candidate EXE/PDB/MAP adds about **69.3 MiB allocated** inside the retained build tree.
