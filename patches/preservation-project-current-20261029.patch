@@ -1,5 +1,5 @@
 diff --git a/README.md b/README.md
-index 79f58fe..e83b10d 100644
+index 79f58fe..172a601 100644
 --- a/README.md
 +++ b/README.md
 @@ -10,7 +10,7 @@
@@ -25,14 +25,14 @@ index 79f58fe..e83b10d 100644
  | Work area | Progress | Current result |
  | --- | --- | --- |
 -| Overall project milestones | [#####---------------] 2/8 | Milestone 3 remains active. r93 reached `NOW LOADING`; only the diagnostic process was stopped before its 900-second watchdog. No first mission frame. The TEX00 source opens, but its cache entry stays missing; causality is unproven. See the [r93 trace](analysis/m3-preload-item-r93-20261027.md). |
-+| Overall project milestones | [#####---------------] 2/8 | Milestone 3 remains active. r340 confirmed a renderer pixel store corrupting DirectSound list fields at the Campaign menu; its active surface state still needs correlation. No first mission frame. See the [r340–r344 report](analysis/m3-r340-r344-surface-and-storage-20261029.md). |
++| Overall project milestones | [#####---------------] 2/8 | Milestone 3 remains active. r340 confirmed a renderer pixel store corrupting DirectSound list fields at the Campaign menu; its active surface state still needs correlation. The Campaign route remains intermittent, and no first mission frame is verified. See the [r340–r345 report](analysis/m3-r340-r344-surface-and-storage-20261029.md). |
  | Research and architecture | [####################] 3/3 | Approach and technical limits documented. |
  | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
  | Initial code translation | [####################] 100% | Translation output exists; correctness is not established by output count. |
  | Windows build | [####################] 100% | A local build completes. |
 -| Boot and compatibility | [########------------] 4/5 | r93 followed new-pilot setup into `NOW LOADING`; 121 cache opens for `Z:\TEX00.BIN` failed, while the source opened for metadata only. DCF4 counters advanced; bounded wait tracing still leaves later waits incompletely sampled. The earlier r89 DirectSound crash remains separate. See the [r93 report](analysis/m3-preload-item-r93-20261027.md). |
 -| Loader dependency tracing | [##########----------] 2/4 | r93 correlated the TEX00 source metadata open, repeated cache misses, loader scans, and guest stack samples. No content transfer was recorded, but the prior controlled cache copy did not advance loading; the first causal dependency remains unverified. |
-+| Boot and compatibility | [########------------] 4/5 | r342 reached the Campaign menu. r343/r344 stalled at a black title-stage frame before Campaign; no first mission frame or loader dependency is verified. |
++| Boot and compatibility | [########------------] 4/5 | r342 reached Campaign; r343–r345 stalled at a black title-stage frame before Campaign. No first mission frame or loader dependency is verified. |
 +| Loader dependency tracing | [##########----------] 2/4 | r340–r344 did not reach the mission loader. The first stalled mission dependency remains unknown; title DCF4, the Campaign audio-list crash, rendering cost, and later loading plateaus remain separate. |
  | First mission frame | [--------------------] 0/1 | No in-mission framebuffer has been verified. |
  | 60-FPS mission performance | [--------------------] 0/1 | No playable mission frame or gameplay frame-time sample has been verified; startup/loading measurements do not count. |
@@ -108,11 +108,11 @@ index bf99256..869c613 100644
 +Detailed run findings: `analysis\m3-mode2-loader-plateau-r253-r255-20261028.md`. Current index: `docs\PROJECT_STATUS.md`.
 diff --git a/analysis/m3-r340-r344-surface-and-storage-20261029.md b/analysis/m3-r340-r344-surface-and-storage-20261029.md
 new file mode 100644
-index 0000000..5fcb779
+index 0000000..f71cc04
 --- /dev/null
 +++ b/analysis/m3-r340-r344-surface-and-storage-20261029.md
-@@ -0,0 +1,61 @@
-+# Steel Battalion AOT surface overlap and storage follow-up — r340–r344
+@@ -0,0 +1,62 @@
++# Steel Battalion AOT surface overlap and storage follow-up — r340–r345
 +
 +## Scope and protected state
 +
@@ -147,14 +147,15 @@ index 0000000..5fcb779
 +- r342 reached a visually confirmed Campaign menu and `PILOT-LIST-CB` owner 1 at `0x000E18D8`, but the new surface-trace environment flag was absent. The DS write watch saw no watched-address write during its retained route window. It was manually stopped as this task's own PID `177684`. This is a bounded non-reproduction, not a rejection of r340.
 +- r343 enabled the surface-trace setting but stopped at the title's “Unable to load Player Record” prompt and then a black frame. NV2A telemetry flattened with DCF4 zero, zero raster batches/pending work, and no pilot-list callback. It was stopped as this task's own PID `179752`; no post-black input was sent. This run did not reach the Campaign test state.
 +- r344 used the same r342 binary with the new trace flag confirmed in `environment.txt`. A single screen-gated A reached the player-record warning; a second A led to a black frame. The saved framebuffer and telemetry show a title-stage freeze at frame `0x160`, counter `0x625`, target `0x61B`, fence `0x621`, DCF4 zero, and zero raster batches/workers/pending. There was no Campaign callback, DS list corruption, or surface-overlap record. It was stopped as this task's own PID `178480`. This is not a valid negative test of r340's Campaign crash.
++- r345 repeated r342's two-pulse route from a visually confirmed title screen with the surface trace enabled (PID `161844`, same r342 EXE SHA-256 `727864FBDF2F3623D8BCEF7C9D8EB310E8F28CD4BC75BE340F875FDFCACED998`). It went black before Campaign; terminal NV2A sample was frame `0xD8`, counter `0x3A5`, target `0x39B`, fence `0x3A1`, DCF4 zero, and zero raster batches/workers/pending. `PILOT-LIST-CB`, `[DS-SURFACE-PIXEL]`, and invalid-list records remained absent. The process was stopped as this task's own child; relay drops were zero and the writer drained. This shows the Campaign transition is intermittent on the current route. Do not treat r345 as a negative test of the r340 write.
 +
-+r342/r343/r344 relay logs recorded no dropped lines and drained cleanly. The 64 MiB per-run evidence cap remained enabled. The r341 compile-failure log and candidate directory contain no executable and are not part of the active build.
++r342/r343/r344/r345 relay logs recorded no dropped lines and drained cleanly. The 64 MiB per-run evidence cap remained enabled. The r341 compile-failure log and candidate directory contain no executable and are not part of the active build. r345's closed 10-file evidence set reclaimed 3,994 allocated bytes by compression with all 10 SHA-256 hashes matching; see `analysis/r345-evidence-compression-20261029.csv`.
 +
 +## Storage and build efficiency
 +
-+Fresh post-push allocated-versus-logical inventory: `C:\Project\sb-inventory-postpush-20261029.csv` (76,782 ordinary files; 13 reparse entries skipped; zero allocation query failures). Path-summed workspace total is **53,537,125,251 allocated bytes (49.860 GiB)** and **1,385,284,866,002 logical bytes (1,290.147 GiB)**. Logical size is dominated by sparse saves and is not the disk-use figure.
++Fresh post-r345 allocated-versus-logical inventory: `C:\Project\sb-inventory-post-r345-20261029.csv` (76,803 ordinary files; 13 reparse entries skipped; zero allocation query failures). Path-summed workspace total is **53,538,836,988 allocated bytes (49.862 GiB)** and **1,385,287,806,147 logical bytes (1,290.150 GiB)**. Logical size is dominated by sparse saves and is not the disk-use figure.
 +
-+The closed r338–r343 run folders were losslessly NTFS-compressed; 56 file hashes matched before and after a compression/uncompression integrity cycle. Compared with the pre-compression per-file inventory, those folders reclaimed **2,032,049 allocated bytes**. r344's closed evidence is also compressed and recorded in `analysis/r344-evidence-compression-20261029.csv`. No files were deleted or moved. The overall footprint is about 69.9 MiB larger than the r337 inventory because the required r342 EXE/PDB/MAP candidate and additional traces were retained; workspace growth and compression savings are reported separately.
++The closed r338–r343 run folders were losslessly NTFS-compressed; 56 file hashes matched before and after a compression/uncompression integrity cycle. Compared with the pre-compression per-file inventory, those folders reclaimed **2,032,049 allocated bytes**. r344's closed evidence is also compressed and recorded in `analysis/r344-evidence-compression-20261029.csv`; r345's 10 closed files reclaimed **3,994 allocated bytes**, with all SHA-256 hashes matching. No files were deleted or moved. The overall footprint is about 71.5 MiB larger than the r337 inventory because the required r342 EXE/PDB/MAP candidate and additional traces/source manifests were retained; workspace growth and compression savings are reported separately.
 +
 +Retained working-set slices: warm `build-xpp-seeded` **6,701,008,794 allocated bytes (6.240 GiB)**; canonical generated AOT source **155,885,489 bytes**; current route save **952,898,778 allocated / 5,422,128,858 logical bytes**. The new r342 EXE/PDB/MAP bundle uses about 69.3 MiB allocated and is retained for the unresolved diagnostic. No hot compiler/Cargo cache was cleared; the successful isolated build took roughly 10 seconds. C: free space is a volume-wide figure and is not attributed to this project.
 +
@@ -162,7 +163,7 @@ index 0000000..5fcb779
 +
 +## Current conclusion and next discriminating test
 +
-+The r340 DirectSound crash has a confirmed immediate mechanism: a `put_pixel` store wrote the pixel value into the three live list words. The missing causal field is the renderer's active surface state at that exact store. The bounded source probe now records precisely that state when the store recurs. The r342 route did not recur within its short campaign window and had the trace disabled; r343/r344 did not reach Campaign, so neither rejects the finding.
++The r340 DirectSound crash has a confirmed immediate mechanism: a `put_pixel` store wrote the pixel value into the three live list words. The missing causal field is the renderer's active surface state at that exact store. The bounded source probe now records precisely that state when the store recurs. r342 reached Campaign without the probe enabled and did not recur within its short observation; r343–r345 did not reach Campaign with the probe enabled. The Campaign overwrite remains established by r340, while a repeat with target-state capture is still required.
 +
 +Before changing runtime behavior, reproduce the visible Campaign route with the surface trace enabled and capture a matching `[DS-SURFACE-PIXEL]` row. Correlate the resolved color target to the guest/host address mapping. Only then select the smallest supported repair. Keep the title DCF4 wait, this DirectSound crash, high raster cost, and post-difficulty loader plateau separate. No loader dependency has been identified in these runs. Continue with AOT, controller mapping, guest fences, and rasterizer `1ea1871`; stop at the first visually verified mission frame.
 +
@@ -278,23 +279,23 @@ index f2d0c67..f296cdf 100644
 +
 +
 diff --git a/docs/PROJECT_STATUS.md b/docs/PROJECT_STATUS.md
-index 3dc37da..36ba48e 100644
+index 3dc37da..91caae4 100644
 --- a/docs/PROJECT_STATUS.md
 +++ b/docs/PROJECT_STATUS.md
 @@ -1,5 +1,17 @@
  # Steel Battalion project status
  
-+## Current verified state — r340–r344, 2026-10-29
++## Current verified state — r340–r345, 2026-10-29
 +
 +**Milestone 3 remains active.** First visually verified mission frame: **0/1**.
 +
 +Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `███░ 3/4` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
 +
-+r340 directly captured the renderer's `put_pixel` store writing `FF000000` into guest DirectSound list fields `8038C08C`, `8038C098`, and `8038C09C`; the list walk then crashed at `sub_0021ED29+0x88`. The bad store's active color-surface state is still missing, so no behavior fix is justified. A 16-record opt-in overlap trace now captures that state. r342 reached Campaign but ran without the new flag and did not repeat the store during its short observation; r343/r344 remained at a black title-stage frame and did not exercise Campaign. Keep title DCF4 waits, this audio-list crash, raster cost, and post-difficulty loading plateaus separate.
++r340 directly captured the renderer's `put_pixel` store writing `FF000000` into guest DirectSound list fields `8038C08C`, `8038C098`, and `8038C09C`; the list walk then crashed at `sub_0021ED29+0x88`. The bad store's active color-surface state is still missing, so no behavior fix is justified. A 16-record opt-in overlap trace now captures that state. r342 reached Campaign without the new flag and did not repeat the store during its short observation; r343–r345 remained at a black title-stage frame and did not exercise Campaign. Keep title DCF4 waits, this audio-list crash, raster cost, and post-difficulty loading plateaus separate.
 +
 +Earlier r151 evidence still identifies a title DCF4 wait with no subsequent index-5 callback/`KeSetEvent`; r153's dump is only a DSP point sample and does not identify the frozen guest owner. The r130 null-output handle behavior is already implemented; its completion semantics remain uncorrelated with loader readiness. AOT execution, controller mapping, guest fences, and rasterizer `1ea1871` are unchanged.
 +
-+Current storage: **53,537,125,251 bytes allocated (49.860 GiB)** and **1,385,284,866,002 logical bytes (1,290.147 GiB)** across 76,782 files; 13 reparse entries skipped. The closed r338–r343 logs reclaimed **2,032,049 allocated bytes** through lossless compression with SHA-256 checks; r344 evidence is compressed. The r342 EXE/PDB/MAP candidate and hot build cache remain. No files were deleted; no hot compiler/Cargo cache was purged. See the [r340–r344 report](../analysis/m3-r340-r344-surface-and-storage-20261029.md) and [current cleanup manifest](../analysis/current-cleanup-manifest-20261029.md).
++Current storage: see the post-r345 inventory in the [current cleanup manifest](../analysis/current-cleanup-manifest-20261029.md). Closed r338–r343 logs reclaimed **2,032,049 allocated bytes** through lossless compression with SHA-256 checks; r344/r345 evidence is compressed, and r345's 10-file set reclaimed another **3,994 bytes** with SHA-256 checks. The r342 EXE/PDB/MAP candidate and hot build cache remain. No files were deleted; no hot compiler/Cargo cache was purged. See the [r340–r345 report](../analysis/m3-r340-r344-surface-and-storage-20261029.md).
 +
  **Current milestone:** 3 — boot and compatibility.
  **Next acceptance point:** first visually verified mission frame.

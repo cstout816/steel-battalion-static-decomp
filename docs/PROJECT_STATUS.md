@@ -1,16 +1,16 @@
 # Steel Battalion project status
 
-## Current verified state — r340–r344, 2026-10-29
+## Current verified state — r340–r345, 2026-10-29
 
 **Milestone 3 remains active.** First visually verified mission frame: **0/1**.
 
 Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `███░ 3/4` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
 
-r340 directly captured the renderer's `put_pixel` store writing `FF000000` into guest DirectSound list fields `8038C08C`, `8038C098`, and `8038C09C`; the list walk then crashed at `sub_0021ED29+0x88`. The bad store's active color-surface state is still missing, so no behavior fix is justified. A 16-record opt-in overlap trace now captures that state. r342 reached Campaign but ran without the new flag and did not repeat the store during its short observation; r343/r344 remained at a black title-stage frame and did not exercise Campaign. Keep title DCF4 waits, this audio-list crash, raster cost, and post-difficulty loading plateaus separate.
+r340 directly captured the renderer's `put_pixel` store writing `FF000000` into guest DirectSound list fields `8038C08C`, `8038C098`, and `8038C09C`; the list walk then crashed at `sub_0021ED29+0x88`. The bad store's active color-surface state is still missing, so no behavior fix is justified. A 16-record opt-in overlap trace now captures that state. r342 reached Campaign without the new flag and did not repeat the store during its short observation; r343–r345 remained at a black title-stage frame and did not exercise Campaign. Keep title DCF4 waits, this audio-list crash, raster cost, and post-difficulty loading plateaus separate.
 
 Earlier r151 evidence still identifies a title DCF4 wait with no subsequent index-5 callback/`KeSetEvent`; r153's dump is only a DSP point sample and does not identify the frozen guest owner. The r130 null-output handle behavior is already implemented; its completion semantics remain uncorrelated with loader readiness. AOT execution, controller mapping, guest fences, and rasterizer `1ea1871` are unchanged.
 
-Current storage: **53,537,125,251 bytes allocated (49.860 GiB)** and **1,385,284,866,002 logical bytes (1,290.147 GiB)** across 76,782 files; 13 reparse entries skipped. The closed r338–r343 logs reclaimed **2,032,049 allocated bytes** through lossless compression with SHA-256 checks; r344 evidence is compressed. The r342 EXE/PDB/MAP candidate and hot build cache remain. No files were deleted; no hot compiler/Cargo cache was purged. See the [r340–r344 report](../analysis/m3-r340-r344-surface-and-storage-20261029.md) and [current cleanup manifest](../analysis/current-cleanup-manifest-20261029.md).
+Current storage: see the post-r345 inventory in the [current cleanup manifest](../analysis/current-cleanup-manifest-20261029.md). Closed r338–r343 logs reclaimed **2,032,049 allocated bytes** through lossless compression with SHA-256 checks; r344/r345 evidence is compressed, and r345's 10-file set reclaimed another **3,994 bytes** with SHA-256 checks. The r342 EXE/PDB/MAP candidate and hot build cache remain. No files were deleted; no hot compiler/Cargo cache was purged. See the [r340–r345 report](../analysis/m3-r340-r344-surface-and-storage-20261029.md).
 
 **Current milestone:** 3 — boot and compatibility.
 **Next acceptance point:** first visually verified mission frame.

@@ -51,12 +51,12 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3 remains active. r340 confirmed a renderer pixel store corrupting DirectSound list fields at the Campaign menu; its active surface state still needs correlation. No first mission frame. See the [r340–r344 report](analysis/m3-r340-r344-surface-and-storage-20261029.md). |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3 remains active. r340 confirmed a renderer pixel store corrupting DirectSound list fields at the Campaign menu; its active surface state still needs correlation. The Campaign route remains intermittent, and no first mission frame is verified. See the [r340–r345 report](analysis/m3-r340-r344-surface-and-storage-20261029.md). |
 | Research and architecture | [####################] 3/3 | Approach and technical limits documented. |
 | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
 | Initial code translation | [####################] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [####################] 100% | A local build completes. |
-| Boot and compatibility | [########------------] 4/5 | r342 reached the Campaign menu. r343/r344 stalled at a black title-stage frame before Campaign; no first mission frame or loader dependency is verified. |
+| Boot and compatibility | [########------------] 4/5 | r342 reached Campaign; r343–r345 stalled at a black title-stage frame before Campaign. No first mission frame or loader dependency is verified. |
 | Loader dependency tracing | [##########----------] 2/4 | r340–r344 did not reach the mission loader. The first stalled mission dependency remains unknown; title DCF4, the Campaign audio-list crash, rendering cost, and later loading plateaus remain separate. |
 | First mission frame | [--------------------] 0/1 | No in-mission framebuffer has been verified. |
 | 60-FPS mission performance | [--------------------] 0/1 | No playable mission frame or gameplay frame-time sample has been verified; startup/loading measurements do not count. |
