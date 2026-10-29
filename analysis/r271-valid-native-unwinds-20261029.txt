@@ -1,0 +1,20 @@
+Run: m3-title-dcf4-outer-r271-20261029
+Dump: iso/local-analysis/logs/m3-title-dcf4-outer-r271-20261029/nv2a-progress-stall.dmp
+Exact image: build-xpp-seeded/ProducerTrace-Candidates/r271-dcf4-outer-loop/Release/your_game_recomp_producer_trace.exe
+Exact MAP SHA-256: D84AD7E0B146605F0F4888041AA302A18C8182FD85AEE4C6935F76FF590F9A10
+
+Validated native unwind, TID 143608:
+  #00 ntdll.dll+0x161DD4
+  #02 KERNELBASE.dll+0x1BE9F
+  #03 your_game_recomp_producer_trace.exe+0x64A6F69 = xbox_KeWaitForSingleObject+0x29
+  unwind stops at non-module address 0xD8C
+  Explicit guest wait record: object 0x0021DCF4, callsite hint 0x00211F3B, in sub_00211E10.
+
+Validated native unwind, TID 14264:
+  #00 ntdll.dll+0x1623D4
+  #02 ntdll.dll+0xD0FD4
+  #03 KERNELBASE.dll+0x8B9C1
+  #04 your_game_recomp_producer_trace.exe+0x6496732 = kernel_timer_thread+0xE2
+  the next return is outside listed module ranges; no guest caller is inferred.
+
+The address samples printed by Read-ProducerTraceMiniDump.ps1 are not an unwind. The guest callsite above is taken from the synchronized wait logger, not from a raw stack-address scan.

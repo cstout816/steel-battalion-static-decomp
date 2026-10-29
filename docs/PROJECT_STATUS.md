@@ -1,30 +1,33 @@
 # Steel Battalion project status
 
-**Current milestone:** Milestone 3 — boot and compatibility.
-
+**Current milestone:** 3 — boot and compatibility.
 **Next acceptance point:** first visually verified mission frame.
 
-**Latest diagnostic:** r234 (`m3-thread-suspend-snapshot-r234-20261028`).
+## Progress
 
-**Progress:** overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · loader diagnosis `███░ 3/4` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
+Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `███░ 3/4` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
 
-## Current finding
+## Current verified finding — r271
 
-r234 supports a guest CPU scheduler handoff failure: the title successfully suspended a newly created loader worker while that worker still owned the guest CPU lock. Two guest threads remained queued behind it. The state repeated in three synchronized snapshots, and the worker's saved native unwind reaches the runtime thread bridge and CRT trace-output path. No file I/O began, so this is before the asset dependency stage. See [r234 guest CPU suspension report](../analysis/m3-r234-guestcpu-suspend-report-20261028.md).
+The [r271 evidence report](../analysis/m3-r271-title-dcf4-outer-loop-20261029.md) supersedes the r267–r270 current theory. The 300-second watchdog captured an unsignaled guest wait on `0x0021DCF4` at guest callsite `0x00211F3B` (`sub_00211E10`). DCF4 set 127 returned the prior wait; wait 128 had no matching set or return. The main thread's valid native unwind reaches `xbox_KeWaitForSingleObject+0x29`, then stops at non-module `0xD8C`; the guest callsite comes from the explicit wait-entry record.
 
-The dump's owner unwind is partly validated; the two waiters unwind only through Windows wait frames. Their guest call chains remain unverified. No runtime behavior fix has been applied yet. The next focused change is cooperative guest-thread suspension through the guest CPU scheduler, with a regression test for suspend, queued progress, and resume before another AOT route.
+Callback 453 selected index 5 / target `0x0021701E` and produced DCF4 set 127. Callback 454 selected index 1 / target `0x00216EC9`; its gate returned `out100=0`. No later index-5 callback or DCF4 signal appeared. The final NV2A sample had callbacks/frame/counter/target/fence `454 / 0x143 / 0x57D / 0x573 / 0x579`, line 1, and zero raster batches, workers, or pending batches. This supports an event/producer handoff stall, not an active raster queue backlog. The reason guest state chose index 1 remains unknown.
 
-The r234 run ended on a black post-difficulty frame. It did not show a verified `NOW LOADING` screen or a mission frame. A separate r233 DirectSound list crash, earlier title DCF4 waits, and expensive CPU raster work remain distinct issues. Preserve AOT execution, controller mapping, guest fences, and rasterizer `1ea1871`.
+The test also rejects one narrow theory: `sub_002173A0` was called again after its inner loop recorded `loop=0`. Its 2,048-record first-N trace cap was reached before the final stall, so later outer-loop behavior is not known. Runner output reported no relay drops and only this trace cap. The title prompt was observed after callback progress had already frozen. A later `a:2000` reached XID DMA, but no guest input predicate or edge-consume followed it; the new-pilot route was not tested in r271. No pilot-list callback, `NOW LOADING`, or mission frame was reached.
 
-## Storage and retained working set
+Earlier r267–r270 evidence remains historical context in [its report](../analysis/m3-title-dcf4-r267-r270-evidence-20261029.md). Keep this title-stage wait distinct from r258's post-difficulty mode-2 plateau, DirectSound list corruption, and expensive rendering windows. The r130 null-output `ObReferenceObjectByHandle` implementation remains unverified for completion semantics because no loader route ran.
 
-Latest scan: **64.675781 GiB allocated**, **1,284.616413 GiB logical**, 74,960 files; C: had **26.963 GiB free**. `iso` accounts for 42.27 GiB allocated; `local-tools` for 22.24 GiB. A current exact-path cleanup manifest is [here](../analysis/current-cleanup-manifest-20261028.md). This pass reclaimed **0 bytes**: the duplicate Ghidra removal was blocked by automatic deletion policy, and sparse BMP compression had no measurable benefit. The incremental build cache, dirty source checkouts, original game data, saves, and dump-matched symbol bundles remain preserved.
+## Keep these findings separate
 
-## Most useful reports
+- r258's post-difficulty mode-2 scan plateau at `NOW LOADING` is a later, distinct blocker; it is not the cause of the title DCF4 wait.
+- The historical divide-by-zero, DirectSound list corruption, and expensive raster windows are separate investigations.
+- The r130 null-output `ObReferenceObjectByHandle` theory is obsolete as a current diagnosis; verify completion semantics only when the loader route is reached.
+- Raw dump stack-address scans are candidate addresses, not call chains. r264's valid native unwind stops at the host wait; its guest callsite comes from the instrumented wait-entry record.
 
-- [r234 guest CPU suspension diagnosis](../analysis/m3-r234-guestcpu-suspend-report-20261028.md)
-- [r150–r153 exact-bundle unwind review](../analysis/m3-dump-unwind-review-r150-r153-20261028.md)
-- [r227–r229 read/plateau evidence](../analysis/m3-read-target-mode2-r227-r229-20261028.md)
-- [Storage cleanup manifest](../analysis/current-cleanup-manifest-20261028.md)
+## Next test
 
-Older run reports remain historical evidence; use this index before restarting a theory.
+Preserve failure-window outer-loop evidence with a bounded sample/ring policy and explicit emitted/capped/dropped counts. Trace callback 454's handler return/state into the next producer decision. Apply screen-gated input only while guest predicates are still advancing; do not count an XID pulse without a following guest edge record as route progress. Do not alter guest behavior, force a signal, bypass fences, force preload, or seed valid imports. Keep AOT execution, controller mapping, guest fences, and rasterizer `1ea1871` intact. Stop at the first visually verified mission frame.
+
+## Storage
+
+Latest allocated/logical measurements and protected files are in the [current cleanup manifest](../analysis/current-cleanup-manifest-20261029.md). The post-r271 full scan, adjusted for the four status/report text files written afterward, totals 57,530,266,619 allocated bytes (53.579236 GiB) and 1,381,116,557,578 logical bytes (1,286.265028 GiB) across 75,680 files. Thirteen Rust tool reparse entries were skipped; no other scan errors occurred. The r271 bundle used 169,853,890 allocated bytes and its run folder used 2,422,431 allocated bytes. This pass reclaimed 0 workspace bytes. The run stayed below its 64 MiB budget and had no relay drops, but the outer trace cap was hit. The warm cache was retained; the build completed in about 30 seconds.
