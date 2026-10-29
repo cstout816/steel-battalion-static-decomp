@@ -1,0 +1,2144 @@
+diff --git a/README.md b/README.md
+index 79f58fe..e83b10d 100644
+--- a/README.md
++++ b/README.md
+@@ -10,7 +10,7 @@
+ 
+ </div>
+ 
+-> **For players:** there is no game to download yet. The latest bounded new-pilot replay reached “NOW LOADING” but no mission frame. It repeatedly found the cache path `TEX00.BIN` missing; the source file was only metadata-queried, and the trace does not show why its cache entry was never created or prove it alone prevents mission entry. The game is not yet reliably playable. These diagnostics used a synthetic DSP acknowledgement; audible audio is not verified. There is no installer or launcher. Please do not send game files.
++> **For players:** there is no game to download yet. The latest bounded AOT new-pilot diagnostic (r179) reached a black post-title/loading transition, created a preload worker, and recorded seven mode-2 loader scans. The saved framebuffer is black; no mission frame or playable boot is verified. The traces do not establish whether loading, graphics, or synchronization is responsible. Audio and physical-controller support remain unverified. There is no installer or launcher. Please do not send game files.
+ 
+ ## The game and its controller
+ 
+@@ -33,7 +33,7 @@ These externally hosted images show the original hardware and game. They are not
+ 
+ The goal is to translate the original Xbox version of *Steel Battalion* (2002) ahead of time into a Windows application and recreate the Xbox services it needs. This is called **static recompilation**. The project is not an emulator packaged under another name.
+ 
+-The translated Windows program builds, but it is not reliable or playable. In r93, the visible new-pilot route reached `NOW LOADING`. The source `TEX00.BIN` exists and opens for metadata, while 121 cache opens for `Z:\TEX00.BIN` fail; no content read or copy for TEX00 was recorded. The loader kept polling with its tracked pair unchanged. Why the producer did not populate the cache, whether TEX00 alone blocks mission entry, and the first mission frame remain unverified; a prior controlled cache copy also did not advance loading. Raster work remains very expensive, but no growing queue or causal link to the loader was proven. DCF4 counters continued advancing, though bounded wait logging does not exclude every later wait. Earlier r89 separately crashed in a DirectSound deferred-settings list; that issue remains unresolved. Audio, physical controller support, and campaign completion remain unverified. See the [r93 loading evidence](analysis/m3-preload-item-r93-20261027.md), [r92 file lifecycle](analysis/m3-loader-file-lifecycle-r92-20261027.md), [r91 producer trace](analysis/m3-dcf4-producer-r91-20261027.md), and [loader handoff](analysis/astra-pilot-loading-handoff.md).
++The translated Windows program builds, but it is not reliable or playable. In r179, the new-pilot route returned 39/39 file-copy callbacks, created worker 6, and completed seven mode-2 scans with result 0 before the screen and activity plateaued. The final captured frame is black. Earlier runs identified incomplete copies and cache misses, but those did not establish a single cause, and later runs completed the observed copies. DMA-ACK sampling filled its cap before the loading interval, and the dump's last AOT program counter is only a candidate; the evidence does not prove a graphics backlog, file dependency, or unsignaled DCF4 wait. The separate DirectSound list crash remains unresolved. Audio, physical-controller support, and campaign completion remain unverified. See the [r173–r179 loading evidence](analysis/m3-pilot-loader-r159-r160-report-20261028.md) and [loader handoff](analysis/astra-pilot-loading-handoff.md).
+ 
+ ## Controller compatibility
+ 
+@@ -51,20 +51,21 @@ When a tested release exists, players will need to provide their own legally obt
+ 
+ | Work area | Progress | Current result |
+ | --- | --- | --- |
+-| Overall project milestones | [#####---------------] 2/8 | Milestone 3 remains active. r93 reached `NOW LOADING`; only the diagnostic process was stopped before its 900-second watchdog. No first mission frame. The TEX00 source opens, but its cache entry stays missing; causality is unproven. See the [r93 trace](analysis/m3-preload-item-r93-20261027.md). |
++| Overall project milestones | [#####---------------] 2/8 | Milestone 3 remains active. r340 confirmed a renderer pixel store corrupting DirectSound list fields at the Campaign menu; its active surface state still needs correlation. No first mission frame. See the [r340–r344 report](analysis/m3-r340-r344-surface-and-storage-20261029.md). |
+ | Research and architecture | [####################] 3/3 | Approach and technical limits documented. |
+ | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
+ | Initial code translation | [####################] 100% | Translation output exists; correctness is not established by output count. |
+ | Windows build | [####################] 100% | A local build completes. |
+-| Boot and compatibility | [########------------] 4/5 | r93 followed new-pilot setup into `NOW LOADING`; 121 cache opens for `Z:\TEX00.BIN` failed, while the source opened for metadata only. DCF4 counters advanced; bounded wait tracing still leaves later waits incompletely sampled. The earlier r89 DirectSound crash remains separate. See the [r93 report](analysis/m3-preload-item-r93-20261027.md). |
+-| Loader dependency tracing | [##########----------] 2/4 | r93 correlated the TEX00 source metadata open, repeated cache misses, loader scans, and guest stack samples. No content transfer was recorded, but the prior controlled cache copy did not advance loading; the first causal dependency remains unverified. |
++| Boot and compatibility | [########------------] 4/5 | r342 reached the Campaign menu. r343/r344 stalled at a black title-stage frame before Campaign; no first mission frame or loader dependency is verified. |
++| Loader dependency tracing | [##########----------] 2/4 | r340–r344 did not reach the mission loader. The first stalled mission dependency remains unknown; title DCF4, the Campaign audio-list crash, rendering cost, and later loading plateaus remain separate. |
+ | First mission frame | [--------------------] 0/1 | No in-mission framebuffer has been verified. |
+ | 60-FPS mission performance | [--------------------] 0/1 | No playable mission frame or gameplay frame-time sample has been verified; startup/loading measurements do not count. |
+-| Startup rendering performance | [##########----------] 2/4 | r93 measured a late 27-batch / 56-triangle window at 2.05 seconds batch wall and 7.97 seconds summed worker-active time across four workers. This is severe CPU raster cost, but no growing queue or causal link to the loader was proven. |
++| Startup rendering performance | [##########----------] 2/4 | r340 recorded raster work near the Campaign crash, but no evidence ties a growing render backlog to the title freeze or mission loading. |
+ | CPU raster throughput | [##########----------] 2/4 | Four workers remain the measured default; a synthetic sweep found no benefit from 8–16 workers. The local clipping fast path and raster regression harness have synthetic-only evidence; mission frame time and 1% lows are unverified. |
+-| GPU scene rendering | [#####---------------] 1/4 | Vulkan presentation and a narrow splash-render path use the RTX 4070 SUPER. General NV2A scene rasterization still runs on CPU; sampled `nvidia-smi` readings were 0% during the title/loading route. Mission GPU-engine use and accelerated-scene image parity are unverified. |
+-| Virtual controller input | [#############-------] 2/3 | r93 followed the `LIST AS NEW` action through XID/DMA, guest edge/predicate, callback `0x000E18D8` / branch `0x000E193B`, and row action `0x83`; later screens showed pilot creation and mission selection. Physical adapter compatibility and full original controller mapping/outputs remain unverified. |
+-| Guest DSP and audio | [█-------------------] 1/2 | Nonzero packets reach the DirectSound stream processor, XMO returns success, and the deferred callback reaches XBE routine `0x00227F9C`. A separate capture reproduced the invalid release argument in an audio callback while draining a DPC-managed list. The corrected loading run did not reach that same cleanup path, and audible output remains unverified. |
++| GPU scene rendering | [#####---------------] 1/4 | A narrow splash-render path is verified; general NV2A scene rendering, mission GPU use, and image parity remain unverified. |
++| Virtual controller input | [#############-------] 2/3 | Earlier screen-gated captures correlated XID/DMA, guest edge handling, pilot callback `0x000E18D8` / branch `0x000E193B`, and row action `0x83`. Physical adapter compatibility and the full original controller mapping/outputs remain unverified. |
++| Guest DSP and audio | [█-------------------] 1/2 | r340 confirmed `put_pixel` writing into the DirectSound list before its invalid-node crash. The active render target and safe fix remain unverified; audible output is not verified. |
++| Storage and incremental builds | [##############------] 3/4 | The workspace is 49.860 GiB allocated / 1.261 TiB logical after sparse-file accounting. Closed diagnostic logs were compressed with hash checks; the warm build cache remains intact. |
+ | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
+ 
+ These bars describe engineering work, not playable features or campaign completion. See the [detailed tracker](docs/DEVELOPMENT_STATUS.md) for field-by-field evidence.
+diff --git a/analysis/current-cleanup-manifest-20261028.md b/analysis/current-cleanup-manifest-20261028.md
+index bf99256..869c613 100644
+--- a/analysis/current-cleanup-manifest-20261028.md
++++ b/analysis/current-cleanup-manifest-20261028.md
+@@ -1,36 +1,27 @@
+-# Current cleanup manifest — 2026-10-28
++# Current cleanup manifest — refreshed after r255 (2026-10-28)
+ 
+-## Measurement
++## Latest allocated and logical inventory
+ 
+-Final scan after writing this turn's evidence: **69,445,091,197 bytes allocated (64.675781 GiB)** and **1,379,346,370,436 bytes logical (1,284.616413 GiB)** across 74,960 files. Thirteen reparse paths were skipped. C: free space at scan time was **28,951,494,656 bytes (26.963 GiB)**. The detailed exact-path CSV is `C:\Project\steel-battalion-inventory-current-20261028.csv`; the scanner is `tools/Measure-WorkspaceInventory.ps1`.
++`C:\Project\sb-inventory-current-20261028-r255-final.csv`: 75,432 files, **56,990,370,814 allocated bytes (53.076 GiB)**, **1,380,545,500,255 logical bytes (1,285.733 GiB)**, 13 reparse entries skipped. Measure allocated bytes for capacity decisions; logical size includes sparse partition images.
+ 
+-Top allocated areas:
++## Verified space reclaimed this pass
+ 
+-| Area | Allocated | Logical | Handling |
+-|---|---:|---:|---|
+-| `iso` | 42.27 GiB | 1,012.13 GiB | Original ISO, sparse image trees, saves, and run evidence; retain until each duplicate is content-validated. |
+-| `local-tools` | 22.24 GiB | 272.30 GiB | Dirty source checkouts, tool trees, caches, and exact dump bundles; retain working inputs and build efficiency. |
++The prior read-only content scan (`C:\Project\sb-all-zero-partitions-r254.csv`) examined all 1,270 partition images and found 1,016 zero-only files. Eight were still fully allocated: Partition1–4 in each of `iso\local-analysis\saves-m3-known-save-copy-20261023` and `iso\local-analysis\saves-m3-first-level-windowed-20261023`. Their total allocated size was 8,913,944,576 bytes (8.302 GiB). All eight were validated zero before and after, retained exact logical lengths and timestamps, and were converted to sparse files with the guarded `tools\Optimize-VerifiedZeroSavePartitions.ps1`. Per-file before/after data: `C:\Project\sb-zero-sparse-r254.csv`.
+ 
+-## Completed storage-safe actions
++Fresh inventory after the operation and r255: 56,990,370,814 allocated bytes. The pre-operation inventory recorded 65,902,347,767 bytes; measured decrease is 8,911,976,953 bytes (8.300 GiB), 1,967,623 bytes less than the exact file-range recovery because the current evidence and other workspace changes add allocation. Compared to the inventory immediately after sparse conversion but before r255, the workspace grew about 1.9 MiB allocated, including r255 logs and manifests. No files were deleted or moved. Same-drive quarantine did not occur.
+ 
+-- Created the fresh inventory above. No original game file, save, source tree, build cache, EXE, PDB, or MAP was deleted or moved.
+-- Verified that `iso/local-analysis/logs` has 8,831 BMPs, 7.625 GiB logical and about 0.892 GiB allocated. A sample compression check saved zero bytes and the sample was returned to uncompressed state; blanket BMP compression was not applied.
+-- Verified the r232 EXE/PDB/MAP hashes listed in `m3-r234-guestcpu-suspend-report-20261028.md`; the exact bundle remains necessary for the unresolved r234 dump.
+-- A same-path duplicate Ghidra distribution was content-checked against the retained copy, including the differently nested extension directories. A deletion of `local-tools/analysis-deps/ghidra_12.1.4_PUBLIC` was rejected by the automatic deletion policy. No files were deleted, and the rejection was not bypassed. This duplicate is a documented candidate only; current verified reclaimed space from this pass is **0 bytes**.
++## Protected working set and efficiency
+ 
+-## Preserve
++- Original ISO/game files, nonzero and unique saves, active save root, dirty XboxRecomp/game source checkouts, hand-edited generated source, licenses, canonical generated tree, rollback/build caches, and exact EXE/PDB/MAP bundles for unresolved dumps remain in place.
++- r255's exact r249 binary bundle remains at `local-tools\steel-battalion-game\build-xpp-seeded\ProducerTrace-Candidates\r249-dsound-watch-slots-fixed\Release`. r255's run evidence and minidump remain at `iso\local-analysis\logs\m3-loader-sampled-read-loadstack-r255-20261028`.
++- r255 retained 5,456,710 logical bytes and 1,976,549 allocated bytes. Its 64 MiB budget and trace limits were not hit; there were no async-relay drops. Screenshot retained losslessly as the existing frame BMP.
++- Closed BMP screenshots tested were already NTFS-compressed; re-compression yielded no meaningful recovery. The zero-only logs partition files were already sparse. We did not prune compiler/Cargo caches, builds, or symbol bundles, so build efficiency is unchanged.
++- No writable save was hard-linked or densely copied. No original game file, save data, source, cache, build, or symbol file was deleted.
+ 
+-- Original ISO and game assets; all unique or not-yet-hash-validated save images; dirty XboxRecomp and generated-source checkouts; licenses; canonical generation and incremental caches.
+-- The exact EXE/PDB/MAP bundles for unresolved dumps, including r149 and r232; r232 is currently linked to r234's native stack analysis.
+-- Closed run evidence, including sparse BMPs and dump/log bundles, until retention can be validated by references and content hashes. Do not replace sparse files with dense copies or hard-link writable saves.
++## Current blocker and next bounded action
+ 
+-## Candidates and current disposition
++r253 (all read completions) and r255 (sampled read completions) both reached `NOW LOADING` and then remained at mode-2 `range=2..11`, `last_index=28`, `result=0`, pair zero, with the same black framebuffer signature for 300 seconds. That comparison rejects only the narrow possibility that all-read tracing itself creates the stall. r255's last sampled read succeeded but later reads are intentionally omitted; asset opens succeeded without proving their reads were consumed. DCF4 wait/set traces are paired through wait 3285 in r255, so no outstanding DCF4 wait is established there. The dump's main TID 25364 stops in translated `sub_00211E10`; native unwind does not validate a deeper guest wait. Do not attribute the plateau to DCF4, audio list corruption, rendering backlog, or a particular file from this evidence.
+ 
+-| Candidate | Evidence | Disposition |
+-|---|---|---|
+-| Duplicate Ghidra tree `local-tools/analysis-deps/ghidra_12.1.4_PUBLIC` | 5,264 files; matching retained Ghidra core and the extension files compare by SHA-256; no path references found in the prior audit. | Delete attempt blocked by policy. Preserved in place; do not retry through a different mechanism. |
+-| Closed historical screenshots | 8,831 sparse BMPs; 0.892 GiB allocated total. | Retain; compression test yielded no measurable savings. |
+-| Historical save images and partition trees | Paths/sizes alone do not establish duplicate identity; previous full-hash work did not complete. | Retain until a complete content-hash manifest proves redundant copies and save ownership. |
+-| Historical EXE/PDB/MAP bundles | Multiple bundles map to unresolved dumps and cannot be pruned by age/name. | Retain until dump-to-bundle references are reconciled. |
++Next use existing bounded `-EnableLoadPairOutputTrace` (cap 8192) on the same r249 binary and route. Correlate each helper raw result/output pair/index with mode-2 pass and file-completion state. It will test the readiness-helper candidate without changing game behavior. No runtime fix, forced signal, preload change, import seeding, controller change, fence change, or rasterizer change is authorized by the current evidence.
+ 
+-**Net reclaimed by this pass: 0 bytes.** Actual footprint did not grow materially; the dominant logical size is sparse-file length, while allocated size is about 64.7 GiB. Do not report logical-size reductions as freed disk space.
++Detailed run findings: `analysis\m3-mode2-loader-plateau-r253-r255-20261028.md`. Current index: `docs\PROJECT_STATUS.md`.
+diff --git a/docs/DEVELOPMENT_STATUS.md b/docs/DEVELOPMENT_STATUS.md
+index f2d0c67..f296cdf 100644
+--- a/docs/DEVELOPMENT_STATUS.md
++++ b/docs/DEVELOPMENT_STATUS.md
+@@ -1,3 +1,64 @@
++> **Current state:** read [PROJECT_STATUS.md](PROJECT_STATUS.md) first. It summarizes the active blocker, progress bars, storage state and next experiment. Detailed run history follows.
++
++### 2026-10-28 — r205–r210 low-output loader and zero-divisor evidence
++
++**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader dependency tracing `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`; stable 60-FPS performance `░ 0/1`.
++
++r210 used AOT candidate SHA-256 `EE1AD00E2BA09C5029F53FA678D2F0E86127629305237ED3F149EF4D730652AC`, current generated sources and the existing save root. Screen-gated input verified new pilot `A`, DOB `01/01/2002`, YES, HAI SHI DAO 2080 Normal, then black. No NOW LOADING caption or mission frame appeared.
++
++At tick 438473421, mode-2 worker TID 108164 recorded guest table pointer `0x00A04B08`, count zero, first two words zero; immediately afterward guest PC `0x0001EEBE` attempted division by divisor zero from guest stack address `0x019A0F64`, causing `0xC0000094` at host RVA `0x61DCB9`. Generated `sub_0001ED90` shows the local alias feeding this divide. The immediate worker fault is supported; why this table pointer is empty and which routine should populate it remain unknown. No seed or runtime fix was made.
++
++Logged initial reads for `stgdat00.stg` (316/316), `engdat08.eng` (268/268), and `spr000.uv`–`spr008.uv` all completed. Thus no incomplete targeted read preceded the fault. DMA, PB, NV2A, and raster telemetry continued; late raster batches were extremely slow (about 8.2 seconds summed active raster time in a ~2.1 second window), confirming a major performance problem distinct from the worker exception. DCF4 producer tracing was off; no separate unmatched DCF4 wait was established.
++
++The exception watchdog captured a dump and stopped only diagnostic PID 133032; relay/stdout/stderr drops were zero. Stack unwind did not recover a useful guest call chain. No user game was closed. Full evidence: [r205–r210 report](../analysis/m3-loader-r205-r210-evidence-20261028.md). Next: trace the owner/populator of `0x00A04B08` and the value chain through mode-2 setup without seeding or changing game behavior. Milestone 3 remains active.
++### 2026-10-28 — r204 exact asset opens and repeat worker arithmetic fault
++
++**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader dependency tracing `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`; stable 60-FPS performance `░ 0/1`.
++
++r204 replayed the new-pilot path and correlated XID byte 2 through guest edge/predicate and callback `0x000E18D8` branch `0x000E193B` to the visible LIST AS NEW screen. The loader worker opened `stgdat00.stg`, `engdat08.eng`, and `spr000.uv`–`spr008.uv`; each logged initial read completed. This clears the r203 unknown-open boundary for those assets but does not establish full-file consumption or a blocked dependency. The screenshot after difficulty remains black; NOW LOADING and a mission frame are not verified.
++
++Worker TID 138044 then hit `0xC0000094` at host RVA `0x61D92C`, map `sub_0001ED90+0x4FC`, after the last recorded `spr008.uv` initial read. This repeats the r200 arithmetic fault location. The precise guest divisor/data origin remains unknown; no fix or seed was made. DMA/PB/NV2A counters advanced; raster windows remain very slow but do not establish the terminal cause. No distinct unmatched DCF4 wait reproduced. The crash watchdog captured the dump and stopped only our verified PID 125412. Future stalled diagnostic runs are authorized to auto-stop their own exact child.
++
++Detailed evidence: [r201–r204 report](../analysis/m3-loader-r201-r204-evidence-20261028.md). Next: capture the guest divide operand and processing data at the fault without changing guest behavior; stop when a first mission frame is verified. Milestone 3 remains active.
++### 2026-10-28 — r198–r200 loader stall isolation
++
++**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader dependency tracing `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`; stable 60-FPS performance `░ 0/1`.
++
++r199's dump localizes its mode-2 pause to CRT `getenv` contention in diagnostic logging: the worker was in `bridge_trace_file_open_target` reading `RECOMP_FILE_OPEN_TARGET_LOG`, with the main loader callback and the timer thread also waiting in environment lookups. The timer calls `getenv("RECOMP_NV2A_TIMER_TRACE")` every 10 ms even when the flag is unset. This explains the immediate diagnostic obstruction in r199; lock ownership is not proven.
++
++r200 reused the exact same AOT binary with per-open trace disabled. The worker progressed further, then raised `0xC0000094` at host RVA `0x61D92C`, mapped to `sub_0001ED90+0x4FC`, an `idiv rax,rcx`. Guest return addresses correlate mode-2 `sub_00034720 -> sub_0001F2D0 -> sub_0001ED90`; the corresponding guest divide is at `0x0001EE98` and uses `MEM32(esp+0x1C)`. The divide fault establishes a zero divisor; its value's source remains unknown. NV2A, DMA, PB semaphore and raster traces advanced before the fault, and no unmatched DCF4 wait or missing dependency is established. r200's new-pilot input ended up as `AA` / `01/01/2001`, a route-data caveat. Neither `NOW LOADING` nor a mission frame was verified.
++
++No gameplay/runtime change was made. Both child-only automatic stops captured dumps and terminated only their own diagnostic PID. Next, capture the exception-time operand with in-process crash diagnostics, correct stage/engine/sprite paths to their `stgdata`, `engdata`, and `sprdata` directories, and replay `A` / `01/01/2002` before deciding any fix. Detailed record: [r198–r200 evidence](../analysis/m3-loader-r198-r200-evidence-20261028.md). AOT, controller mapping, guest fences, and rasterizer commit `1ea1871` remain unchanged.
++
++### 2026-10-28 — r183–r185 trace diagnosis
++
++**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader dependency tracing `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`; stable 60-FPS performance `░ 0/1`.
++
++r183 repeated the separate DirectSound null-list fault before loading. r184 reached the post-difficulty black screen but its file-open probe blocked before the host open; DCF4 was paired and NV2A signatures advanced. r185 used AOT EXE SHA-256 `00176C3538608180EBBEA114CCEB89300B77698BC3854A9681D0DD44D9A49DB0`, the current generated-source directory, and the existing saves. The verified enabled trace macros emitted 26 file-copy enters / 25 returns, 3 preload-asset enters / 2 returns, one mode-2 pass, 70 NV2A signatures, 231 DMA ACKs, 232 PB semaphore records, and 99 raster windows with zero relay drops. Last row was preload asset index 6 at tick 421495078, copy-in size zero; that is not a proven failed dependency.
++
++The r185 live dump contains 37 threads. Main TID 6772 and preload worker TID 140184 both unwind into UCRT formatting at executable `+0x543C1D` (`fprintf+0x3D`). This supports trace-output contention as the immediate diagnostic freeze; exact CRT lock ownership and a game-loader failure are unproven. The dump was captured before stopping only verified diagnostic PID 10548. Its manifest records manual stop (`ProcessExitCode=-1`; watchdog flags false). No game behavior or AOT, controller, fence, renderer, or rasterizer changes were made. Next run: omit `-EnableFileCopyTrace`, retain independent preload copy-in/out and lower-volume loader/sync/raster telemetry, and use dump-first exact-child stopping. Full evidence: [r159–r185 report](../analysis/m3-pilot-loader-r159-r160-report-20261028.md).
++
++### 2026-10-28 — r181/r182 AOT pilot and loader evidence
++
++**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader dependency tracing `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`; stable 60-FPS performance `░ 0/1`.
++
++r181 (PID 100304, EXE SHA-256 `00176C3538608180EBBEA114CCEB89300B77698BC3854A9681D0DD44D9A49DB0`) crashed before loading in the recurring DirectSound null-list access violation at guest `0xFFFFFFF4`; `-LoadingFocus` had suppressed the menu/input trace, so the precise visible screen is unknown. No fix was made.
++
++r182 (PID 119032, EXE SHA-256 `E15F05AACDA2F76CC9B9AA0D1FFFAEDDE0CF0C00696B92D91D80E869683F5133`) correlated a `LIST AS NEW` XID edge through guest predicate, active callback `0x000E18D8` branch `0x000E193B`, and row action `0x83` at `0x000E19CF`; the visible result was the new-pilot name editor. Snapshot and input-dispatch markers remained zero. The route reached a black post-difficulty transition, not a verified mission frame. Mode-2 worker TID 136756 read `Z:\COPYCHECK.DAT` in 41 successful 64 KiB chunks; the file-copy/preload return was absent, but no failed dependency was logged. The UI watchdog captured `ui-plateau-stall.dmp` then stopped only PID 119032 after 240 seconds. Both main TID 140704 and worker TID 136756 stacks entered UCRT `fprintf+0x3D`; this makes trace-output blocking the leading run-freeze candidate, not proof of a game loader failure. Last sampled NV2A state had DCF4=1 and advancing frame/counter/fence; no final raster timing or unmatched DCF4 wait was captured.
++
++A trace-only `-DisableHighVolumeMenuTrace` option was added to `tools/Start-ProducerTrace.ps1`; it keeps XID and pilot callback probes while suppressing repetitive title-route/object/menu-dispatch output. Next run: use this option, keep bounded loader and sparse sync records, omit chunk-level copy-read traces, and re-enable sampled raster timing. Full report: [r159–r182 evidence](../analysis/m3-pilot-loader-r159-r160-report-20261028.md). No runtime behavior fix or architecture change was made.
++### 2026-10-28 — current route and architecture/tooling revalidation
++
++**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader dependency tracing `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`; stable 60-FPS mission performance `░ 0/1`.
++
++Run r179 (`m3-loader-low-output-control-r179-20261028`, PID 137508) reused the current AOT executable (SHA-256 `65529680AE4E42C397F795D4EEF7A521A95D13862373D98B0783D35B681F77D`), generated source tree, and existing save root. The screen-gated new-pilot route reached a black post-title/loading transition. It emitted 39/39 successful file-copy callback pairs, three preload returns, worker 6 creation, and seven mode-2 scans with result 0. The final captured BMP is fully black; no mission frame was verified. DMA-ACK tracing reached its 256-row cap before loading. The dump sampled raster workers asleep, but no late DMA queue state or causal loader dependency was established. Main-thread AOT PC `sub_00211E10+0xFC0` is only a candidate. No game behavior, AOT targets, fences, controller mapping, or rasterizer code changed.
++
++The 240-second UI-plateau watchdog saved `ui-plateau-stall.dmp` and stopped only verified diagnostic PID 137508 at `2026-10-28T06:47:03.968Z`; no other game process is to be targeted. The standing user authorization now permits this exact dump-first, executable-path-verified child-only stop on future stalled diagnostics.
++
++Milestone 1 recheck found the Git repository already excludes `iso/`, XBE files, saves, extracted assets, generated recompilation source, and local build products; the tracked-path scan found no game-derived files. The current Ghidra workspace contains the ordinal candidate CSV, MIT notice, annotator, verifier, and analysis scripts. Exact-name GitHub repository searches returned zero results for `XbeTripper` and `xberewrite`. The primary XboxXBERecomp repository is MIT and documents AOT x86-to-C++, Xbox API replacements, SDL3 input, and D3D12, but its published XDK directory contains only builds 4831 and 5849, not this XBE's 4627. Keep the existing integrated XboxRecomp AOT path; Cxbx-Reloaded remains a read-only reference because it is an emulator. Details: [Milestone 1 research](milestone-1-research.md) and [XBE tools and ordinal archive](xbe-tooling-and-ordinals.md).
++
++**Next:** improve synchronized late-stage file/loader/DMA telemetry, replay the same route with the automatic stop enabled, and stop at the first visually verified mission frame. Do not infer a file, raster, or DCF4 cause from the current trace.
++
+ ### 2026-10-27 — r95 loader-state and automatic plateau stop
+ 
+ **Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader dependency tracing `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`; stable 60-FPS mission performance `░ 0/1`.
+@@ -6226,3 +6287,34 @@ The isolated AOT candidate `m3-mode-state-r100-20261027` (SHA-256 `B1FD7121E4442
+ r102 enabled the existing DirectSound write watch and list trace, which armed 54 observed thread IDs but logged zero writes to words `0x8038C098`, `0x8038C09C`, or `0x8038C08C`. The guest list trace logged 49 inserts and 30 unlinks; insert #8 placed node `0x8038C098` into sentinel `0x010810B4` with next=`0x010810B4` and prev=`0x803B0C10`. This is a valid-looking initial link in r102 only; it does not prove r100/r101 shared the same history. r102 remained at name entry without reaching the loader and was stopped only after verifying the exact launched PID and executable path. This does not prove all writers or allocations were covered. No behavior, controller, fence, or rasterizer changes were made. Exact paths, run IDs, trace limits, and evidence: [r100–r102 report](../analysis/m3-preload-mode-input-r100-r102-20261027.md).
+ 
+ Next: determine whether DirectSound’s malformed node can be traced to its originating guest object write, then retry the new-pilot route to exercise the alternate scheduler and resume the loader dependency trace. Do not force mode 1, seed TEX00, or conflate this audio crash with the separate loading plateau.
++
++### 2026-10-28 — r188 reaches mode-2 preload; diagnostic child auto-stopped
++
++Run `m3-loader-dsound-watch-keyboard-r188-20261028`, PID136136, used AOT EXE SHA-256 `00176C3538608180EBBEA114CCEB89300B77698BC3854A9681D0DD44D9A49DB0`, PDB `6E764F1495C6161EE06CA1FF580ABA4D4BFB1B2284D2F5C54BCA18815957E69D`, current generated source, and existing save root. No ISO/save copies or runtime behavior changes. The screen-gated new-pilot route reached `A`, DOB `01/01/2002`, `YES`, and `HAI SHI DAO 2080 [NORMAL]`, then black; no NOW LOADING or mission frame.
++
++At tick422559234 the final confirmation was XID report byte2=1 and DMA buffer `0x01081763`; guest edge `0x000C8064` / parent `0x000D5BD5` consumed it at tick422559281 (table `0x00048DF8`, index6, target `0x00048CBB`, button cell `0x004AFC08=1`, predicate=1). Worker TID140440 started at `0x00017E40`, route mode1 `preload-mode2`, caller `0x00013F00`. In `sub_00013D70`, asset indices2 and3 copied successfully. Index4 reached probe=1, metadata=1 and compare unequal at tick422561234, then no copy-in/out. Concurrent `LOAD-STATE-CB 0x0010203A` remained mode1/phase0, gates1/1/0, progress/status0/0. The last failed-path probe was main-thread `user00.sav` at `0x0018E758`; this is not proof of a missing mission dependency.
++
++Last NV2A sample tick422560828: frame0x22D8/counter0x4705F/target0x47055/fence0x47051/DCF4=0. DCF4 had changed value during earlier progress, and no unmatched wait was recorded. Raster/NV2A signatures ceased together with loader logging. The 120s UI plateau watchdog captured `ui-plateau-stall.dmp` (961,103 bytes), verified and stopped only PID136136 at `2026-10-28T07:55:48.563Z`; no relay drops. Dump: 38 threads. Main TID143276 RIP `0x7FFE7A7C59C4`, worker TID140440 RIP `0x7FFE7A7C1E54`; each raw stack includes `fprintf+0x3D` at executable `0x7FF79BF03C1D`. This makes stderr/CRT contention the leading diagnostic-stall candidate, but the dump does not validate a full unwind or identify lock ownership. The first stalled game dependency remains unidentified; no renderer backlog is established.
++
++Next run: disable per-asset stderr trace, add bounded targeted successful/failed open begin/return coverage and keep sparse loader, NV2A, DMA, and raster telemetry. Do not enable DCF4 producer-stage tracing unless an unmatched wait reproduces. Preserve AOT, controller mapping, fences, and rasterizer `1ea1871`; stop at the first visually verified mission frame. Full detail: [r188 report](../analysis/m3-pilot-loader-r159-r160-report-20261028.md).
++
++Progress remains overall `██░░░░░░ 2/8`; XBE/decomp `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission framebuffer `░ 0/1`; stable 60 FPS `░ 0/1`.
++
++### 2026-10-28 — r190–r192 loading route and trace blockage
++
++**Progress bars:** overall `██░░░░░░ 2/8`; XBE/decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader diagnosis `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio/DSP `█░ 1/2`; first mission frame `░ 0/1`; stable 60 FPS `░ 0/1`.
++
++The r192 AOT run (`m3-loader-copy-read-focus-r192-20261028`, PID 77852; EXE SHA-256 `044C57A0E5E34892EC15B3B55061A54012D0D70A73D4CFFDA228A6351261CA4E`) visibly selected a new pilot, confirmed DOB 01/01/2002 and YES, selected Normal, then showed black. No mission frame or NOW LOADING caption verified. The targeted `STRM00.WAV` source read completed its host operation before its completion trace was interrupted: offsets 0–983,040 returned 64 KiB with zero status; offset 1,048,576 entered, but the completion record was truncated. TID 15532's dump stack lands in UCRT `fprintf` at EXE+0x543C1D; source confirms that print is after `NtReadFile`. Main TID 137664 also ended in the same CRT output path. Shared diagnostic stderr/CRT contention is the strongest immediate obstruction; exact lock owner and first game-loader dependency remain unknown.
++
++r191 completed opens of `D:\media\sprdata\spr003.uv` through `spr008.uv`, all status zero. r190 input evidence correlated the XID edge, guest predicate, callback `0x000E18D8` positive branch `0x000E193B`, and pilot-list state change. The separate `sub_000E0870` callback candidate remains uncorrelated. r192 final NV2A signature at tick 425750828: callbacks0/frame0x21E8/counter0x3F811/target0x3F809/fence0x3F807/DCF4=0. DCF4 was not stuck; graphics timing was not captured after the loading transition, so a render backlog is unclassified. The watchdog dumped and terminated only PID77852; zero relay drops. Full evidence and addresses: [r190–r192 report](../analysis/m3-pilot-loader-r159-r160-report-20261028.md).
++
++Next action is trace-only: route selected read/state completion output away from shared CRT stderr and make verbose per-draw stderr opt-in, rebuild a side-by-side candidate, and repeat the same new-pilot route with synchronized sparse loader/graphics/event records. Do not change game behavior until that trace identifies a dependency or synchronization cause. Preserve AOT, controller mapping, guest fences, and rasterizer commit `1ea1871`.
++
++### 2026-10-28 — r197 loader worker exception
++
++r197 reached the new-pilot route's black loading stage. Mode-2 worker TID 130076 dispatched guest entry `0x00017E40` to `sub_00034720`, then raised `0xC0000094` at host RIP `0x7FF70292D87C` with guest ESP `0x019A0F44` and EDX 0. The exact guest instruction is unresolved. The worker successfully opened the observed stage/sprite files, but targeted read completions were absent; cache misses do not identify a failed dependency. Loader state remained mode 2/phase 0 with zero progress. Frame/counter stopped at `0x1486/0x26B55`; DCF4 stayed high without wait-trace proof. No mission frame verified. PID 115612 alone was stopped. The diagnostic runner was updated to stop its verified child on fatal crash records and exclude the expected `0x406D1388` thread-name exception; that new branch has not yet been exercised. Full evidence and limitations: `analysis/m3-pilot-loader-r159-r160-report-20261028.md`, r197 section.
++
++Progress remains overall `██░░░░░░ 2/8`; decompilation `██░░ 2/4`; boot/compatibility `████░ 4/5`; loader `██░░ 2/4`; rendering `██░░ 2/4`; controller `██░ 2/3`; audio `█░ 1/2`; first mission frame `░ 0/1`; stable 60 FPS `░ 0/1`.
++
++
++
+diff --git a/docs/PROJECT_STATUS.md b/docs/PROJECT_STATUS.md
+index 3dc37da..734646f 100644
+--- a/docs/PROJECT_STATUS.md
++++ b/docs/PROJECT_STATUS.md
+@@ -1,5 +1,17 @@
+ # Steel Battalion project status
+ 
++## Current verified state — r340–r344, 2026-10-29
++
++**Milestone 3 remains active.** First visually verified mission frame: **0/1**.
++
++Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `███░ 3/4` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
++
++r340 directly captured the renderer's `put_pixel` store writing `FF000000` into guest DirectSound list fields `8038C08C`, `8038C098`, and `8038C09C`; the list walk then crashed at `sub_0021ED29+0x88`. The bad store's active color-surface state is still missing, so no behavior fix is justified. A 16-record opt-in overlap trace now captures that state. r342 reached Campaign but ran without the new flag and did not repeat the store during its short observation; r343/r344 remained at a black title-stage frame and did not exercise Campaign. Keep title DCF4 waits, this audio-list crash, raster cost, and post-difficulty loading plateaus separate.
++
++Earlier r151 evidence still identifies a title DCF4 wait with no subsequent index-5 callback/`KeSetEvent`; r153's dump is only a DSP point sample and does not identify the frozen guest owner. The r130 null-output handle behavior is already implemented; its completion semantics remain uncorrelated with loader readiness. AOT execution, controller mapping, guest fences, and rasterizer `1ea1871` are unchanged.
++
++Current storage: **53,536,836,288 bytes allocated (49.860 GiB)** and **1,385,284,577,039 logical bytes (1,290.147 GiB)** across 76,766 files; 13 reparse entries skipped. The closed r338–r343 logs reclaimed **2,032,049 allocated bytes** through lossless compression with SHA-256 checks; r344 evidence is compressed. The r342 EXE/PDB/MAP candidate and hot build cache remain. No files were deleted; no hot compiler/Cargo cache was purged. See the [r340–r344 report](../analysis/m3-r340-r344-surface-and-storage-20261029.md) and [current cleanup manifest](../analysis/current-cleanup-manifest-20261029.md).
++
+ **Current milestone:** 3 — boot and compatibility.
+ **Next acceptance point:** first visually verified mission frame.
+ 
+diff --git a/docs/milestone-1-research.md b/docs/milestone-1-research.md
+index 7ebd3d3..a2af8f6 100644
+--- a/docs/milestone-1-research.md
++++ b/docs/milestone-1-research.md
+@@ -1,6 +1,6 @@
+ # Milestone 1: Research and Architecture
+ 
+-Updated 2026-10-26. The user-selected execution architecture remains sp00nznet/xboxrecomp ahead-of-time x86 translation with an Xbox compatibility runtime; no full-system emulator is the execution core. Milestones 1 and 2 have produced an XBE feasibility assessment and translated Windows build. Milestone 3 remains active: captured routes have shown title/menu screens and `NOW LOADING`, but no mission frame or playable boot is verified. The D3D11 statements below describe the selected toolkit's original renderer; the project's later graphics-backend decision and evidence are maintained separately in [`VULKAN_MIGRATION_MAP.md`](VULKAN_MIGRATION_MAP.md).
++Updated 2026-10-28. The active execution architecture remains sp00nznet/xboxrecomp ahead-of-time x86 translation with an Xbox compatibility runtime; no full-system emulator is the execution core. Milestones 1 and 2 produced an XBE feasibility assessment and translated Windows build. Milestone 3 remains active: r179 reached a black post-title/loading transition and emitted preload/worker and mode-2 scan records, but no mission framebuffer was verified. The r179 capture itself is fully black, and its DMA trace cap was exhausted before the loading interval, so it does not distinguish a loading dependency from graphics or synchronization behavior. The D3D11 statements below describe the selected toolkit's renderer; graphics-backend research is maintained separately in [`VULKAN_MIGRATION_MAP.md`](VULKAN_MIGRATION_MAP.md).
+ 
+ ## Disc and executable evidence
+ 
+@@ -28,7 +28,9 @@ Static recompilation is feasible in principle for this XBE: it is a retail x86 X
+ 
+ The MIT-licensed [XboxXBERecomp](https://github.com/TGP482/XboxXBERecomp) translates XBE x86 code ahead of time to C++ and documents a Windows x64 executable with an Xbox API layer, Direct3D 8 translation to native Direct3D 12, XAudio2, and SDL3 input. This most closely matches the requested graphics API.
+ 
+-**Title-specific gap:** the public repository tree reviewed for this milestone exposes `xdk/5849`, while this XBE identifies its XDK libraries as build 4627. Its tool documentation says symbol identification selects signatures for the XBE's XDK build and stops if no corresponding signatures exist. Therefore it cannot be assumed to process this title unchanged. Supporting build 4627 may require generating/validating a new layout and signature set or modifying the analysis tool; neither has been done.
++**Title-specific gap:** the current public repository tree exposes `xdk/4831` and `xdk/5849`, while this XBE identifies its XDK libraries as build 4627. Its tool documentation says symbol identification selects signatures for the XBE's XDK build and stops if no corresponding signatures exist. Therefore it cannot process this title unchanged based on the published profiles. Supporting build 4627 requires a validated layout and signature set plus compatibility work; none has been produced.
++
++**Revalidation (2026-10-28):** primary-source review confirmed the repository is MIT-licensed and describes true x86-to-C++ ahead-of-time recompilation with a native D3D12 renderer, XAudio2, SDL3 controllers, and game hooks. The Xbox GitHub contents endpoint lists only `xdk/4831` and `xdk/5849`; exact GitHub repository searches for `XbeTripper` and `xberewrite` returned no matches. The compatibility gap rules out using XboxXBERecomp unchanged, but does not justify discarding the existing title-specific AOT pipeline that already translates this build and has reached loading-route execution. Keep it as an alternative for later comparison; do not migrate without a build-4627 prototype and a parity/evidence plan. Cxbx-Reloaded remains an emulator and is useful only as an independent read-only XBE validation reference in this project.
+ 
+ ### sp00nznet/xboxrecomp
+ 
+@@ -708,3 +710,7 @@ The partial renderer counted 72 draws/288 indices, 37 clears, and 1,104 unhandle
+ A 180-second no-DSP-ack startup with `RECOMP_PB_EXEC=1`, modeled vblank/title-event diagnostics, and `RECOMP_FB_DUMP` exited with expected watchdog code 3 and no remaining process. The guest loaded English data through `engdat22.eng`, and the watchdog stack still included the `sub_000DFF40` / `sub_000DFBC0` logo path. The last local dump (`iso/local-analysis/logs/m3-startup-180s-20261018/frame_00012.bmp`, ignored) visibly shows the Nude Maker logo after earlier black and Capcom captures. This confirms the guest framebuffer advances to a second splash; it is not the Steel Battalion title and does not verify window presentation or reference accuracy.
+ 
+ The final partial-renderer counts were 132 draws/528 indices, 67 clears, and 1,824 unhandled method instances across 155 IDs. No audio, input, saves, or gameplay were verified. The user-copy-derived BMPs remain local and out of Git. Milestone 3 and progress bars remain unchanged. Next continue following the remaining logo sequence until the Steel Battalion title image appears.
++
++## 2026-10-29 tooling revalidation
++
++The current local Ghidra reference archive and tool selection are recorded in [`xbe-tooling-and-ordinals.md`](xbe-tooling-and-ordinals.md). Ghidra 12.1.4 has the XBE extension; the installed 12.2 copy does not. The 371-row ordinal CSV and Java annotate/verify scripts are archived under `C:\Project\GhidraAnalysis\scripts` with matching source hashes and MIT notice. Exact public source and license for XbeTripper/xberewrite remain unverified. Cxbx-Reloaded is suitable for read-only XBE validation but executes through emulation; do not substitute it for the current AOT path. No XBE hooks or binary edits were made.
+\ No newline at end of file
+diff --git a/docs/xbe-tooling-and-ordinals.md b/docs/xbe-tooling-and-ordinals.md
+index a44d481..4c3408c 100644
+--- a/docs/xbe-tooling-and-ordinals.md
++++ b/docs/xbe-tooling-and-ordinals.md
+@@ -40,6 +40,16 @@ The Ghidra script labels existing kernel thunk cells and never modifies the XBE.
+ 
+ The local parser was run read-only on the supplied XBE: seven library records all report build 4627; the 123 distinct imported ordinals all occur in the 371-entry candidate CSV. Ghidra 12.1.4 headless applied candidate labels to 123 thunk cells in both `SteelBattalionStartupDecomp` and the larger `SteelBattalionStartup` project; separate read-only verification passes found all 123 labels persisted in each. The larger existing database defines 6,463 functions in 79 memory blocks. A read-only trace-address walk maps the DCF4 wait, `KeSetEvent` callback, and DPC handler to saved function boundaries and call references. Treat all of these as database analysis, not manual validation of every function boundary or a proven runtime cause. The labels are provisional because the CSV's cross-checks cover builds 3944/4039, not 4627. The XBE bytes were not modified. See the tool README for the exact commands and limits.
+ 
++### 2026-10-28 public-source and workspace recheck
++
++- GitHub's repository search API returned zero repositories for the exact names `XbeTripper` and `xberewrite`; no canonical source or license was available to evaluate. This is limited to those exact names and public GitHub search.
++- The primary [TGP482/XboxXBERecomp repository](https://github.com/TGP482/XboxXBERecomp) is a genuine MIT-licensed static recompiler. Its current README describes ahead-of-time x86-to-C++ recompilation, Windows Xbox API replacements, D3D12 rendering, XAudio2, SDL3 controller support, and game-specific hooks. The setup requires a matching XDK signature/layout set. A read-only GitHub contents query listed only `xdk/4831` and `xdk/5849`; this Steel Battalion XBE identifies build 4627. Its published setup therefore cannot process this XBE unchanged. Adding build 4627 would require a validated layout/signature set and compatibility work, not just changing a version number.
++- This alternative is worth keeping in the architecture comparison because its renderer matches the requested D3D12 API. It is not selected for migration: the existing sp00nznet XboxRecomp pipeline already parses and translates this XBE and has produced title/loading-route evidence with Steel Battalion-specific runtime work. Moving to another framework would discard or require reimplementing that progress, while the missing 4627 profile is an unclosed compatibility prerequisite. No XboxXBERecomp code or dependency was added.
++- Cxbx-Reloaded's primary repository identifies it as an emulator and is GPL-2.0. Its XBE printer, signature/section validation, and loader are useful read-only references, but launching through Cxbx would be ordinary emulation and would not validate a native AOT executable. No Cxbx source or binary was incorporated.
++- The local Git safety check found no tracked ISO, XBE, extracted assets, save data, or generated recompilation source. `.gitignore` excludes the full `iso/` tree and these file classes. The Ghidra script workspace currently contains the 371-entry candidate ordinal CSV, MIT notice, annotator, verifier, and analysis scripts. The candidate names remain provisional for build 4627; this archive is not an XDK function-signature database.
++
++The audit changes no architecture: continue with the already integrated XboxRecomp AOT path, preserve user game files outside Git, and revisit a framework migration only if new compatibility evidence justifies the cost. No XBE hook, cave, section injection, emulator run, or project code migration was made during this recheck.
++
+ ### 2026-10-26 — Milestone 1 workspace safety audit
+ 
+ A bounded read-only audit on 2026-10-26 found 105 tracked Git paths and zero paths matching XBE/ISO, game asset/media, or generated recompiled-source patterns. `.gitignore` covers `iso/`, XBE extensions, game files/assets, generated folders, and local build products. No game files were staged or added by that audit.
+@@ -61,3 +71,16 @@ The current repository has 113 tracked paths, no tracked XBE/ISO/media/generated
+ ### 2026-10-27 — opt-in AOT XBE-section diagnostic
+ 
+ A bounded observation-only trace was added to the local XboxRecomp `bridge_XeSection()` and saved as `patches/xboxrecomp-v0.13.1-xbe-section-trace.patch`. It reports section name/header, load or unload action, mapped VA/size, refcount change, two guest stack words, and result, with a 4,096-row cap. `RECOMP_XBE_SECTION_TRACE` enables it; broad kernel logging can remain disabled. The diagnostic is in the Windows kernel compatibility bridge used by the statically recompiled executable. It does not modify the original XBE, insert a game hook, change section behavior, or replace AOT execution. The `seg00` load in run r84 succeeded (`section=0x0001134C`, VA `0x009FB0A0`, size `0x9AC8`, refcount `0->1`). Full screen-gated input and loading evidence, including limitations, is in [`analysis/m3-pilot-loading-r84-xbe-section-20261027.md`](../analysis/m3-pilot-loading-r84-xbe-section-20261027.md).
++
++## 2026-10-29 verification and tool decision
++
++- Rechecked the user-local Ghidra workspace at `C:\Project\GhidraAnalysis\scripts`. It contains the 371-row `xbox_kernel_ordinals.csv`, Java annotator/verifier, analysis helper scripts, README, and MIT notice. The CSV, primary Java scripts, and notice have matching SHA-256 values in the repository copy. A compressed, seven-file reference archive is now available at `C:\Project\GhidraAnalysis\scripts\XboxKernelOrdinals-GhidraSupport-20261029.zip` (11,133 bytes; SHA-256 `1E1ECDC89B931E404EA366647B41A10838363641B80BB4DC2BCE679AD0C33761`). Its entries were streamed and hash-compared with the source files. It contains ordinal candidates and scripts, not XBE/game data.
++- Ghidra 12.1.4 is the verified local install with the XboxDev XBE loader extension. Ghidra 12.2 is also installed, but the `ghidra-xbe` extension is absent there. Keep importing the XBE in 12.1.4 until the extension is deliberately installed and verified for 12.2. The extension loads XBE format and integrates XbSymbolDatabase pattern-based library-symbol recovery; this is separate from our provisional XDK 4627 ordinal-name table. [XboxDev ghidra-xbe](https://github.com/XboxDev/ghidra-xbe)
++- The exact names **XbeTripper** and **xberewrite** did not resolve to a canonical public repository or attributable source/license in exact-name searches. They remain unevaluated and are not in the runtime path. Do not use them without a verifiable upstream URL and license.
++- Cxbx-Reloaded’s `Xbe` / `XbePrinter` code can be used as an independent read-only XBE metadata, signature, and section-integrity reference. Its launch path boots the original XBE through an emulator; it does not run an AOT-generated Windows executable. Keep Cxbx out of runtime validation for this project. [Cxbx-Reloaded repository](https://github.com/Xbox-dev/Cxbx-Reloaded), [XBE parser declarations](https://github.com/Cxbx-Reloaded/Cxbx-Reloaded/blob/master/src/common/xbe/Xbe.h)
++- XboxDev `xbedump` is another header-dump/validation reference. Its source also includes signing/repair operations, which must not be directed at the user’s original XBE. It is not a static recompiler or required runtime dependency. [XboxDev xbedump](https://github.com/XboxDev/xbedump)
++- The chosen runtime remains XboxRecomp AOT. The separate XboxXBERecomp project documents AOT x86-to-C++ translation and an XDK-build-specific `signatures.toml` prerequisite; public docs say the build stops if no matching file exists. A 4627 profile was not verified, and migrating now would be a major architecture change without evidence of a better Steel Battalion result. [XboxXBERecomp upstream](https://github.com/TGP482/XboxXBERecomp)
++- No custom hook was inserted into the original XBE or generated PE in this check. Existing diagnostics instrument generated AOT source only; there is no cave, JMP, or added PE section to assess. The original XBE remained untouched.
++- Current Git safety audit: 145 tracked paths, zero matches for ISO/XBE, save images, extracted game files, or generated recompilation source. `.gitignore` continues to exclude those classes. Local generated code and the Ghidra archive remain outside Git.
++
++The ordinal CSV is a convenience map, not a full XDK signature/type database. Names remain provisional for XDK 4627. Do not promote them into asserted export names without confirming each through the game’s imports, call sites, and matching build-specific sources.
+\ No newline at end of file
+diff --git a/tools/Build-ProducerTrace.ps1 b/tools/Build-ProducerTrace.ps1
+index c3a88af..33c10e4 100644
+--- a/tools/Build-ProducerTrace.ps1
++++ b/tools/Build-ProducerTrace.ps1
+@@ -39,6 +39,7 @@ if ($blockingGames.Count -gt 0) {
+ $projectFile = Join-Path $buildRoot 'your_game_recomp.vcxproj'
+ $kernelProject = Join-Path $buildRoot 'xboxrecomp\src\kernel\xbox_kernel.vcxproj'
+ $usbProject = Join-Path $buildRoot 'xboxrecomp\src\usb\xbox_usb.vcxproj'
++$apuProject = Join-Path $buildRoot 'xboxrecomp\src\apu\xbox_apu.vcxproj'
+ $generatedSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0015.c'
+ $generatedInputSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0001.c'
+ $generatedMenuSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0004.c'
+@@ -47,13 +48,18 @@ $generatedAudioSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-ge
+ $generatedFileCopySource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0008.c'
+ $generatedPreloadSource = Join-Path $projectRoot 'iso\local-analysis\xboxrecomp-generated-xpp-untraced-current\gen\recomp_0000.c'
+ $kernelTraceSource = Join-Path $projectRoot 'local-tools\xboxrecomp\src\kernel\kernel_bridge.c'
++$kernelThreadSource = Join-Path $projectRoot 'local-tools\xboxrecomp\src\kernel\kernel_thread.c'
++$kernelHalSource = Join-Path $projectRoot 'local-tools\xboxrecomp\src\kernel\kernel_hal.c'
++$runtimeMainSource = Join-Path $projectRoot 'local-tools\steel-battalion-game\src\main.c'
+ $msbuild = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
+ $stagedExe = Join-Path $traceDir 'your_game_recomp.exe'
+ $stagedPdb = Join-Path $buildRoot 'Release\your_game_recomp.pdb'
++$stagedMap = Join-Path $traceDir 'your_game_recomp.map'
+ $tracePdb = Join-Path $traceDir 'your_game_recomp_producer_trace.pdb'
++$traceMap = Join-Path $traceDir 'your_game_recomp_producer_trace.map'
+ $archiveDir = 'C:\Project\SteelBattalion-Delete-Later-20261024\workspace\local-tools\steel-battalion-game\build-xpp-seeded\ProducerTrace\Release'
+ 
+-foreach ($path in @($projectFile, $kernelProject, $usbProject, $generatedSource, $generatedInputSource, $generatedMenuSource, $generatedLoaderSource, $generatedAudioSource, $generatedFileCopySource, $generatedPreloadSource, $kernelTraceSource, $msbuild)) {
++foreach ($path in @($projectFile, $kernelProject, $usbProject, $apuProject, $generatedSource, $generatedInputSource, $generatedMenuSource, $generatedLoaderSource, $generatedAudioSource, $generatedFileCopySource, $generatedPreloadSource, $kernelTraceSource, $kernelThreadSource, $kernelHalSource, $runtimeMainSource, $msbuild)) {
+     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+         throw "Required build input is missing: $path"
+     }
+@@ -79,12 +85,35 @@ foreach ($library in $requiredLibraries) {
+ 
+ $requiredTraceMarkers = @(
+     'RECOMP_SB_DCF4_PRODUCER_TRACE',
+-    'sb_put_trace_count < 100000u',
+-    'dcf4_reset_trace_count < 100000u',
+-    'sb_marker_trace_count < 100000u',
++    'RECOMP_SB_DCF4_QUEUE_TRACE',
++    '[DCF4-QUEUE]',
++    '[DCF4-QUEUE-CAP]',
++    '[DCF4-GATE]',
++    '[DCF4-GATE-CAP]',
++    '[DCF4-OUTER]',
++    '[DCF4-OUTER-POLL]',
++    '[DCF4-OUTER-CAP]',
++    '[DCF4-OUTER-POLL-CAP]',
++    'sb_outer_n <= 16u || (sb_outer_n & 0x0Fu) == 0u',
++    'sb_outer_emit <= 4096u',
++    'attempted=%u emitted=4096 skipped=%u',
++    'sb_put_trace_count < 1000000u',
++    'dcf4_reset_trace_count < 1000000u',
++    'sb_marker_trace_count < 1000000u',
++    'call_n % 512u',
++    'marker_n % 64u',
++    '[SB-DMA-PUBLISH-CAP]',
++    '[SB-DCF4-MARKER-CAP]',
++    '[DCF4-CB-CAP]',
+     'n <= 100000u',
+     '[SB-PFB-POLL]',
+-    'sb_pfb_poll_count < 2048u'
++    'sb_pfb_poll_count < 2048u',
++    'RECOMP_SB_RING_POLL_TRACE_FILE',
++    '[SB-RING-POLL-ENABLED]',
++    '[SB-RING-POLL]',
++    '[SB-RING-POLL-CAP]',
++    'poll_n % 16777216ull',
++    'sample_stride=16777216 limit=256'
+ )
+ foreach ($marker in $requiredTraceMarkers) {
+     $match = Select-String -LiteralPath $generatedSource -SimpleMatch $marker -Quiet
+@@ -92,6 +121,12 @@ foreach ($marker in $requiredTraceMarkers) {
+ }
+ 
+ foreach ($check in @(
++    @{ Path = $generatedSource; Marker = 'recomp_trace_guest_device_entry' },
++    @{ Path = $generatedSource; Marker = '0x0020EC2Bu' },
++    @{ Path = $generatedSource; Marker = '0x0020EC33u' },
++    @{ Path = $generatedSource; Marker = '0x0020F26Bu' },
++    @{ Path = $generatedSource; Marker = '0x0020F2B5u' },
++    @{ Path = $generatedPreloadSource; Marker = 'PUSH32(esp, 0x3FFF)' },
+     @{ Path = $generatedInputSource; Marker = '[SB-INPUT-DISPATCH]' },
+     @{ Path = $generatedInputSource; Marker = '[SB-INPUT-TABLE]' },
+     @{ Path = $generatedInputSource; Marker = '[SB-EDGE-CONSUME]' },
+@@ -175,6 +210,16 @@ foreach ($marker in @(
+     'RECOMP_FILE_FAIL_PATH_TRACE',
+     '[FILE-MISS-PATH]',
+     'RECOMP_FILE_IO_DETAIL_TRACE',
++    'RECOMP_FILE_COPY_READ_TRACE',
++    '[FILE-COPY-READ-TARGET]',
++    'D:\\media\\bgm\\STRM00.WAV',
++    '[FILE-COPY-READ-ENTER]',
++    '[FILE-COPY-READ]',
++    'RECOMP_FILE_OPEN_TARGET_TRACE',
++    'RECOMP_FILE_OPEN_TARGET_LOG',
++    'bridge_trace_file_open_target',
++    '[FILE-OPEN-TARGET-BEGIN]',
++    '[FILE-OPEN-TARGET-DONE]',
+     '[FILE-IO]'
+ )) {
+     if (-not (Select-String -LiteralPath $kernelTraceSource -SimpleMatch $marker -Quiet)) {
+@@ -182,6 +227,80 @@ foreach ($marker in @(
+     }
+ }
+ 
++foreach ($marker in @(
++    'RECOMP_THREAD_OBJECT_TRACE',
++    'bridge_thread_object_trace_row("STATE"',
++    'bridge_thread_object_trace_row("POLL"',
++    '[THREAD-OBJECT-CAP]',
++    's_thread_object_trace_rows'
++)) {
++    if (-not (Select-String -LiteralPath $kernelTraceSource -SimpleMatch $marker -Quiet)) {
++        throw "Kernel bridge is missing bounded thread-object transition tracing: $marker"
++    }
++}
++
++foreach ($marker in @(
++    'trace_guest_ntalloc',
++    'RECOMP_MEM_RESERVE_TRACE',
++    '[MEM-ALLOC]',
++    '[MEM-ALLOC-CAP]',
++    'requested_size < 0x400000u'
++)) {
++    if (-not (Select-String -LiteralPath $kernelTraceSource -SimpleMatch $marker -Quiet)) {
++        throw "Kernel bridge is missing bounded large-reserve tracing: $marker"
++    }
++}
++
++foreach ($marker in @(
++    'RECOMP_DISPATCH_GATE_TRACE',
++    '[DISPATCH-GATE]',
++    '[DISPATCH-GATE-CAP]',
++    'owner_at_request',
++    's_dispatch_gate_trace_limit'
++)) {
++    if (-not (Select-String -LiteralPath $kernelHalSource -SimpleMatch $marker -Quiet)) {
++        throw "Kernel HAL is missing bounded dispatch-gate ownership tracing: $marker"
++    }
++}
++
++foreach ($marker in @(
++    'xbox_ThreadSuspendTrace',
++    '[THREAD-SUSPEND]',
++    '[THREAD-SUSPEND-CAP]',
++    'NtSuspendThread',
++    'NtResumeThread'
++)) {
++    if (-not (Select-String -LiteralPath $kernelThreadSource -SimpleMatch $marker -Quiet)) {
++        throw "Kernel thread source is missing bounded suspend/resume trace instrumentation: $marker"
++    }
++}
++
++foreach ($marker in @(
++    'RECOMP_FILE_READ_TARGET_PATHS',
++    'RECOMP_FILE_READ_TARGET_LIMIT',
++    '[FILE-READ-TARGET-ENTER]',
++    '[FILE-READ-TARGET-DONE]',
++    '[FILE-READ-TARGET-CAP]',
++    'dropped_count',
++    's_target_read_trace_limit'
++)) {
++    if (-not (Select-String -LiteralPath $kernelTraceSource -SimpleMatch $marker -Quiet)) {
++        throw "Kernel bridge is missing targeted read-completion instrumentation: $marker"
++    }
++}
++
++foreach ($marker in @(
++    '0x406D1388u',
++    'module_base=0x%llX host_rva=0x%llX',
++    'RECOMP_GUEST_DEVICE_ENTRY_TRACE',
++    '[DEVICE-ENTRY]',
++    '[DEVICE-ENTRY-CAP]'
++)) {
++    if (-not (Select-String -LiteralPath $runtimeMainSource -SimpleMatch $marker -Quiet)) {
++        throw "Runtime exception diagnostics are missing expected address data: $marker"
++    }
++}
++
+ foreach ($marker in @(
+     'RECOMP_XBE_SECTION_TRACE',
+     '[XBE-SECTION]',
+@@ -200,6 +319,9 @@ if ($LASTEXITCODE -ne 0) { throw "Kernel trace-library build failed with exit co
+ $usbOutDirArg = '/p:OutDir=' + (Join-Path $buildRoot 'xboxrecomp\src\usb\Release') + '\\'
+ & $msbuild $usbProject '/nologo' '/m' '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' $usbOutDirArg '/v:minimal'
+ if ($LASTEXITCODE -ne 0) { throw "USB trace-library build failed with exit code $LASTEXITCODE" }
++$apuOutDirArg = '/p:OutDir=' + (Join-Path $buildRoot 'xboxrecomp\src\apu\Release') + '\\'
++& $msbuild $apuProject '/nologo' '/m' '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' $apuOutDirArg '/v:minimal'
++if ($LASTEXITCODE -ne 0) { throw "APU trace-library build failed with exit code $LASTEXITCODE" }
+ $outDirArg = '/p:OutDir=' + $traceDir + '\\'
+ # Generated diagnostic chunks use bounded fprintf(stderr, ...) probes but do
+ # not all carry the stdio declaration. Force-include stdio without changing
+@@ -212,13 +334,19 @@ if (-not (Test-Path -LiteralPath $stagedExe -PathType Leaf)) {
+ if (-not (Test-Path -LiteralPath $stagedPdb -PathType Leaf)) {
+     throw "Build completed without producing the matching diagnostic PDB: $stagedPdb"
+ }
++if (-not (Test-Path -LiteralPath $stagedMap -PathType Leaf)) {
++    throw "Build completed without producing the matching linker map: $stagedMap"
++}
+ if ((Get-Item -LiteralPath $stagedExe).Length -lt 10MB) {
+     throw "Staged executable is unexpectedly small; existing trace executable was preserved."
+ }
+ 
+ if ($isSideBySide) {
+     Move-Item -LiteralPath $stagedExe -Destination $traceExe
+-    Move-Item -LiteralPath $stagedPdb -Destination $tracePdb
++    # Keep the shared Release PDB as a build input; the isolated executable
++    # receives its own matching symbol copy.
++    Copy-Item -LiteralPath $stagedPdb -Destination $tracePdb
++    Move-Item -LiteralPath $stagedMap -Destination $traceMap
+     "Built isolated producer-trace candidate without replacing any existing executable: $traceExe"
+     return
+ }
+diff --git a/tools/GuestWriteBreakpoint.c b/tools/GuestWriteBreakpoint.c
+index e038609..6b2a905 100644
+--- a/tools/GuestWriteBreakpoint.c
++++ b/tools/GuestWriteBreakpoint.c
+@@ -91,6 +91,7 @@ int wmain(int argc, wchar_t **argv)
+     uintptr_t guest_va;
+     uintptr_t memory_offset;
+     DWORD initial_value;
++    ULONGLONG next_poll_log;
+     int attached = 0;
+ 
+     if (argc != 5) {
+@@ -122,6 +123,7 @@ int wmain(int argc, wchar_t **argv)
+         return 5;
+     }
+     g_last_value = initial_value;
++    next_poll_log = GetTickCount64() + 5000;
+     log_line("ATTACH pid=%lu guest_va=%08llX memory_offset=%p host_va=%p initial=%08lX",
+              g_pid, (unsigned long long)guest_va, (void *)memory_offset,
+              (void *)g_watch_address, g_last_value);
+@@ -136,8 +138,24 @@ int wmain(int argc, wchar_t **argv)
+     DebugSetProcessKillOnExit(FALSE);
+ 
+     for (;;) {
+-        if (!WaitForDebugEvent(&event, INFINITE)) {
+-            last_error = GetLastError();
++        if (!WaitForDebugEvent(&event, 100)) {
++            DWORD wait_error = GetLastError();
++            if (wait_error == ERROR_SEM_TIMEOUT) {
++                DWORD current_value;
++                if (read_dword(process, g_watch_address, &current_value)) {
++                    ULONGLONG now = GetTickCount64();
++                    if (current_value != g_last_value) {
++                        log_line("POLL-CHANGE tick=%llu old=%08lX new=%08lX",
++                                 now, g_last_value, current_value);
++                        g_last_value = current_value;
++                    } else if (now >= next_poll_log) {
++                        log_line("POLL tick=%llu value=%08lX", now, current_value);
++                        next_poll_log = now + 5000;
++                    }
++                }
++                continue;
++            }
++            last_error = wait_error;
+             log_line("DEBUG-FAILED step=WaitForDebugEvent error=%lu", last_error);
+             break;
+         }
+diff --git a/tools/Start-ProducerTrace.ps1 b/tools/Start-ProducerTrace.ps1
+index 2eb36ac..7227c26 100644
+--- a/tools/Start-ProducerTrace.ps1
++++ b/tools/Start-ProducerTrace.ps1
+@@ -15,7 +15,16 @@ watchdog fails. A plateau watchdog also stops only that child after the
+ configured interval with no change in the mode-2 loader signature or captured
+ framebuffer; it verifies the live executable path before stopping.
+ The UI plateau watchdog also stops only that child when the captured UI and
+-live-input transcript remain unchanged, including stalls before loading.
++live-input transcript remain unchanged, including stalls before loading; it
++captures a thread snapshot before stopping the child.
++When NV2A telemetry is enabled, a separate progress watchdog also stops only
++that child if callback/frame/counter/target/fence values remain unchanged, even
++when a loading animation keeps changing the framebuffer.
++Fatal runtime exception records also stop only the verified diagnostic child;
++the intentional 0x406D1388 thread-name exception is ignored. The supervisor
++captures an external thread dump before stopping. In-process dumps are opt-in.
++-Dcf4WaitHangSeconds adds a child-only stop when producer tracing records a
++DCF4 wait with no matching return for the configured interval.
+ -EnableFileFailurePathTrace adds a low-volume sampled path
+ record for failed NtCreateFile calls, useful when lifecycle traces reach their cap.
+ 
+@@ -31,27 +40,93 @@ param(
+     [ValidateRange(300, 43200)]
+     [int]$WatchdogSeconds = 900,
+ 
++# One in-process snapshot at this many seconds after launch. This is
++# nonfatal and emits at most one small dedicated watchdog log; it may be set
++# later than the plateau duration because the external plateau timer starts
++# only after observed progress stops.
++    [ValidateRange(0, 3600)]
++    [int]$WatchdogSnapshotSeconds = 0,
++
++    # Bound each run's retained evidence before it can consume the workspace.
++    # On limit, preserve the current log window and capture a dump, then stop
++    # only the executable launched by this script.
++    [ValidateRange(64, 4096)]
++    [int]$RunStorageBudgetMiB = 64,
++
+     [ValidateRange(120, 3600)]
+     [int]$PlateauSeconds = 300,
+ 
+     [ValidateRange(120, 3600)]
+-    [int]$UiPlateauSeconds = 300,
++    [int]$UiPlateauSeconds = 240,
++
++    [ValidateRange(60, 3600)]
++    [int]$Nv2aProgressPlateauSeconds = 240,
++
++    [ValidateRange(1, 1800)]
++    [int]$FramebufferDumpInterval = 1800,
++
++    [ValidateRange(60, 1800)]
++    [int]$Dcf4WaitHangSeconds = 120,
+ 
+     [ValidateRange(4096, 32768)]
+     [int]$WaitTraceAllLimit = 16384,
+ 
++    [ValidateRange(256, 65536)]
++    [int]$DmaAckTraceLimit = 4096,
++
++    [ValidateRange(256, 65536)]
++    [int]$PbSemaphoreTraceLimit = 2048,
++
+     [string]$GuestWatchAddress,
+ 
+     [string]$GuestWatchAddress2,
+ 
+     [switch]$EnableDcf4ProducerTrace,
+ 
++    [switch]$EnableDcf4StackTrace,
++
++    [switch]$EnableRingPollTrace,
++
++    [switch]$EnableDcf4GateTrace,
++
++    [switch]$EnableDcf4CallbackTrace,
++
++    [switch]$EnableDcf4QueueTrace,
++
++    [switch]$EnableDispatchGateTrace,
++
++    [switch]$EnableGuestDeviceEntryTrace,
++
++    [switch]$EnableMemoryReserveTrace,
++
++    [switch]$EnableAllFileReadTrace,
++
++    [switch]$EnableNv2aIrqTrace,
++
++    [switch]$EnableNv2aSignatureTrace,
++
++    [switch]$EnableNv2aTimerTrace,
++
++    [switch]$DisableRasterPerfTrace,
++
++    [switch]$EnableDmaAckTrace,
++
++    [switch]$EnableNv2aPushbufferTrace,
++
++    [switch]$EnablePgraphNotifyTrace,
++
+     [switch]$EnableKeyboardInput,
+ 
+     [switch]$EnableHighVolumeSyncTrace,
+ 
++    [switch]$EnablePbSemaphoreTrace,
++
+     [switch]$EnableLoadStateCallbackTrace,
+ 
++    [switch]$EnableLoadStackTrace,
++
++    [switch]$EnableLoadHelperTrace,
++
+     [switch]$EnableLoadPairOutputTrace,
+ 
+     [switch]$EnablePreloadTex00GateTrace,
+@@ -64,12 +139,43 @@ param(
+ 
+     [switch]$EnableFileLifecycleTrace,
+ 
++    [switch]$EnableThreadObjectTrace,
++
+     [switch]$EnableFileFailurePathTrace,
+ 
++    [switch]$EnableFileStatusTrace,
++
++    [switch]$EnableFileOpenPathTrace,
++
++    [switch]$EnableFileOpenTargetTrace,
++
++    [switch]$DisableWaitTraceLog,
++
++    [switch]$DisableLoadPassTrace,
++
++    [switch]$DisableFileReadTrace,
++
++    [switch]$DisableHighVolumeMenuTrace,
++
++    [switch]$LoadingFocus,
++
+     [switch]$EnableFileCallerTrace,
+ 
+     [switch]$EnableFileIoDetailTrace,
+ 
++    [switch]$EnableFileCopyReadTrace,
++
++    [string]$FileCopyReadTargetPath = 'D:\media\bgm\STRM00.WAV',
++
++    [string[]]$FileReadTargetPaths = @(),
++
++    [ValidateRange(64, 4096)]
++    [int]$FileReadTargetLimit = 256,
++
++    [switch]$EnableInProcessCrashDump,
++
++    [switch]$EnableGpuDrawTrace,
++
+     [switch]$EnableFileCopyTrace,
+ 
+     [switch]$EnableThreadStartTrace,
+@@ -78,14 +184,28 @@ param(
+ 
+     [switch]$EnablePreloadAssetTrace,
+ 
++    [switch]$EnableGuestCpuTrace,
++
++    [switch]$EnableThreadSuspendTrace,
++
++    [switch]$EnableGuestCpuSnapshots,
++
++    [switch]$EnableGuestDivideTrace,
++
++    [switch]$EnableCriticalSectionTrace,
++
+     [switch]$EnableDsoundWriteWatch,
+ 
+     [switch]$EnableDsoundListTrace,
+ 
++    [switch]$EnableDsoundSurfaceTrace,
++
+     [switch]$EnableTextureSampleTrace,
+ 
+     [switch]$EnableXbeSectionTrace,
+ 
++    [switch]$EnableGuestFrameTrace,
++
+     [switch]$EnableAllWaitTrace,
+ 
+     [switch]$EnableMmioTrace,
+@@ -112,6 +232,57 @@ param(
+ 
+ $ErrorActionPreference = 'Stop'
+ 
++if (-not ('ProducerTraceAllocatedBytes' -as [type])) {
++    Add-Type -TypeDefinition @"
++using System;
++using System.IO;
++using System.Runtime.InteropServices;
++
++public static class ProducerTraceAllocatedBytes {
++    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
++    private static extern uint GetCompressedFileSizeW(string path, out uint high);
++
++    public static long ForFile(string path) {
++        string full = Path.GetFullPath(path);
++        string extended = full.StartsWith(@"\\?\", StringComparison.Ordinal)
++            ? full
++            : (full.StartsWith(@"\\", StringComparison.Ordinal)
++                ? @"\\?\UNC\" + full.Substring(2)
++                : @"\\?\" + full);
++        uint high;
++        uint low = GetCompressedFileSizeW(extended, out high);
++        if (low == UInt32.MaxValue && Marshal.GetLastWin32Error() != 0)
++            return -1;
++        return ((long)high << 32) | low;
++    }
++}
++"@
++}
++
++function Get-AllocatedBytesForFiles {
++    param([Parameter(Mandatory = $true)][System.IO.FileInfo[]]$Files)
++
++    [long]$total = 0
++    foreach ($file in $Files) {
++        $allocated = [ProducerTraceAllocatedBytes]::ForFile($file.FullName)
++        if ($allocated -lt 0) { return -1L }
++        $total += $allocated
++    }
++    return $total
++}
++
++function Get-RunDirectoryAllocatedBytes {
++    param([Parameter(Mandatory = $true)][string]$Path)
++
++    $files = @(Get-ChildItem -LiteralPath $Path -File -Force -Recurse)
++    return Get-AllocatedBytesForFiles -Files $files
++}
++
++if ($WatchdogSnapshotSeconds -gt 0 -and
++        $WatchdogSnapshotSeconds -ge $WatchdogSeconds) {
++    throw 'WatchdogSnapshotSeconds must be earlier than the external watchdog limit.'
++}
++
+ if ($AsyncTraceRelay -and $DirectTraceOutput) {
+     throw 'Choose either the default asynchronous trace relay or -DirectTraceOutput, not both.'
+ }
+@@ -149,6 +320,8 @@ $diagnosticSupportSources = @(
+     (Join-Path $projectRoot 'local-tools\steel-battalion-game\src\main.c'),
+     (Join-Path $projectRoot 'local-tools\steel-battalion-game\src\dsound_write_watch.c'),
+     (Join-Path $projectRoot 'local-tools\xboxrecomp\src\kernel\kernel_bridge.c'),
++    (Join-Path $projectRoot 'local-tools\xboxrecomp\src\kernel\kernel_thread.c'),
++    (Join-Path $projectRoot 'local-tools\xboxrecomp\src\kernel\kernel_hal.c'),
+     (Join-Path $projectRoot 'local-tools\steel-battalion-game\CMakeLists.txt')
+ )
+ $logRoot = Join-Path $projectRoot 'iso\local-analysis\logs'
+@@ -199,6 +372,16 @@ foreach ($source in $diagnosticSupportSources) {
+             (Get-Item -LiteralPath $traceExe).LastWriteTimeUtc -lt (Get-Item -LiteralPath $source).LastWriteTimeUtc) {
+         throw "All-wait-trace executable is older than the kernel bridge ($source). Build it before launching."
+     }
++    if ($EnableThreadObjectTrace -and $source -like '*xboxrecomp\src\kernel\kernel_bridge.c' -and
++            (Get-Item -LiteralPath $traceExe).LastWriteTimeUtc -lt (Get-Item -LiteralPath $source).LastWriteTimeUtc) {
++        throw "Thread-object-trace executable is older than the kernel bridge ($source). Build it before launching."
++    }
++    if ($EnableThreadSuspendTrace -and
++            ($source -like '*xboxrecomp\src\kernel\kernel_bridge.c' -or
++             $source -like '*xboxrecomp\src\kernel\kernel_thread.c') -and
++            (Get-Item -LiteralPath $traceExe).LastWriteTimeUtc -lt (Get-Item -LiteralPath $source).LastWriteTimeUtc) {
++        throw "Thread-suspend-trace executable is older than a kernel source ($source). Build it before launching."
++    }
+ }
+ if (Test-Path -LiteralPath $runDirectory) {
+     throw "Run directory already exists; choose a new name so earlier logs are preserved: $runDirectory"
+@@ -211,38 +394,47 @@ $stderrLog = Join-Path $runDirectory 'stderr.log'
+ $framePath = Join-Path $runDirectory 'frame.bmp'
+ $crashPath = Join-Path $runDirectory 'crash.dmp'
+ $waitTrace = Join-Path $runDirectory 'wait-trace.log'
++$fileOpenTargetLog = Join-Path $runDirectory 'file-open-target.log'
++$fileLifecycleLog = Join-Path $runDirectory 'file-lifecycle.log'
++$fileReadLog = Join-Path $runDirectory 'file-read.log'
++$fileCopyReadLog = Join-Path $runDirectory 'file-copy-read.log'
++$fileReadTargetLog = Join-Path $runDirectory 'file-read-target.log'
++$loadStateCallbackLog = Join-Path $runDirectory 'load-state-callback.log'
+ $dsoundWriteWatchLog = Join-Path $runDirectory 'dsound-write-watch.log'
++$watchdogSnapshotLog = Join-Path $runDirectory 'watchdog-snapshot.log'
++$threadSuspendLog = Join-Path $runDirectory 'thread-suspend.log'
+ $null = New-Item -ItemType File -Path $padLive
+ 
+ $settings = [ordered]@{
+     RECOMP_AC97_READY = '1'
+     RECOMP_APU_DSP_ACK = '0x803B8810'
+     RECOMP_ASYNC_IO = '1'
+-    RECOMP_CRASH_DUMP = $crashPath
+-    RECOMP_DCF4_CALLBACK_TRACE = '1'
+     # Add complete bounded open/close records so READ tokens correlate with
+     # resolved paths after the older sampled path traces reach their caps.
+     # Lifecycle fprintf rows repeatedly held startup in NtCreateFile in r51/r52.
+     # Keep the low-volume loader-pass and READ probes enabled by default; opt in
+     # to all open/close records only when a run specifically needs path mapping.
+     RECOMP_FILE_LIFECYCLE_TRACE = '0'
+-    # r47 emitted only 7,471 reads, below the dense trace cap. Keep all read
+-    # completion fields to match token/offset/status with lifecycle events.
++    RECOMP_FILE_LIFECYCLE_LOG = $fileLifecycleLog
++    # Bounded read completion sampling is enough for routine loading diagnosis.
++    # Trace rows use a dedicated Win32 append log to avoid CRT stderr locking.
+     RECOMP_FILE_READ_TRACE = '1'
+-    RECOMP_FILE_READ_TRACE_ALL = '1'
++    RECOMP_FILE_READ_LOG = $fileReadLog
+     RECOMP_DISPATCH_GATE = '1'
+     RECOMP_DSOUND_COMMIT_TRACE = '1'
+     RECOMP_DSOUND_NULL_TRACE = '1'
+     RECOMP_FB_DUMP = $framePath
+     RECOMP_FB_WINDOW = '1'
+-    RECOMP_FB_WINDOW_DUMP_EVERY = '1800'
++    RECOMP_FB_WINDOW_DUMP_EVERY = [string]$FramebufferDumpInterval
+     RECOMP_GUEST_LOCK = '1'
++    # Retain the bounded per-waiter ticket table for live read-only diagnosis.
++    # The guest CPU snapshot itself remains one-shot and opt-in separately.
++    RECOMP_GUEST_CPU_SNAPSHOT = '0'
+     RECOMP_INPUT_DIAG = '1'
+     RECOMP_LOAD_REPEAT_TRACE = '1'
+     RECOMP_IRQ_SAFE_POINTS = '1'
+     RECOMP_KERNEL_LOG_BUDGET = '0'
+     RECOMP_LOAD_PASS_TRACE = '1'
+-    RECOMP_NV2A_IRQ_TRACE = '1'
+     RECOMP_PAD_LIVE = $padLive
+     RECOMP_PB_EXEC = '1'
+     RECOMP_PB_REPORT_MS = '30000'
+@@ -270,16 +462,190 @@ $settings = [ordered]@{
+     RECOMP_USB_STATS = '1'
+     RECOMP_VBLANK = '1'
+     RECOMP_WAIT_TRACE_LOG = $waitTrace
+-    RECOMP_WATCHDOG_SECS = [string]$WatchdogSeconds
++    RECOMP_WATCHDOG_SECS = [string]$(if ($WatchdogSnapshotSeconds -gt 0) { $WatchdogSnapshotSeconds } else { $WatchdogSeconds })
+     RECOMP_XID_REPORT_TRACE = '1'
+ }
+ 
++if ($WatchdogSnapshotSeconds -gt 0) {
++    $settings.RECOMP_WATCHDOG_KEEP_RUNNING = '1'
++    $settings.RECOMP_WATCHDOG_LOG = $watchdogSnapshotLog
++    $settings.RECOMP_WATCHDOG_NATIVE_PC = '1'
++    $settings.RECOMP_WATCHDOG_PGRAPH_SNAPSHOT = '1'
++    $settings.RECOMP_GUEST_CPU_SNAPSHOT = '1'
++    $settings.RECOMP_CS_SNAPSHOT = '1'
++}
++
++if ($EnableThreadSuspendTrace) {
++    $settings.RECOMP_THREAD_SUSPEND_TRACE = '1'
++    $settings.RECOMP_THREAD_SUSPEND_LOG = $threadSuspendLog
++}
++
++if ($EnableGuestCpuSnapshots) {
++    $settings.RECOMP_GUEST_CPU_SNAPSHOT = '1'
++}
++
++if ($DisableRasterPerfTrace) {
++    # Raster performance logging uses stderr on worker threads. Keep a clean
++    # control run available to test whether concurrent trace output is stalling
++    # the guest while retaining independent DMA/semaphore telemetry.
++    $settings.Remove('RECOMP_RASTER_PERF_TRACE')
++}
++
++if ($DisableWaitTraceLog) {
++    # Recent traces show DCF4 wait/set pairs, while the per-event file writer
++    # adds substantial diagnostics traffic. Disable that channel unless an
++    # unmatched wait has actually reproduced.
++    $settings.Remove('RECOMP_WAIT_TRACE_LOG')
++}
++
++if ($DisableLoadPassTrace) {
++    # Loader pass/stack rows use fprintf on the game thread and scale with
++    # every paired-open scan. Keep state callbacks and separate file-open
++    # records while suppressing this high-volume diagnostic channel.
++    $settings.Remove('RECOMP_LOAD_PASS_TRACE')
++}
++
++if ($DisableFileReadTrace) {
++    # Keep only the explicitly targeted copy-read completion probe when
++    # requested; the general sampled read stream uses the shared CRT stderr.
++    $settings.Remove('RECOMP_FILE_READ_TRACE')
++}
++
++if ($DisableHighVolumeMenuTrace) {
++    # Keep XID/input and the active pilot-list callback traces while avoiding
++    # per-frame title-route, title-object, and menu-dispatch fprintf traffic.
++    $settings.Remove('RECOMP_TITLE_ROUTE_TRACE')
++    $settings.Remove('RECOMP_TITLE_OBJECT_GATE_TRACE')
++    $settings.Remove('RECOMP_MENU_DISPATCH_TRACE')
++}
++
++$loadingFocusTraceNames = @(
++    'RECOMP_INPUT_DIAG',
++    'RECOMP_LOAD_REPEAT_TRACE',
++    'RECOMP_DSOUND_COMMIT_TRACE',
++    'RECOMP_DSOUND_NULL_TRACE',
++    'RECOMP_SB_PRED_TRACE',
++    'RECOMP_SB_ROSTER_TRACE',
++    'RECOMP_SB_INPUT_SNAPSHOT_TRACE',
++    'RECOMP_TITLE_INPUT_TRACE',
++    'RECOMP_TITLE_ROUTE_TRACE',
++    'RECOMP_TITLE_OBJECT_GATE_TRACE',
++    'RECOMP_MENU_STATE_TRACE',
++    'RECOMP_MENU_DISPATCH_TRACE',
++    'RECOMP_MENU_RESOURCE_TRACE',
++    'RECOMP_MENU_CALLBACK_GATE_TRACE',
++    'RECOMP_PILOT_LIST_TRACE'
++)
++if ($LoadingFocus) {
++    foreach ($name in $loadingFocusTraceNames) {
++        if ($name -eq 'RECOMP_LOAD_REPEAT_TRACE' -and $EnableLoadHelperTrace) {
++            continue
++        }
++        $settings.Remove($name)
++    }
++}
++
++if ($EnableLoadHelperTrace) {
++    # The generated helper probe is bounded to 8192 branch/return rows and
++    # records the paired-open selector, resource index, outputs, and stage.
++    # Keep it available in LoadingFocus runs without re-enabling menu traces.
++    $settings.RECOMP_LOAD_REPEAT_TRACE = '1'
++}
++$environmentSnapshot += 'RECOMP_CRASH_DUMP=<unset; fatal dumps are captured externally by the diagnostic supervisor>'
++if ($EnableInProcessCrashDump) {
++    $environmentSnapshot += "RECOMP_CRASH_DUMP=$crashPath; in-process crash dump explicitly enabled"
++}
++$environmentSnapshot += if ($FileReadTargetPaths.Count -gt 0) {
++    "RECOMP_FILE_READ_TARGET_PATHS=$($FileReadTargetPaths -join ';'); targeted NtReadFile begin/completion records use Win32 append output; per-handle limit=$FileReadTargetLimit and excess-read cap rows are bounded"
++} else {
++    'RECOMP_FILE_READ_TARGET_PATHS=<unset; opt-in>'
++}
++
+ if ($EnableDcf4ProducerTrace) {
+     # The current executable contains bounded producer-stage instrumentation.
+     # Enable it only for a run specifically investigating a reproduced DCF4 wait.
+     $settings.RECOMP_SB_DCF4_PRODUCER_TRACE = '1'
+ }
+ 
++if ($EnableDcf4StackTrace) {
++    # Preserve the first 64 raw guest stack words for DCF4 waits. These are
++    # address candidates only, not a validated guest unwind.
++    $settings.RECOMP_DCF4_STACK_TRACE = '1'
++}
++
++if ($EnableRingPollTrace) {
++    $settings.RECOMP_SB_RING_POLL_TRACE_FILE = Join-Path $runDirectory 'ring-poll.enable'
++}
++
++if ($EnableDcf4GateTrace) {
++    # Capture the translated guest callback's caller gate with a fixed 2,048-row cap.
++    $settings.RECOMP_SB_DCF4_GATE_TRACE = '1'
++}
++
++if ($EnableDcf4CallbackTrace) {
++    $settings.RECOMP_DCF4_CALLBACK_TRACE = '1'
++}
++
++if ($EnableDcf4QueueTrace) {
++    # The generated ring probe emits at most 1,024 sampled records, including
++    # the helper's real work count and pre/post ring fields.
++    $settings.RECOMP_SB_DCF4_QUEUE_TRACE = '1'
++}
++
++if ($EnableDispatchGateTrace) {
++    # Runtime emits only long waits/holds and caps this channel independently.
++    $settings.RECOMP_DISPATCH_GATE_TRACE = '1'
++    $settings.RECOMP_DISPATCH_GATE_TRACE_LIMIT = '256'
++    $settings.RECOMP_DISPATCH_GATE_TRACE_MIN_MS = '250'
++}
++
++if ($EnableGuestDeviceEntryTrace) {
++    # Sample the 0x3FFF table-entry creation and retry paths; runtime output is capped at 256 rows.
++    $settings.RECOMP_GUEST_DEVICE_ENTRY_TRACE = '1'
++}
++
++if ($EnableMemoryReserveTrace) {
++    # Only failed or >=4 MiB reserve requests are recorded; runtime cap is 32.
++    $settings.RECOMP_MEM_RESERVE_TRACE = '1'
++}
++
++if ($EnableAllFileReadTrace) {
++    $settings.RECOMP_FILE_READ_TRACE_ALL = '1'
++}
++
++if ($EnableNv2aIrqTrace) {
++    $settings.RECOMP_NV2A_IRQ_TRACE = '1'
++}
++
++if ($EnableNv2aSignatureTrace) {
++    # Keep the low-volume vblank/frame/counter/target/fence signature required
++    # by the stall watchdog, while suppressing per-write PGRAPH ACK rows.
++    $settings.RECOMP_NV2A_IRQ_TRACE = '1'
++    $settings.RECOMP_PGRAPH_ACK_TRACE = '0'
++}
++
++if ($EnableNv2aTimerTrace) {
++    # Low-volume 1 Hz boundaries around vblank, IRQ polling, and DPC drain.
++    # Pair with the IRQ trace to identify which producer stage stops advancing.
++    $settings.RECOMP_NV2A_TIMER_TRACE = '1'
++}
++
++if ($EnableDmaAckTrace) {
++    # Bounded host-side DMA PUT/GET snapshots around pushbuffer scans.
++    $settings.RECOMP_DMA_ACK_TRACE = '1'
++    $settings.RECOMP_DMA_ACK_TRACE_LIMIT = [string]$DmaAckTraceLimit
++}
++
++if ($EnableNv2aPushbufferTrace) {
++    $settings.RECOMP_NV2A_TRACE = '1'
++}
++
++if ($EnablePgraphNotifyTrace) {
++    # Existing bounded request/ack records expose a stuck synchronous PGRAPH
++    # notification without enabling per-register ACK tracing.
++    $settings.RECOMP_PB_NOTIFY_TRACE = '1'
++}
++
+ if ($EnableKeyboardInput) {
+     # The host keyboard overlay is opt-in so a real XInput pad remains the
+     # default. It also lets screen-gated diagnostics navigate text entry.
+@@ -301,10 +667,22 @@ if ($EnableHighVolumeSyncTrace) {
+     $settings.RECOMP_SYNC_TRACE = '1'
+ }
+ 
++if ($EnablePbSemaphoreTrace) {
++    # The runtime emits an initial semaphore sample and then sparse
++    # time-based samples, without enabling the high-volume per-store SYNC trace.
++    $settings.RECOMP_PB_SEMAPHORE_TRACE = '1'
++    $settings.RECOMP_PB_SEMAPHORE_TRACE_LIMIT = [string]$PbSemaphoreTraceLimit
++}
++
+ if ($EnableLoadStateCallbackTrace) {
+     # Bounded before/after snapshots for indirect callbacks in sub_00101A60.
+     # This helps distinguish loader-state callback progress from file or GPU waits.
+     $settings.RECOMP_LOAD_STATE_CALLBACK_TRACE = '1'
++    $settings.RECOMP_LOAD_STATE_CALLBACK_LOG = $loadStateCallbackLog
++}
++
++if ($EnableLoadStackTrace) {
++    $settings.RECOMP_LOAD_STACK_TRACE = '1'
+ }
+ 
+ if ($EnableLoadPairOutputTrace) {
+@@ -343,12 +721,38 @@ if ($EnableFileLifecycleTrace) {
+     $settings.RECOMP_FILE_LIFECYCLE_TRACE = '1'
+ }
+ 
++if ($EnableThreadObjectTrace) {
++    # Thread-object logging is transition-only, samples a pending poll once
++    # and then every 1,024 polls per handle, and has a 256-row process cap.
++    $settings.RECOMP_THREAD_OBJECT_TRACE = '1'
++}
++
+ if ($EnableFileFailurePathTrace) {
+     # The kernel bridge samples failed-create paths (first 64, then every 4096)
+     # independently of the bounded lifecycle open/close trace.
+     $settings.RECOMP_FILE_FAIL_PATH_TRACE = '1'
+ }
+ 
++if ($EnableFileStatusTrace) {
++    # Include the NTSTATUS and Win32 error selected by NtCreateFile. This is
++    # one line per open attempt and is opt-in for loader dependency diagnosis.
++    $settings.RECOMP_FILE_TRACE = '1'
++}
++
++if ($EnableFileOpenPathTrace) {
++    # Bounded successful open path records correlate read handles with files;
++    # the runtime caps this trace at 2,048 rows.
++    $settings.RECOMP_FILE_OPEN_PATH_TRACE = '1'
++}
++
++if ($EnableFileOpenTargetTrace) {
++    # Trace entry/return around only the loader's paired-open NtCreateFile
++    # caller. Records use a separate native append log to avoid contention on
++    # the shared CRT stderr stream and are capped at 2048 attempts.
++    $settings.RECOMP_FILE_OPEN_TARGET_TRACE = '1'
++    $settings.RECOMP_FILE_OPEN_TARGET_LOG = $fileOpenTargetLog
++}
++
+ if ($EnableFileCallerTrace) {
+     $settings.RECOMP_FILE_CALLER_TRACE = '1'
+ }
+@@ -359,6 +763,29 @@ if ($EnableFileIoDetailTrace) {
+     $settings.RECOMP_FILE_IO_DETAIL_TRACE = '1'
+ }
+ 
++if ($EnableFileCopyReadTrace) {
++    # Trace selected source reads to a dedicated append file, avoiding shared
++    # CRT stderr on the loader worker.
++    $settings.RECOMP_FILE_COPY_READ_TRACE = '1'
++    $settings.RECOMP_FILE_COPY_READ_LOG = $fileCopyReadLog
++    $settings.RECOMP_FILE_COPY_READ_TARGET = $FileCopyReadTargetPath
++}
++
++if ($FileReadTargetPaths.Count -gt 0) {
++    $settings.RECOMP_FILE_READ_TARGET_TRACE = '1'
++    $settings.RECOMP_FILE_READ_TARGET_PATHS = $FileReadTargetPaths -join ';'
++    $settings.RECOMP_FILE_READ_TARGET_LOG = $fileReadTargetLog
++    $settings.RECOMP_FILE_READ_TARGET_LIMIT = [string]$FileReadTargetLimit
++}
++
++if ($EnableInProcessCrashDump) {
++    $settings.RECOMP_CRASH_DUMP = $crashPath
++}
++
++if ($EnableGpuDrawTrace) {
++    $settings.RECOMP_GPU_DRAW_TRACE = '1'
++}
++
+ if ($EnableFileCopyTrace) {
+     $settings.RECOMP_FILE_COPY_TRACE = '1'
+ }
+@@ -377,6 +804,23 @@ if ($EnablePreloadAssetTrace) {
+     $settings.RECOMP_PRELOAD_ASSET_TRACE = '1'
+ }
+ 
++if ($EnableGuestCpuTrace) {
++    # Emit only guest CPU turns held for at least 5 ms. This can identify a
++    # scheduler handoff cycle without logging every guest kernel call.
++    $settings.RECOMP_GUEST_CPU_TRACE = '5'
++}
++
++if ($EnableGuestDivideTrace) {
++    # The runtime and generated code emit a bounded guest IDIV operand record
++    # at the two candidate divisions in sub_0001ED90.
++    $settings.RECOMP_GUEST_DIV_TRACE = '1'
++}
++
++if ($EnableCriticalSectionTrace) {
++    # Record the guest critical-section address and caller for bounded samples.
++    $settings.RECOMP_CRITSEC_TRACE = '1'
++}
++
+ if ($EnableDsoundWriteWatch) {
+     $settings.RECOMP_DSOUND_WRITE_WATCH = '1'
+     $settings.RECOMP_DSOUND_WRITE_WATCH_LOG = $dsoundWriteWatchLog
+@@ -388,12 +832,25 @@ if ($EnableDsoundListTrace) {
+     $settings.RECOMP_DS_LIST_TRACE = '1'
+ }
+ 
++if ($EnableDsoundSurfaceTrace) {
++    # Correlate the known DirectSound list addresses with the active NV2A
++    # surface state at the exact raster pixel store. The runtime caps this at
++    # 16 matching writes and emits nothing unless an address overlaps.
++    $settings.RECOMP_DSOUND_SURFACE_TRACE = '1'
++}
++
+ if ($EnableXbeSectionTrace) {
+     # Bounded per-call XeLoadSection/XeUnloadSection records. This identifies
+     # the selected XBE section and refcount without enabling broad kernel logs.
+     $settings.RECOMP_XBE_SECTION_TRACE = '1'
+ }
+ 
++if ($EnableGuestFrameTrace) {
++    # Guest EBP chains are high-volume around frequent event waits. The runtime
++    # samples this trace and reports how many calls were suppressed.
++    $settings.RECOMP_GUEST_FRAME_TRACE = '1'
++}
++
+ if ($EnableAllWaitTrace) {
+     # Separate bounded capture for ordinary guest waits; keeps the historical
+     # 64-record default unchanged and records at most the selected cap.
+@@ -422,9 +879,14 @@ if (-not [string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
+     $settings.RECOMP_WATCH2 = $GuestWatchAddress2
+ }
+ 
+-$environmentNames = @($settings.Keys) + 'RECOMP_WATCH2' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_PRELOAD_ASSET_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_WAIT_TRACE_ALL_LIMIT' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + 'RECOMP_DS_LIST_TRACE' + 'RECOMP_KEYBOARD' + 'RECOMP_KEY_TRACE' + @(
++$environmentNames = @($settings.Keys) + @('RECOMP_WAIT_TRACE_LOG', 'RECOMP_LOAD_PASS_TRACE', 'RECOMP_FILE_READ_TRACE', 'RECOMP_FILE_READ_TARGET_TRACE', 'RECOMP_FILE_READ_TARGET_PATHS', 'RECOMP_FILE_READ_TARGET_LOG', 'RECOMP_FILE_READ_TARGET_LIMIT', 'RECOMP_FILE_COPY_READ_TRACE', 'RECOMP_FILE_COPY_READ_LOG', 'RECOMP_FILE_COPY_READ_TARGET', 'RECOMP_LOAD_STATE_CALLBACK_LOG', 'RECOMP_LOAD_STACK_TRACE', 'RECOMP_GPU_DRAW_TRACE', 'RECOMP_CRASH_DUMP', 'RECOMP_GUEST_FRAME_TRACE', 'RECOMP_WATCHDOG_KEEP_RUNNING', 'RECOMP_WATCHDOG_LOG', 'RECOMP_WATCHDOG_NATIVE_PC', 'RECOMP_WATCHDOG_PGRAPH_SNAPSHOT', 'RECOMP_GUEST_CPU_SNAPSHOT', 'RECOMP_THREAD_SUSPEND_TRACE', 'RECOMP_THREAD_SUSPEND_LOG', 'RECOMP_MEM_RESERVE_TRACE', 'RECOMP_SB_RING_POLL_TRACE', 'RECOMP_SB_RING_POLL_TRACE_FILE') + $loadingFocusTraceNames + 'RECOMP_PGRAPH_ACK_TRACE' + 'RECOMP_PB_NOTIFY_TRACE' + 'RECOMP_WATCH2' + 'RECOMP_FILE_READ_TRACE_ALL' + 'RECOMP_FILE_CALLER_TRACE' + 'RECOMP_FILE_IO_DETAIL_TRACE' + 'RECOMP_FILE_COPY_TRACE' + 'RECOMP_THREAD_START_TRACE' + 'RECOMP_PRELOAD_WORKER_TRACE' + 'RECOMP_PRELOAD_ASSET_TRACE' + 'RECOMP_MMIO_TRACE' + 'RECOMP_PAD_SCRIPT' + 'RECOMP_XBE_SECTION_TRACE' + 'RECOMP_WAIT_TRACE_ALL_LIMIT' + 'RECOMP_SB_DCF4_PRODUCER_TRACE' + 'RECOMP_DCF4_STACK_TRACE' + 'RECOMP_SB_DCF4_GATE_TRACE' + 'RECOMP_DCF4_CALLBACK_TRACE' + 'RECOMP_DISPATCH_GATE_TRACE' + 'RECOMP_DISPATCH_GATE_TRACE_LIMIT' + 'RECOMP_DISPATCH_GATE_TRACE_MIN_MS' + 'RECOMP_NV2A_IRQ_TRACE' + 'RECOMP_NV2A_TIMER_TRACE' + 'RECOMP_DMA_ACK_TRACE' + 'RECOMP_DMA_ACK_TRACE_LIMIT' + 'RECOMP_NV2A_TRACE' + 'RECOMP_SYNC_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE' + 'RECOMP_PB_SEMAPHORE_TRACE_LIMIT' + 'RECOMP_DS_LIST_TRACE' + 'RECOMP_KEYBOARD' + 'RECOMP_KEY_TRACE' + 'RECOMP_FILE_TRACE' + @(
+     'RECOMP_FILE_FAIL_PATH_TRACE',
++    'RECOMP_GUEST_DEVICE_ENTRY_TRACE',
+     'RECOMP_FILE_OPEN_PATH_TRACE',
++    'RECOMP_FILE_OPEN_TARGET_TRACE',
++    'RECOMP_FILE_OPEN_TARGET_LOG',
++    'RECOMP_FILE_LIFECYCLE_LOG',
++    'RECOMP_FILE_READ_LOG',
+     'RECOMP_LOAD_PAIR_OUTPUT_TRACE',
+     'RECOMP_PRELOAD_TEX00_GATE_TRACE',
+     'RECOMP_PRELOAD_WORKER_SCHEDULE_TRACE',
+@@ -440,13 +902,51 @@ try {
+     foreach ($name in $settings.Keys) {
+         Set-Item -Path ("Env:{0}" -f $name) -Value $settings[$name]
+     }
++    if ($DisableWaitTraceLog) {
++        Remove-Item Env:RECOMP_WAIT_TRACE_LOG -ErrorAction SilentlyContinue
++    }
++    if ($DisableLoadPassTrace) {
++        Remove-Item Env:RECOMP_LOAD_PASS_TRACE -ErrorAction SilentlyContinue
++    }
++    if ($DisableFileReadTrace) {
++        Remove-Item Env:RECOMP_FILE_READ_TRACE -ErrorAction SilentlyContinue
++    }
++    if ($LoadingFocus) {
++        foreach ($name in $loadingFocusTraceNames) {
++            if ($name -eq 'RECOMP_LOAD_REPEAT_TRACE' -and $EnableLoadHelperTrace) {
++                continue
++            }
++            Remove-Item -Path ("Env:{0}" -f $name) -ErrorAction SilentlyContinue
++        }
++    }
+     # Keep duplicate path-only probes off by default. The failure-only probe is
+     # low-volume and can be enabled explicitly after lifecycle traces hit a cap.
+     if (-not $EnableFileFailurePathTrace) {
+         Remove-Item Env:RECOMP_FILE_FAIL_PATH_TRACE -ErrorAction SilentlyContinue
+     }
+-    Remove-Item Env:RECOMP_FILE_OPEN_PATH_TRACE -ErrorAction SilentlyContinue
++    if (-not $EnableFileStatusTrace) {
++        Remove-Item Env:RECOMP_FILE_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableFileOpenPathTrace) {
++        Remove-Item Env:RECOMP_FILE_OPEN_PATH_TRACE -ErrorAction SilentlyContinue
++    }
+     Remove-Item Env:RECOMP_PAD_SCRIPT -ErrorAction SilentlyContinue
++    Remove-Item Env:RECOMP_SB_RING_POLL_TRACE -ErrorAction SilentlyContinue
++    if (-not $EnableRingPollTrace) {
++        Remove-Item Env:RECOMP_SB_RING_POLL_TRACE_FILE -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableGuestFrameTrace) {
++        Remove-Item Env:RECOMP_GUEST_FRAME_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableDcf4CallbackTrace) {
++        Remove-Item Env:RECOMP_DCF4_CALLBACK_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableDcf4StackTrace) {
++        Remove-Item Env:RECOMP_DCF4_STACK_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableAllFileReadTrace) {
++        Remove-Item Env:RECOMP_FILE_READ_TRACE_ALL -ErrorAction SilentlyContinue
++    }
+     if (-not $EnableFileCallerTrace) {
+         Remove-Item Env:RECOMP_FILE_CALLER_TRACE -ErrorAction SilentlyContinue
+     }
+@@ -456,9 +956,36 @@ try {
+     if (-not $EnableFileCopyTrace) {
+         Remove-Item Env:RECOMP_FILE_COPY_TRACE -ErrorAction SilentlyContinue
+     }
++    if (-not $EnableFileCopyReadTrace) {
++        Remove-Item Env:RECOMP_FILE_COPY_READ_TRACE -ErrorAction SilentlyContinue
++        Remove-Item Env:RECOMP_FILE_COPY_READ_LOG -ErrorAction SilentlyContinue
++        Remove-Item Env:RECOMP_FILE_COPY_READ_TARGET -ErrorAction SilentlyContinue
++    }
++    if ($FileReadTargetPaths.Count -eq 0) {
++        Remove-Item Env:RECOMP_FILE_READ_TARGET_TRACE -ErrorAction SilentlyContinue
++        Remove-Item Env:RECOMP_FILE_READ_TARGET_PATHS -ErrorAction SilentlyContinue
++        Remove-Item Env:RECOMP_FILE_READ_TARGET_LOG -ErrorAction SilentlyContinue
++        Remove-Item Env:RECOMP_FILE_READ_TARGET_LIMIT -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableInProcessCrashDump) {
++        Remove-Item Env:RECOMP_CRASH_DUMP -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableLoadStateCallbackTrace) {
++        Remove-Item Env:RECOMP_LOAD_STATE_CALLBACK_LOG -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableLoadStackTrace) {
++        Remove-Item Env:RECOMP_LOAD_STACK_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableGpuDrawTrace) {
++        Remove-Item Env:RECOMP_GPU_DRAW_TRACE -ErrorAction SilentlyContinue
++    }
+     if (-not $EnableThreadStartTrace) {
+         Remove-Item Env:RECOMP_THREAD_START_TRACE -ErrorAction SilentlyContinue
+     }
++    if (-not $EnableThreadSuspendTrace) {
++        Remove-Item Env:RECOMP_THREAD_SUSPEND_TRACE -ErrorAction SilentlyContinue
++        Remove-Item Env:RECOMP_THREAD_SUSPEND_LOG -ErrorAction SilentlyContinue
++    }
+     if (-not $EnablePreloadWorkerTrace) {
+         Remove-Item Env:RECOMP_PRELOAD_WORKER_TRACE -ErrorAction SilentlyContinue
+     }
+@@ -477,21 +1004,78 @@ try {
+     if (-not $EnableDcf4ProducerTrace) {
+         Remove-Item Env:RECOMP_SB_DCF4_PRODUCER_TRACE -ErrorAction SilentlyContinue
+     }
++    if (-not $EnableDispatchGateTrace) {
++        Remove-Item Env:RECOMP_DISPATCH_GATE_TRACE -ErrorAction SilentlyContinue
++        Remove-Item Env:RECOMP_DISPATCH_GATE_TRACE_LIMIT -ErrorAction SilentlyContinue
++        Remove-Item Env:RECOMP_DISPATCH_GATE_TRACE_MIN_MS -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableGuestDeviceEntryTrace) {
++        Remove-Item Env:RECOMP_GUEST_DEVICE_ENTRY_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableMemoryReserveTrace) {
++        Remove-Item Env:RECOMP_MEM_RESERVE_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableDcf4GateTrace) {
++        Remove-Item Env:RECOMP_SB_DCF4_GATE_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not ($EnableNv2aIrqTrace -or $EnableNv2aSignatureTrace)) {
++        Remove-Item Env:RECOMP_NV2A_IRQ_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not ($EnableNv2aIrqTrace -or $EnableNv2aSignatureTrace)) {
++        Remove-Item Env:RECOMP_PGRAPH_ACK_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableFileOpenTargetTrace) {
++        Remove-Item Env:RECOMP_FILE_OPEN_TARGET_LOG -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableNv2aTimerTrace) {
++        Remove-Item Env:RECOMP_NV2A_TIMER_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableDmaAckTrace) {
++        Remove-Item Env:RECOMP_DMA_ACK_TRACE -ErrorAction SilentlyContinue
++        Remove-Item Env:RECOMP_DMA_ACK_TRACE_LIMIT -ErrorAction SilentlyContinue
++    }
++    if (-not $EnableNv2aPushbufferTrace) {
++        Remove-Item Env:RECOMP_NV2A_TRACE -ErrorAction SilentlyContinue
++    }
++    if (-not $EnablePgraphNotifyTrace) {
++        Remove-Item Env:RECOMP_PB_NOTIFY_TRACE -ErrorAction SilentlyContinue
++    }
+     if (-not $EnableKeyboardInput) {
+         Remove-Item Env:RECOMP_KEYBOARD -ErrorAction SilentlyContinue
+         Remove-Item Env:RECOMP_KEY_TRACE -ErrorAction SilentlyContinue
+     }
+-    if (-not $EnableHighVolumeSyncTrace) {
++    if (-not ($EnableHighVolumeSyncTrace -or $EnablePbSemaphoreTrace)) {
+         Remove-Item Env:RECOMP_SYNC_TRACE -ErrorAction SilentlyContinue
+         Remove-Item Env:RECOMP_PB_SEMAPHORE_TRACE -ErrorAction SilentlyContinue
++        Remove-Item Env:RECOMP_PB_SEMAPHORE_TRACE_LIMIT -ErrorAction SilentlyContinue
+     }
+     if ([string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
+         Remove-Item Env:RECOMP_WATCH2 -ErrorAction SilentlyContinue
+     }
+ 
+     $environmentSnapshot = @($settings.GetEnumerator() | ForEach-Object { "{0}={1}" -f $_.Key, $_.Value })
++    foreach ($name in $loadingFocusTraceNames) {
++        if ($name -eq 'RECOMP_LOAD_REPEAT_TRACE') {
++            $effectiveValue = [Environment]::GetEnvironmentVariable($name, 'Process')
++            $environmentSnapshot += "EFFECTIVE_ENV_$name=$(if ($null -eq $effectiveValue) { '<unset>' } else { $effectiveValue })"
++        }
++    }
+     $environmentSnapshot += "EXECUTABLE_PATH=$traceExe"
++    if ($DisableWaitTraceLog) {
++        $environmentSnapshot += 'RECOMP_WAIT_TRACE_LOG=<disabled; no unmatched DCF4 wait reproduced>'
++    }
++    if ($DisableLoadPassTrace) {
++        $environmentSnapshot += 'RECOMP_LOAD_PASS_TRACE=<disabled; use loader-state callbacks and separate file-open records>'
++    }
++    if ($DisableFileReadTrace) {
++        $environmentSnapshot += 'RECOMP_FILE_READ_TRACE=<disabled; only explicitly targeted read completion traces may emit>'
++    }
++    if ($LoadingFocus) {
++        $environmentSnapshot += 'LOADING_FOCUS=high-volume input/menu/DirectSound diagnostics disabled; controller profile and guest behavior unchanged'
++    }
+     $environmentSnapshot += "AUTO_PLATEAU_STOP=$PlateauSeconds seconds; requires unchanged mode-2 loader signature and framebuffer signature excluding the loading-indicator band"
++    $environmentSnapshot += "AUTO_NV2A_PROGRESS_STOP=$Nv2aProgressPlateauSeconds seconds; requires NV2A IRQ signature rows; timer-boundary trace alone does not emit progress signatures"
++    $environmentSnapshot += "FRAMEBUFFER_DUMP_INTERVAL=$FramebufferDumpInterval frames"
+     $environmentSnapshot += 'RECOMP_PAD_SCRIPT=<unset; screen-gated live input only>'
+     if (-not $EnableFileCallerTrace) {
+         $environmentSnapshot += 'RECOMP_FILE_CALLER_TRACE=<unset; opt-in>'
+@@ -499,12 +1083,33 @@ try {
+     if (-not $EnableFileIoDetailTrace) {
+         $environmentSnapshot += 'RECOMP_FILE_IO_DETAIL_TRACE=<unset; opt-in>'
+     }
++    if (-not $EnableAllFileReadTrace) {
++        $environmentSnapshot += 'RECOMP_FILE_READ_TRACE_ALL=<unset; first 220 and every 1000th read completion only>'
++    }
++    else {
++        $environmentSnapshot += 'RECOMP_FILE_READ_TRACE_ALL=1; first 30,000 and every 1,000th read completion thereafter; count is reported in trace-counts.txt'
++    }
+     if (-not $EnableFileCopyTrace) {
+         $environmentSnapshot += 'RECOMP_FILE_COPY_TRACE=<unset; opt-in>'
+     }
++    if ($EnableFileCopyReadTrace) {
++        $environmentSnapshot += "RECOMP_FILE_COPY_READ_TARGET=$FileCopyReadTargetPath"
++        $environmentSnapshot += "RECOMP_FILE_COPY_READ_LOG=$fileCopyReadLog; bounded copy-read rows use Win32 append output"
++    }
++    if ($EnableLoadStateCallbackTrace) {
++        $environmentSnapshot += "RECOMP_LOAD_STATE_CALLBACK_LOG=$loadStateCallbackLog; loader-state rows use Win32 append output"
++    }
++    if (-not $EnableGpuDrawTrace) {
++        $environmentSnapshot += 'RECOMP_GPU_DRAW_TRACE=<unset; periodic per-200-draw stderr output disabled>'
++    }
+     if (-not $EnableThreadStartTrace) {
+         $environmentSnapshot += 'RECOMP_THREAD_START_TRACE=<unset; opt-in>'
+     }
++    if (-not $EnableThreadSuspendTrace) {
++        $environmentSnapshot += 'RECOMP_THREAD_SUSPEND_TRACE=<unset; opt-in>'
++    } else {
++        $environmentSnapshot += "RECOMP_THREAD_SUSPEND_LOG=$threadSuspendLog; guest suspend/resume API events capped at 128 plus cap counters"
++    }
+     if (-not $EnablePreloadWorkerTrace) {
+         $environmentSnapshot += 'RECOMP_PRELOAD_WORKER_TRACE=<unset; opt-in>'
+     }
+@@ -517,21 +1122,82 @@ try {
+     if (-not $EnableDsoundListTrace) {
+         $environmentSnapshot += 'RECOMP_DS_LIST_TRACE=<unset; opt-in bounded list mutation records>'
+     }
++    if (-not $EnableDsoundSurfaceTrace) {
++        $environmentSnapshot += 'RECOMP_DSOUND_SURFACE_TRACE=<unset; opt-in capped pixel/surface overlap records>'
++    }
+     if (-not $EnableMmioTrace) {
+         $environmentSnapshot += 'RECOMP_MMIO_TRACE=<unset; opt-in>'
+     }
+     if (-not $EnableXbeSectionTrace) {
+         $environmentSnapshot += 'RECOMP_XBE_SECTION_TRACE=<unset; opt-in>'
+     }
++    if (-not $EnableGuestFrameTrace) {
++        $environmentSnapshot += 'RECOMP_GUEST_FRAME_TRACE=<unset; opt-in sampled stack frames>'
++    }
+     if (-not $EnableAllWaitTrace) {
+         $environmentSnapshot += 'RECOMP_WAIT_TRACE_ALL_LIMIT=<unset; ordinary waits retain 64-record cap>'
+     }
+     if (-not $EnableDcf4ProducerTrace) {
+         $environmentSnapshot += 'RECOMP_SB_DCF4_PRODUCER_TRACE=<unset; only enable for a reproduced DCF4 wait>'
+     }
++    if ($EnableDcf4StackTrace) {
++        $environmentSnapshot += 'RECOMP_DCF4_STACK_TRACE=1; first 64 raw guest stack windows only (not an unwind)'
++    }
++    if ($EnableRingPollTrace) {
++        $environmentSnapshot += "RECOMP_SB_RING_POLL_TRACE_FILE=$($settings.RECOMP_SB_RING_POLL_TRACE_FILE); create ring-poll.enable only after the loading screen turns black; records capped at 256, first 8 plus every 16777216th hit"
++    } else {
++        $environmentSnapshot += 'RECOMP_SB_RING_POLL_TRACE_FILE=<unset; opt-in bounded queue-cursor polling trace>'
++    }
++    if (-not $EnableDispatchGateTrace) {
++        $environmentSnapshot += 'RECOMP_DISPATCH_GATE_TRACE=<unset; long dispatch-gate waits/holds are opt-in>'
++    } else {
++        $environmentSnapshot += 'RECOMP_DISPATCH_GATE_TRACE=1; cap=256; threshold=250ms'
++    }
++    if (-not $EnableGuestDeviceEntryTrace) {
++        $environmentSnapshot += 'RECOMP_GUEST_DEVICE_ENTRY_TRACE=<unset; selector 0x3FFF table trace disabled>'
++    } else {
++        $environmentSnapshot += 'RECOMP_GUEST_DEVICE_ENTRY_TRACE=1; selector 0x3FFF only; sampled state changes; cap=256'
++    }
++    if (-not $EnableMemoryReserveTrace) {
++        $environmentSnapshot += 'RECOMP_MEM_RESERVE_TRACE=<unset; large/failed reserve trace disabled>'
++    } else {
++        $environmentSnapshot += 'RECOMP_MEM_RESERVE_TRACE=1; failed or >=4 MiB requests only; cap=32'
++    }
++    if (-not $EnableDcf4GateTrace) {
++        $environmentSnapshot += 'RECOMP_SB_DCF4_GATE_TRACE=<unset; bounded callback-gate trace disabled>'
++    } else {
++        $environmentSnapshot += 'RECOMP_SB_DCF4_GATE_TRACE=1; maximum 2,048 DCF4-GATE rows plus one cap marker'
++    }
++    if (-not $EnableDcf4CallbackTrace) {
++        $environmentSnapshot += 'RECOMP_DCF4_CALLBACK_TRACE=<unset; callback detail is opt-in to avoid high-volume logging>'
++    }
++    if (-not ($EnableNv2aIrqTrace -or $EnableNv2aSignatureTrace)) {
++        $environmentSnapshot += 'RECOMP_NV2A_IRQ_TRACE=<unset; per-interrupt detail is opt-in>'
++    }
++    if ($EnableNv2aSignatureTrace) {
++        $environmentSnapshot += 'RECOMP_PGRAPH_ACK_TRACE=0; retains NV2A signatures without per-register ACK spam'
++    }
++    if (-not $EnableNv2aTimerTrace) {
++        $environmentSnapshot += 'RECOMP_NV2A_TIMER_TRACE=<unset; opt-in 1 Hz vblank/IRQ/DPC boundaries>'
++    }
++    if ($DisableRasterPerfTrace) {
++        $environmentSnapshot += 'RECOMP_RASTER_PERF_TRACE=<unset; worker timing disabled for low-output control run>'
++    }
++    if (-not $EnableDmaAckTrace) {
++        $environmentSnapshot += 'RECOMP_DMA_ACK_TRACE=<unset; opt-in bounded DMA PUT/GET scan samples>'
++    } else {
++        $environmentSnapshot += "RECOMP_DMA_ACK_TRACE_LIMIT=$DmaAckTraceLimit; default cap 256 is raised for post-transition PUT/GET evidence"
++    }
++    if (-not $EnableNv2aPushbufferTrace) {
++        $environmentSnapshot += 'RECOMP_NV2A_TRACE=<unset; per-PUT diagnostics are opt-in; PB execution remains enabled>'
++    }
+     if (-not $EnableHighVolumeSyncTrace) {
+         $environmentSnapshot += 'RECOMP_SYNC_TRACE=<unset; opt-in high-volume>'
++    }
++    if (-not ($EnableHighVolumeSyncTrace -or $EnablePbSemaphoreTrace)) {
+         $environmentSnapshot += 'RECOMP_PB_SEMAPHORE_TRACE=<unset; opt-in high-volume>'
++    } else {
++        $environmentSnapshot += "RECOMP_PB_SEMAPHORE_TRACE_LIMIT=$PbSemaphoreTraceLimit; default cap 256 is raised for post-transition semaphore evidence"
+     }
+     if ([string]::IsNullOrWhiteSpace($GuestWatchAddress2)) {
+         $environmentSnapshot += 'RECOMP_WATCH2=<unset; opt-in second direct guest address>'
+@@ -539,7 +1205,12 @@ try {
+     if (-not $EnableFileFailurePathTrace) {
+         $environmentSnapshot += 'RECOMP_FILE_FAIL_PATH_TRACE=<unset; opt-in sampled failure paths>'
+     }
+-    $environmentSnapshot += 'RECOMP_FILE_OPEN_PATH_TRACE=<unset; lifecycle traces cover opens>'
++    if (-not $EnableFileStatusTrace) {
++        $environmentSnapshot += 'RECOMP_FILE_TRACE=<unset; per-open status and Win32 errors are opt-in>'
++    }
++    if (-not $EnableFileOpenPathTrace) {
++        $environmentSnapshot += 'RECOMP_FILE_OPEN_PATH_TRACE=<unset; bounded successful paths are opt-in>'
++    }
+     if ($useAsyncTraceRelay) {
+         $environmentSnapshot += "TRACE_OUTPUT_MODE=bounded asynchronous relay; queue capacity $AsyncTraceQueueCapacity lines; overflow drops recorded"
+     }
+@@ -686,11 +1357,26 @@ if ($EnableGuestWriteBreakpoint) {
+ $externalWatchdogTriggered = $false
+ $plateauWatchdogTriggered = $false
+ $uiPlateauWatchdogTriggered = $false
++$nv2aProgressWatchdogTriggered = $false
++$crashExceptionWatchdogTriggered = $false
++$crashExceptionRecordAtStop = $null
++$dcf4WaitHangTriggered = $false
++$dcf4WaitDumpPath = $null
+ $plateauSignatureAtStop = $null
+ $lastPlateauSignature = $null
+ $plateauStableSince = $null
+ $lastUiSignature = $null
+ $uiStableSince = $null
++$lastNv2aProgressSignature = $null
++$nv2aProgressStableSince = $null
++$nv2aProgressSignatureAtStop = $null
++$lastDcf4WaitSignature = $null
++$dcf4WaitStableSince = $null
++$runStorageBudgetBytes = [long]$RunStorageBudgetMiB * 1MB
++$storageBudgetTriggered = $false
++$storageBytesAtStop = 0L
++$storageAllocatedBytesAtStop = -1L
++$lastStorageCheck = [DateTime]::UtcNow
+ $watchdogTimer = [Diagnostics.Stopwatch]::StartNew()
+ while (-not $process.WaitForExit(10000)) {
+     if ($watchdogTimer.Elapsed.TotalSeconds -ge $WatchdogSeconds) {
+@@ -702,6 +1388,126 @@ while (-not $process.WaitForExit(10000)) {
+         break
+     }
+ 
++    # Sum both logical length and actual allocated bytes at a low frequency.
++    # The logical cap is conservative; the allocated-byte cap also protects
++    # against unexpectedly dense evidence if a trace's own cap is ineffective.
++    if (([DateTime]::UtcNow - $lastStorageCheck).TotalSeconds -ge 10) {
++        $lastStorageCheck = [DateTime]::UtcNow
++        $storageBytes = 0L
++        $storageAllocatedBytes = -1L
++        try {
++            $storageBytes = [long]((Get-ChildItem -LiteralPath $runDirectory -File -Force -Recurse |
++                Measure-Object -Property Length -Sum).Sum)
++        }
++        catch { Write-Warning "Could not measure current run storage: $($_.Exception.Message)" }
++        try { $storageAllocatedBytes = Get-RunDirectoryAllocatedBytes -Path $runDirectory }
++        catch { Write-Warning "Could not measure allocated run storage: $($_.Exception.Message)" }
++        if ($storageBytes -ge $runStorageBudgetBytes -or
++            $storageAllocatedBytes -ge $runStorageBudgetBytes) {
++            $liveProcess = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
++            $livePath = if ($liveProcess) { $liveProcess.Path } else { $null }
++            if ($liveProcess -and $livePath -and [string]::Equals(
++                    [IO.Path]::GetFullPath($livePath), [IO.Path]::GetFullPath($traceExe),
++                    [StringComparison]::OrdinalIgnoreCase)) {
++                $storageBudgetTriggered = $true
++                $storageBytesAtStop = $storageBytes
++                $storageAllocatedBytesAtStop = $storageAllocatedBytes
++                $budgetDumpPath = Join-Path $runDirectory 'storage-budget-stall.dmp'
++                $dumpStatus = 'capture failed'
++                try {
++                    $dumpScript = Join-Path $PSScriptRoot 'Capture-ProducerTraceDump.ps1'
++                    if (Test-Path -LiteralPath $dumpScript -PathType Leaf) {
++                        $null = & $dumpScript -ProcessId $process.Id -OutputPath $budgetDumpPath
++                        if ((Test-Path -LiteralPath $budgetDumpPath -PathType Leaf) -and
++                                (Get-Item -LiteralPath $budgetDumpPath).Length -gt 0) {
++                            $dumpStatus = 'captured'
++                        }
++                    }
++                }
++                catch { $dumpStatus = "capture failed: $($_.Exception.Message)" }
++                @(
++                    "Stopped diagnostic PID $($process.Id) at $([DateTime]::UtcNow.ToString('o')) after reaching the $RunStorageBudgetMiB MiB per-run evidence budget.",
++                    "Measured logical evidence bytes: $storageBytes",
++                    "Measured allocated evidence bytes: $storageAllocatedBytes",
++                    "Verified executable: $livePath",
++                    "External thread snapshot: $dumpStatus$(if ($dumpStatus -eq 'captured') { ' (' + $budgetDumpPath + ')' })"
++                ) | Set-Content -LiteralPath (Join-Path $runDirectory 'storage-budget-stop.txt') -Encoding UTF8
++                Write-Warning "Per-run storage budget reached; stopping only verified diagnostic PID $($process.Id)."
++                $process.Kill()
++                $process.WaitForExit()
++                break
++            }
++            Write-Warning 'Run storage budget reached, but the live executable path did not verify as this run. Leaving the process untouched.'
++        }
++    }
++
++    # A fatal guest exception can terminate a worker while the host process and
++    # NV2A timer threads keep running. Detect the runtime's crash records and
++    # stop only this verified child instead of waiting for a graphics plateau.
++    # The runtime also logs the intentional 0x406D1388 thread-name exception;
++    # only C000-status exceptions and the explicit access-violation marker count.
++    $fatalCrashRecord = $null
++    if (Test-Path -LiteralPath $stderrLog -PathType Leaf) {
++        try {
++            $fatalCrashRecord = Get-Content -LiteralPath $stderrLog -Tail 2000 -ErrorAction Stop |
++                Where-Object {
++                    $_ -match '\[CRASH\] Access violation' -or
++                    $_ -match '\[CRASH-EXCEPTION\].*code=0xC000[0-9A-Fa-f]{4}'
++                } |
++                Select-Object -Last 1
++        }
++        catch { $fatalCrashRecord = $null }
++    }
++    if ($fatalCrashRecord) {
++        $liveProcess = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
++        $livePath = if ($liveProcess) { $liveProcess.Path } else { $null }
++        if ($liveProcess -and $livePath -and
++                [string]::Equals(
++                    [IO.Path]::GetFullPath($livePath),
++                    [IO.Path]::GetFullPath($traceExe),
++                    [StringComparison]::OrdinalIgnoreCase)) {
++            $crashExceptionWatchdogTriggered = $true
++            $crashExceptionRecordAtStop = $fatalCrashRecord
++            $exceptionDumpPath = Join-Path $runDirectory 'exception-stall.dmp'
++            $dumpStatus = 'capture failed'
++            try {
++                $dumpScript = Join-Path $PSScriptRoot 'Capture-ProducerTraceDump.ps1'
++                if (Test-Path -LiteralPath $dumpScript -PathType Leaf) {
++                    $dumpJob = Start-Job -ScriptBlock {
++                        param($ScriptPath, $TargetPid, $TargetPath)
++                        & $ScriptPath -ProcessId $TargetPid -OutputPath $TargetPath | Out-Null
++                    } -ArgumentList $dumpScript, $process.Id, $exceptionDumpPath
++                    $dumpCompleted = Wait-Job -Job $dumpJob -Timeout 10
++                    if ($dumpCompleted) {
++                        Receive-Job -Job $dumpJob -ErrorAction Stop | Out-Null
++                        if ((Test-Path -LiteralPath $exceptionDumpPath -PathType Leaf) -and
++                                (Get-Item -LiteralPath $exceptionDumpPath).Length -gt 0) {
++                            $dumpStatus = 'captured'
++                        }
++                    } else {
++                        Stop-Job -Job $dumpJob -ErrorAction SilentlyContinue
++                        $dumpStatus = 'capture timed out after 10 seconds'
++                    }
++                    Remove-Job -Job $dumpJob -Force -ErrorAction SilentlyContinue
++                }
++            }
++            catch {
++                $dumpStatus = "capture failed: $($_.Exception.Message)"
++                $exceptionDumpPath = $null
++            }
++            @(
++                "Stopped diagnostic PID $($process.Id) at $([DateTime]::UtcNow.ToString('o')) after a fatal runtime exception record.",
++                "Verified executable: $livePath",
++                "Exception record: $fatalCrashRecord",
++                "External thread snapshot: $dumpStatus$(if ($exceptionDumpPath) { ' (' + $exceptionDumpPath + ')' })"
++            ) | Set-Content -LiteralPath (Join-Path $runDirectory 'exception-stop.txt') -Encoding UTF8
++            Write-Warning "Fatal runtime exception detected; stopping only verified diagnostic PID $($process.Id)."
++            $process.Kill()
++            $process.WaitForExit()
++            break
++        }
++    }
++
+     # Begin plateau detection only after the mode-2 loading scan is active and
+     # a framebuffer capture exists. A stop requires both the loader's stable
+     # branch/pair signature and the visible frame hash to remain unchanged.
+@@ -749,10 +1555,27 @@ while (-not $process.WaitForExit(10000)) {
+                                 [StringComparison]::OrdinalIgnoreCase)) {
+                         $plateauWatchdogTriggered = $true
+                         $plateauSignatureAtStop = $currentPlateauSignature
++                        $plateauDumpPath = Join-Path $runDirectory 'mode2-plateau-stall.dmp'
++                        $plateauDumpStatus = 'capture failed'
++                        try {
++                            $dumpScript = Join-Path $PSScriptRoot 'Capture-ProducerTraceDump.ps1'
++                            if (Test-Path -LiteralPath $dumpScript -PathType Leaf) {
++                                $null = & $dumpScript -ProcessId $process.Id -OutputPath $plateauDumpPath
++                                if ((Test-Path -LiteralPath $plateauDumpPath -PathType Leaf) -and
++                                        (Get-Item -LiteralPath $plateauDumpPath).Length -gt 0) {
++                                    $plateauDumpStatus = 'captured'
++                                }
++                            }
++                        }
++                        catch {
++                            $plateauDumpStatus = "capture failed: $($_.Exception.Message)"
++                            $plateauDumpPath = $null
++                        }
+                         $stopRecord = @(
+                             "Stopped diagnostic PID $($process.Id) at $($now.ToString('o')) after $PlateauSeconds seconds with unchanged mode-2 loader state and framebuffer hash.",
+                             "Verified executable: $livePath",
+-                            "Signature: $currentPlateauSignature"
++                            "Signature: $currentPlateauSignature",
++                            "Thread snapshot: $plateauDumpStatus$(if ($plateauDumpPath) { ' (' + $plateauDumpPath + ')' })"
+                         )
+                         $stopRecord | Set-Content -LiteralPath (Join-Path $runDirectory 'plateau-stop.txt') -Encoding UTF8
+                         Write-Warning "Plateau watchdog verified PID $($process.Id) belongs to this diagnostic run and is stopping it after $PlateauSeconds seconds without loader or framebuffer progress."
+@@ -802,10 +1625,26 @@ while (-not $process.WaitForExit(10000)) {
+                             [IO.Path]::GetFullPath($traceExe),
+                             [StringComparison]::OrdinalIgnoreCase)) {
+                     $uiPlateauWatchdogTriggered = $true
++                    $uiPlateauDumpPath = Join-Path $runDirectory 'ui-plateau-stall.dmp'
++                    $dumpStatus = 'capture failed'
++                    try {
++                        $dumpScript = Join-Path $PSScriptRoot 'Capture-ProducerTraceDump.ps1'
++                        if (Test-Path -LiteralPath $dumpScript -PathType Leaf) {
++                            $null = & $dumpScript -ProcessId $process.Id -OutputPath $uiPlateauDumpPath
++                            if (Test-Path -LiteralPath $uiPlateauDumpPath -PathType Leaf) {
++                                $dumpStatus = 'captured'
++                            }
++                        }
++                    }
++                    catch {
++                        $dumpStatus = "capture failed: $($_.Exception.Message)"
++                        $uiPlateauDumpPath = $null
++                    }
+                     @(
+                         "Stopped diagnostic PID $($process.Id) at $($now.ToString('o')) after $UiPlateauSeconds seconds without a framebuffer or live-input change.",
+                         "Verified executable: $livePath",
+-                        "Signature: $uiSignature"
++                        "Signature: $uiSignature",
++                        "Thread snapshot: $dumpStatus$(if ($uiPlateauDumpPath) { ' (' + $uiPlateauDumpPath + ')' })"
+                     ) | Set-Content -LiteralPath (Join-Path $runDirectory 'ui-plateau-stop.txt') -Encoding UTF8
+                     Write-Warning "UI plateau watchdog verified PID $($process.Id) belongs to this diagnostic run and is stopping it after $UiPlateauSeconds seconds without screen or input progress."
+                     $process.Kill()
+@@ -824,6 +1663,147 @@ while (-not $process.WaitForExit(10000)) {
+         $lastUiSignature = $null
+         $uiStableSince = $null
+     }
++
++    # A changing loading animation can keep the framebuffer watchdog alive
++    # even when the GPU callback/fence state has stopped. When NV2A telemetry
++    # is enabled, stop this diagnostic child if the guest frame/counter state
++    # remains unchanged for the configured interval. Callback count is included
++    # so ordinary progress at a static menu does not look stalled.
++    if (($EnableNv2aIrqTrace -or $EnableNv2aSignatureTrace) -and
++            (Test-Path -LiteralPath $stderrLog -PathType Leaf)) {
++        $latestNv2aProgress = $null
++        try {
++            $latestNv2aProgress = Get-Content -LiteralPath $stderrLog -Tail 2000 -ErrorAction Stop |
++                Where-Object { $_ -match '\[NV2A-TICK\]' } |
++                Select-Object -Last 1
++        }
++        catch { $latestNv2aProgress = $null }
++
++        if ($latestNv2aProgress -and
++                $latestNv2aProgress -match 'callbacks=(?<callbacks>[0-9]+).*frame=(?<frame>[0-9A-F]+) counter=(?<counter>[0-9A-F]+) target=(?<target>[0-9A-F]+) fence=(?<fence>[0-9A-F]+)') {
++            $currentNv2aProgressSignature = 'callbacks={0}|frame={1}|counter={2}|target={3}|fence={4}' -f @(
++                $Matches.callbacks, $Matches.frame, $Matches.counter, $Matches.target, $Matches.fence)
++            $now = [DateTime]::UtcNow
++            if ($currentNv2aProgressSignature -ne $lastNv2aProgressSignature) {
++                $lastNv2aProgressSignature = $currentNv2aProgressSignature
++                $nv2aProgressStableSince = $now
++            }
++            elseif ($null -ne $nv2aProgressStableSince -and
++                    ($now - $nv2aProgressStableSince).TotalSeconds -ge $Nv2aProgressPlateauSeconds) {
++                $liveProcess = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
++                $livePath = if ($liveProcess) { $liveProcess.Path } else { $null }
++                if ($liveProcess -and $livePath -and
++                        [string]::Equals(
++                            [IO.Path]::GetFullPath($livePath),
++                            [IO.Path]::GetFullPath($traceExe),
++                            [StringComparison]::OrdinalIgnoreCase)) {
++                    $nv2aProgressWatchdogTriggered = $true
++                    $nv2aProgressSignatureAtStop = $currentNv2aProgressSignature
++                    $progressDumpPath = Join-Path $runDirectory 'nv2a-progress-stall.dmp'
++                    $dumpStatus = 'capture failed'
++                    try {
++                        $dumpScript = Join-Path $PSScriptRoot 'Capture-ProducerTraceDump.ps1'
++                        if (Test-Path -LiteralPath $dumpScript -PathType Leaf) {
++                            $null = & $dumpScript -ProcessId $process.Id -OutputPath $progressDumpPath
++                            if (Test-Path -LiteralPath $progressDumpPath -PathType Leaf) {
++                                $dumpStatus = 'captured'
++                            }
++                        }
++                    }
++                    catch {
++                        $dumpStatus = "capture failed: $($_.Exception.Message)"
++                        $progressDumpPath = $null
++                    }
++                    @(
++                        "Stopped diagnostic PID $($process.Id) at $($now.ToString('o')) after $Nv2aProgressPlateauSeconds seconds without NV2A callback/frame/counter/fence progress.",
++                        "Verified executable: $livePath",
++                        "Last NV2A progress signature: $currentNv2aProgressSignature",
++                        "Thread snapshot: $dumpStatus$(if ($progressDumpPath) { ' (' + $progressDumpPath + ')' })"
++                    ) | Set-Content -LiteralPath (Join-Path $runDirectory 'nv2a-progress-stop.txt') -Encoding UTF8
++                    Write-Warning "NV2A progress watchdog verified PID $($process.Id) belongs to this diagnostic run and is stopping it after $Nv2aProgressPlateauSeconds seconds without guest graphics progress."
++                    $process.Kill()
++                    $process.WaitForExit()
++                    break
++                }
++                else {
++                    Write-Warning 'NV2A progress stall detected, but the live process path did not verify as this run executable. Leaving it untouched.'
++                    $nv2aProgressStableSince = $now
++                }
++            }
++        }
++        else {
++            $lastNv2aProgressSignature = $null
++            $nv2aProgressStableSince = $null
++        }
++    }
++
++    # A DCF4 wait can remain blocked while periodic framebuffer captures or
++    # unrelated trace activity continue. When producer tracing is enabled,
++    # detect a wait-before record with no later wait-after and stop only this
++    # verified diagnostic child after a bounded interval.
++    if ($EnableDcf4ProducerTrace -and
++            (Test-Path -LiteralPath $stderrLog -PathType Leaf)) {
++        $lastDcf4Sync = $null
++        try {
++            $lastDcf4Sync = Get-Content -LiteralPath $stderrLog -Tail 5000 -ErrorAction Stop |
++                Where-Object { $_ -match '\[RASTER-SYNC\].*stage=wait-(before|after).*object=0021DCF4' } |
++                Select-Object -Last 1
++        }
++        catch { $lastDcf4Sync = $null }
++
++        if ($lastDcf4Sync -and $lastDcf4Sync -match 'stage=wait-before') {
++            $now = [DateTime]::UtcNow
++            if ($lastDcf4Sync -ne $lastDcf4WaitSignature) {
++                $lastDcf4WaitSignature = $lastDcf4Sync
++                $dcf4WaitStableSince = $now
++            }
++            elseif ($null -ne $dcf4WaitStableSince -and
++                    ($now - $dcf4WaitStableSince).TotalSeconds -ge $Dcf4WaitHangSeconds) {
++                $liveProcess = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
++                $livePath = if ($liveProcess) { $liveProcess.Path } else { $null }
++                if ($liveProcess -and $livePath -and
++                        [string]::Equals(
++                            [IO.Path]::GetFullPath($livePath),
++                            [IO.Path]::GetFullPath($traceExe),
++                            [StringComparison]::OrdinalIgnoreCase)) {
++                    $dcf4WaitHangTriggered = $true
++                    $dcf4WaitDumpPath = Join-Path $runDirectory 'dcf4-stall.dmp'
++                    $dumpStatus = 'capture failed'
++                    try {
++                        $dumpScript = Join-Path $PSScriptRoot 'Capture-ProducerTraceDump.ps1'
++                        if (Test-Path -LiteralPath $dumpScript -PathType Leaf) {
++                            $null = & $dumpScript -ProcessId $process.Id -OutputPath $dcf4WaitDumpPath
++                            if (Test-Path -LiteralPath $dcf4WaitDumpPath -PathType Leaf) {
++                                $dumpStatus = 'captured'
++                            }
++                        }
++                    }
++                    catch {
++                        $dumpStatus = "capture failed: $($_.Exception.Message)"
++                        $dcf4WaitDumpPath = $null
++                    }
++                    @(
++                        "Stopped diagnostic PID $($process.Id) at $($now.ToString('o')) after $Dcf4WaitHangSeconds seconds without a DCF4 wait return.",
++                        "Verified executable: $livePath",
++                        "Last DCF4 synchronization record: $lastDcf4Sync",
++                        "Thread snapshot: $dumpStatus$(if ($dcf4WaitDumpPath) { ' (' + $dcf4WaitDumpPath + ')' })"
++                    ) | Set-Content -LiteralPath (Join-Path $runDirectory 'dcf4-wait-stop.txt') -Encoding UTF8
++                    Write-Warning "DCF4 wait watchdog verified PID $($process.Id) belongs to this diagnostic run and is stopping it after $Dcf4WaitHangSeconds seconds without a wait return."
++                    $process.Kill()
++                    $process.WaitForExit()
++                    break
++                }
++                else {
++                    Write-Warning "DCF4 wait stall detected, but the live process path did not verify as this run's executable. Leaving it untouched."
++                    $dcf4WaitStableSince = $now
++                }
++            }
++        }
++        else {
++            $lastDcf4WaitSignature = $null
++            $dcf4WaitStableSince = $null
++        }
++    }
+ }
+ $watchdogTimer.Stop()
+ if ($guestWriteBreakpoint) {
+@@ -852,12 +1832,24 @@ if ($useAsyncTraceRelay) {
+         '[FILE-PRELOAD-RETURN]', '[FILE-COPY-ENTER]', '[FILE-COPY-RETURN]',
+         '[FILE-IO]', '[FILE-CALL]', '[FILE-MISS-PATH]',
+         '[FILE-LIFECYCLE-OPEN-CAPPED]', '[FILE-LIFECYCLE-OPEN]',
+-        '[FILE-LIFECYCLE-CLOSE]', '[LOAD-HELPER]', '[LOAD-HELPER-BRANCH]',
++        '[FILE-LIFECYCLE-CLOSE]', '[FILE-OPEN-TARGET-BEGIN]',
++        '[FILE-OPEN-TARGET-DONE]', '[FILE-READ-TARGET-BEGIN]',
++        '[FILE-READ-TARGET-DONE]', '[LOAD-HELPER]', '[LOAD-HELPER-BRANCH]',
++        '[READ]',
+         '[LOAD-HELPER-RET]', '[LOAD-HELPER-CALLBACK]', '[LOAD-HELPER-STATE]',
+         '[LOAD-STACK]', '[LOAD-RENDER]',
+         '[LOAD-PASS-IN]', '[LOAD-PASS-OUT]', '[LOAD-REPEAT]',
+-        '[DCF4-CB]', '[SB-DMA-PUBLISH]', '[SB-PFB-POLL]', '[SYNC-PBSEM]',
+-        '[NV2A-TICK]', '[RASTER-PERF]', '[XID0]', '[XID-DMA0]'
++        '[DCF4-CB]', '[DCF4-CB-CAP]', '[DCF4-GATE]', '[DCF4-GATE-CAP]',
++        '[DCF4-RESET-CAP]', '[DCF4-OUTER]',
++        '[DCF4-OUTER-POLL]', '[DCF4-OUTER-CAP]', '[DCF4-OUTER-POLL-CAP]',
++        '[DISPATCH-GATE]', '[DISPATCH-GATE-CAP]',
++        '[DEVICE-ENTRY]', '[DEVICE-ENTRY-CAP]', '[GUEST-STACK-RAW]',
++        '[MEM-ALLOC]', '[MEM-ALLOC-CAP]',
++        '[SB-DMA-PUBLISH]', '[SB-DMA-PUBLISH-CAP]', '[SB-DCF4-MARKER]',
++        '[SB-DCF4-MARKER-CAP]', '[SB-PFB-POLL]', '[SB-PFB-POLL-CAP]',
++        '[WAIT-DCF4-CAP]', '[WAIT-DCE4-CAP]', '[RASTER-SYNC]', '[SYNC-PBSEM]',
++        '[DMA-ACK]', '[PB-SEM]', '[PB-SEM-METHOD]',
++        '[NV2A-TICK]', '[RASTER-PERF]', '[PGRAPH-NOTIFY]', '[XID0]', '[XID-DMA0]'
+     )
+     $markerPattern = ($traceMarkers | Sort-Object Length -Descending |
+         ForEach-Object { [regex]::Escape($_) }) -join '|'
+@@ -865,21 +1857,97 @@ if ($useAsyncTraceRelay) {
+         $markerPattern,
+         [System.Text.RegularExpressions.RegexOptions]::Compiled)
+     $markerCounts = [ordered]@{}
++    $traceLimitHitCount = 0
++    $traceLimitHitRows = [System.Collections.Generic.List[string]]::new()
+     foreach ($marker in $traceMarkers) { $markerCounts[$marker] = 0 }
+     if ($relayResult.WriterStopped) {
+-        $reader = [IO.StreamReader]::new($stderrLog)
+-        try {
+-            while ($null -ne ($line = $reader.ReadLine())) {
+-                foreach ($match in $markerRegex.Matches($line)) {
+-                    $markerCounts[$match.Value]++
++        # Loader-state callbacks can write to their own bounded append-only
++        # channel rather than stderr. Count that channel as well so
++        # trace-counts.txt and MarkerCounts reflect records that were actually
++        # emitted, even when the callback trace is disabled in another run.
++        foreach ($traceFile in @(Get-ChildItem -LiteralPath $runDirectory -Filter '*.log' -File -Recurse -ErrorAction SilentlyContinue)) {
++            $tracePath = $traceFile.FullName
++            $reader = [IO.StreamReader]::new($tracePath)
++            try {
++                while ($null -ne ($line = $reader.ReadLine())) {
++                    foreach ($match in $markerRegex.Matches($line)) {
++                        $markerCounts[$match.Value]++
++                    }
++                    # Count explicit cap/overflow markers and nonzero drop
++                    # counters only. Ordinary trace fields such as
++                    # "dropped=0" are data, not evidence that a limit fired.
++                    if ($line -match '^\[[A-Z0-9_-]*(?:CAP|CAPPED|OVERFLOW)\](?:\s|$)' -or
++                        $line -match '(?i)\blimit reached\b|\boverflow\b|\bdropped=(?:[1-9][0-9]*)\b') {
++                        $traceLimitHitCount++
++                        if ($traceLimitHitRows.Count -lt 64) { $traceLimitHitRows.Add($line) }
++                    }
+                 }
+             }
++            finally { $reader.Dispose() }
+         }
+-        finally { $reader.Dispose() }
+     }
+     $countsComplete = $relayResult.WriterStopped -and
+         $relayResult.DroppedStderrLines -eq 0 -and
+         [string]::IsNullOrEmpty($relayResult.WriterError)
++    $storageBytesAtExit = 0L
++    try {
++        $storageBytesAtExit = [long]((Get-ChildItem -LiteralPath $runDirectory -File -Force -Recurse |
++            Measure-Object -Property Length -Sum).Sum)
++    }
++    catch { Write-Warning "Could not measure final run storage: $($_.Exception.Message)" }
++    $fileReadTargetSummary = [ordered]@{
++        Limit = if ($FileReadTargetPaths.Count -gt 0) { $FileReadTargetLimit } else { $null }
++        EnterCount = 0
++        DoneCount = 0
++        CapMarkerCount = 0
++        CapRows = [System.Collections.Generic.List[string]]::new()
++        HighestReadCountByPath = [ordered]@{}
++    }
++    if ($FileReadTargetPaths.Count -gt 0 -and (Test-Path -LiteralPath $fileReadTargetLog -PathType Leaf)) {
++        foreach ($targetLine in [IO.File]::ReadLines($fileReadTargetLog)) {
++            if ($targetLine -match '^\[FILE-READ-TARGET-ENTER\].*?\bn=(\d+).*?\bpath=(.*?)\s+offset_valid=') {
++                $fileReadTargetSummary.EnterCount++
++                $targetN = [int]$Matches[1]
++                $targetPath = $Matches[2]
++                if (-not $fileReadTargetSummary.HighestReadCountByPath.Contains($targetPath) -or
++                    $targetN -gt $fileReadTargetSummary.HighestReadCountByPath[$targetPath]) {
++                    $fileReadTargetSummary.HighestReadCountByPath[$targetPath] = $targetN
++                }
++            } elseif ($targetLine -match '^\[FILE-READ-TARGET-DONE\]') {
++                $fileReadTargetSummary.DoneCount++
++            } elseif ($targetLine -match '^\[FILE-READ-TARGET-CAP\]') {
++                $fileReadTargetSummary.CapMarkerCount++
++                if ($fileReadTargetSummary.CapRows.Count -lt 32) {
++                    $fileReadTargetSummary.CapRows.Add($targetLine)
++                }
++            }
++        }
++    }
++    $threadSuspendSummary = [ordered]@{
++        Enabled = [bool]$EnableThreadSuspendTrace
++        Cap = 128
++        EventCount = 0
++        CapMarkerCount = 0
++        CapRows = [System.Collections.Generic.List[string]]::new()
++    }
++    if ($EnableThreadSuspendTrace -and (Test-Path -LiteralPath $threadSuspendLog -PathType Leaf)) {
++        foreach ($suspendLine in [IO.File]::ReadLines($threadSuspendLog)) {
++            if ($suspendLine -match '^\[THREAD-SUSPEND\]') {
++                $threadSuspendSummary.EventCount++
++            } elseif ($suspendLine -match '^\[THREAD-SUSPEND-CAP\]') {
++                $threadSuspendSummary.CapMarkerCount++
++                if ($threadSuspendSummary.CapRows.Count -lt 16) {
++                    $threadSuspendSummary.CapRows.Add($suspendLine)
++                }
++            }
++        }
++    }
++    $watchdogSnapshotPresent = Test-Path -LiteralPath $watchdogSnapshotLog -PathType Leaf
++    $watchdogSnapshotBytes = if ($watchdogSnapshotPresent) {
++        (Get-Item -LiteralPath $watchdogSnapshotLog).Length
++    } else { 0L }
++    $watchdogSnapshotEmitted = if ($watchdogSnapshotPresent) { 1 } else { 0 }
++    $watchdogSnapshotMissing = $WatchdogSnapshotSeconds -gt 0 -and -not $watchdogSnapshotPresent
+     $resultManifest = Get-Content -LiteralPath (Join-Path $runDirectory 'run-manifest.json') -Raw |
+         ConvertFrom-Json
+     $resultManifest | Add-Member -NotePropertyName RunResult -NotePropertyValue ([ordered]@{
+@@ -887,8 +1955,23 @@ if ($useAsyncTraceRelay) {
+         ExternalWatchdogTriggered = $externalWatchdogTriggered
+         PlateauWatchdogTriggered = $plateauWatchdogTriggered
+         UiPlateauWatchdogTriggered = $uiPlateauWatchdogTriggered
++        Dcf4WaitHangWatchdogTriggered = $dcf4WaitHangTriggered
++        Nv2aProgressWatchdogTriggered = $nv2aProgressWatchdogTriggered
++        CrashExceptionWatchdogTriggered = $crashExceptionWatchdogTriggered
++        CrashExceptionRecordAtStop = $crashExceptionRecordAtStop
++        Dcf4WaitDumpPath = $dcf4WaitDumpPath
+         PlateauSeconds = $PlateauSeconds
+         UiPlateauSeconds = $UiPlateauSeconds
++        WatchdogSnapshotSeconds = $WatchdogSnapshotSeconds
++        WatchdogSnapshotPresent = $watchdogSnapshotPresent
++        WatchdogSnapshotEmitted = $watchdogSnapshotEmitted
++        WatchdogSnapshotCap = 1
++        WatchdogSnapshotDropped = 0
++        WatchdogSnapshotMissingAtExit = $watchdogSnapshotMissing
++        WatchdogSnapshotBytes = $watchdogSnapshotBytes
++        Dcf4WaitHangSeconds = $Dcf4WaitHangSeconds
++        Nv2aProgressPlateauSeconds = $Nv2aProgressPlateauSeconds
++        Nv2aProgressSignatureAtStop = $nv2aProgressSignatureAtStop
+         PlateauSignatureAtStop = $plateauSignatureAtStop
+         DroppedStdoutLines = $relayResult.DroppedStdoutLines
+         DroppedStderrLines = $relayResult.DroppedStderrLines
+@@ -898,6 +1981,20 @@ if ($useAsyncTraceRelay) {
+             $relayResult.DroppedStderrLines -eq 0)
+         MarkerCountsComplete = $countsComplete
+         MarkerCounts = $markerCounts
++        RunStorageBudgetMiB = $RunStorageBudgetMiB
++        RunStorageBudgetTriggered = $storageBudgetTriggered
++        RunStorageBytesAtStop = $storageBytesAtStop
++        RunStorageAllocatedBytesAtStop = $storageAllocatedBytesAtStop
++        RunStorageBytesAtExit = $storageBytesAtExit
++        RunStorageAllocatedBytesAtExit = -1L
++        ClosedEvidenceAllocatedBytesBeforeCompression = -1L
++        ClosedEvidenceAllocatedBytesAfterCompression = -1L
++        ClosedEvidenceAllocatedBytesReclaimed = 0L
++        TraceLimitHitCount = $traceLimitHitCount
++        TraceLimitHitRows = @($traceLimitHitRows)
++        FileReadTargetTrace = $fileReadTargetSummary
++        ThreadSuspendTrace = $threadSuspendSummary
++        GuestCpuSnapshotsEnabled = [bool]($settings.RECOMP_GUEST_CPU_SNAPSHOT -eq '1')
+     }) -Force
+     $resultManifest | ConvertTo-Json -Depth 8 |
+         Set-Content -LiteralPath (Join-Path $runDirectory 'run-manifest.json') -Encoding UTF8
+@@ -906,4 +2003,37 @@ if ($useAsyncTraceRelay) {
+             '{0} {1}' -f $_.Key, $_.Value
+         } | Set-Content -LiteralPath (Join-Path $runDirectory 'trace-counts.txt') -Encoding UTF8
+     }
++
++    # Keep stage/failure captures and logs lossless; NTFS compression preserves
++    # their names and bytes while reducing the retained footprint after writers
++    # have stopped. Never compress writable saves or game assets here.
++    $closedEvidence = @(Get-ChildItem -LiteralPath $runDirectory -File -Force |
++        Where-Object { $_.Extension -in '.bmp', '.log' })
++    $closedEvidenceAllocatedBytesBeforeCompression = Get-AllocatedBytesForFiles -Files $closedEvidence
++    $closedEvidenceCompressionExitCode = 0
++    if ($closedEvidence.Count -gt 0) {
++        & compact.exe /C /I /Q @($closedEvidence | ForEach-Object { $_.FullName }) 2>$null | Out-Null
++        $closedEvidenceCompressionExitCode = $LASTEXITCODE
++    }
++    $closedEvidenceAllocatedBytesAfterCompression = Get-AllocatedBytesForFiles -Files $closedEvidence
++    $closedEvidenceAllocatedBytesReclaimed = if (
++        $closedEvidenceAllocatedBytesBeforeCompression -ge 0 -and
++        $closedEvidenceAllocatedBytesAfterCompression -ge 0) {
++        [long]($closedEvidenceAllocatedBytesBeforeCompression - $closedEvidenceAllocatedBytesAfterCompression)
++    } else { 0L }
++    $storageAllocatedBytesAtExit = Get-RunDirectoryAllocatedBytes -Path $runDirectory
++    $resultManifest.RunResult | Add-Member -NotePropertyName ClosedEvidenceCompressedFiles `
++        -NotePropertyValue $(if ($closedEvidenceCompressionExitCode -eq 0) { $closedEvidence.Count } else { 0 }) -Force
++    $resultManifest.RunResult | Add-Member -NotePropertyName ClosedEvidenceCompressionExitCode `
++        -NotePropertyValue $closedEvidenceCompressionExitCode -Force
++    $resultManifest.RunResult | Add-Member -NotePropertyName ClosedEvidenceAllocatedBytesBeforeCompression `
++        -NotePropertyValue $closedEvidenceAllocatedBytesBeforeCompression -Force
++    $resultManifest.RunResult | Add-Member -NotePropertyName ClosedEvidenceAllocatedBytesAfterCompression `
++        -NotePropertyValue $closedEvidenceAllocatedBytesAfterCompression -Force
++    $resultManifest.RunResult | Add-Member -NotePropertyName ClosedEvidenceAllocatedBytesReclaimed `
++        -NotePropertyValue $closedEvidenceAllocatedBytesReclaimed -Force
++    $resultManifest.RunResult | Add-Member -NotePropertyName RunStorageAllocatedBytesAtExit `
++        -NotePropertyValue $storageAllocatedBytesAtExit -Force
++    $resultManifest | ConvertTo-Json -Depth 8 |
++        Set-Content -LiteralPath (Join-Path $runDirectory 'run-manifest.json') -Encoding UTF8
+ }
+diff --git a/tools/Walk-ProducerTraceMiniDump.ps1 b/tools/Walk-ProducerTraceMiniDump.ps1
+index 4ec403d..50aaf9f 100644
+--- a/tools/Walk-ProducerTraceMiniDump.ps1
++++ b/tools/Walk-ProducerTraceMiniDump.ps1
+@@ -211,16 +211,16 @@ try {
+     $frame.AddrStack = $stack
+     $frame.AddrFrame = $fp
+     "Dump=$DumpPath TID=$ThreadId StackStart=0x{0:X} StackBytes={1}" -f $thread.StackStart,$thread.StackSize
+-    $lastPc = [ulong]0
++    $lastPc = [uint64]0
+     for ($i = 0; $i -lt 64; $i++) {
+-        $pcAddress = [ulong]$frame.AddrPC.Offset
++        $pcAddress = [uint64]$frame.AddrPC.Offset
+         if ($pcAddress -ne $lastPc) {
+             $module = $dumpModules | Where-Object { $pcAddress -ge $_.Base -and $pcAddress -lt ($_.Base + $_.Size) } | Select-Object -First 1
+             if (-not $module) {
+                 if ($pcAddress) { "Stop: unwind reached non-module address 0x{0:X}." -f $pcAddress }
+                 break
+             }
+-            $moduleOffset = $pcAddress - [ulong]$module.Base
++            $moduleOffset = $pcAddress - [uint64]$module.Base
+             "#{0:D2} {1}+0x{2:X} SP=0x{3:X} FP=0x{4:X}" -f $i,$module.Name,$moduleOffset,$frame.AddrStack.Offset,$frame.AddrFrame.Offset
+             $lastPc = $pcAddress
+         }

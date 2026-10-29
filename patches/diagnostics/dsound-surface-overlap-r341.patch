@@ -1,0 +1,2232 @@
+diff --git a/src/kernel/nv2a_pb_exec.c b/src/kernel/nv2a_pb_exec.c
+index c65632c..297575f 100644
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -30,19 +30,37 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <time.h>
++#if defined(_WIN32)
++#include <windows.h>
++#endif
+ #include "kernel.h"   /* XBOX_CONTIG_BASE / XBOX_CONTIG_SIZE */
+ #include "xbox_memory_layout.h"   /* xbox_Nv2aFrameCounterFlip */
++#include "../nv2a/nv2a_state.h"   /* NV2A PGRAPH register access */
++extern void nv2a_pgraph_notify(uint32_t subchannel, uint32_t method,
++                               uint32_t parameter);
+ /* The swizzle decoder the D3D8 layer already uses -- one implementation of
+  * Morton order, not a second one that can disagree with it. */
+ #include "../d3d/d3d8_swizzle.h"
+ #include "nv2a_vsh_interp.h"
+ #include "nv2a_combiner.h"
+ #if defined(_WIN32)
++#include "../video/fb_vulkan_present.h"
++#endif
++#if defined(_WIN32)
+ #include <windows.h>
+ #define NV_TLS __declspec(thread)
+ #else
+ #define NV_TLS __thread
+ #endif
++static NV_TLS int s_xf_raster_active;
++static uint32_t s_pb_packet_header_va;
++static uint32_t s_pb_parameter_va;
++static uint32_t s_pb_current_method;
++
++void nv2a_pb_exec_set_packet_location(uint32_t header_va)
++{
++    s_pb_packet_header_va = header_va;
++}
+ 
+ extern ptrdiff_t xbox_GetMemoryOffset(void);
+ extern void xbox_FramebufferWindowSet(uint32_t fb_va, uint32_t pitch);
+@@ -121,6 +139,108 @@ static uint32_t dma_resolve(uint32_t offset)
+     return offset;                         /* nothing better to offer */
+ }
+ 
++/* Resolve a semaphore context the way PFIFO/PGRAPH do: handle -> RAMHT entry
++ * -> instance in PRAMIN -> DMA descriptor -> physical-memory target. The
++ * aperture is mapped as RAM in this runtime, so this reads the BIOS/D3D
++ * structures without pretending to emulate the rest of NV2A. */
++static int semaphore_target(uint32_t handle, uint32_t offset,
++                            uint32_t *guest_va, uint32_t *instance_out,
++                            uint32_t *flags_out, uint32_t *limit_out,
++                            uint32_t *frame_out, const char **why)
++{
++    const uint32_t ramin_offset = 0x700000u;
++    const uint32_t ramht_reg_offset = 0x2210u;
++    const uint32_t ramht_bytes = 0x1000u;
++    const uint32_t ramht_slots = ramht_bytes / 8u;
++    const uint32_t max_probes = 128u;
++    const uint8_t *nv2a = (const uint8_t *)((uintptr_t)xbox_GetMemoryOffset()
++                                            + 0xFD000000u);
++    const uint32_t *ramin;
++    uint32_t base, slot, instance, context = 0;
++    uint32_t flags, limit, frame, physical;
++    uint64_t end;
++    int found = 0;
++
++    {
++        uint32_t configured = *(const uint32_t *)(nv2a + ramht_reg_offset);
++        uint32_t size_code = (configured >> 24) & 3u;
++        /* RAMHT size code 3 is the Xbox BIOS 4 KB table used by the guest. */
++        if (size_code != 3u) {
++            *why = "unsupported RAMHT size";
++            return 0;
++        }
++        base = (configured & 0xFFFFu) << 8;
++    }
++    if ((uint64_t)base + ramht_bytes > 0x100000u) {
++        *why = "RAMHT outside PRAMIN";
++        return 0;
++    }
++    ramin = (const uint32_t *)(nv2a + ramin_offset);
++
++    /* With the Xbox BIOS setting, a handle below 2048 hashes directly to
++     * its handle value; the configured search depth permits 128 probes. */
++    slot = handle & (ramht_slots - 1u);
++    for (uint32_t probe = 0; probe < max_probes; probe++) {
++        uint32_t entry = (base / 4u) + slot * 2u;
++        uint32_t entry_handle = ramin[entry];
++        context = ramin[entry + 1u];
++        if ((context & 0x80000000u) && entry_handle == handle) {
++            found = 1;
++            break;
++        }
++        slot = (slot + 1u) & (ramht_slots - 1u);
++    }
++    if (!found) {
++        *why = "RAMHT handle not found";
++        return 0;
++    }
++    /* NV4+ uses the RAMHT engine field only when binding method 0. For DMA
++     * methods such as semaphore release, object suitability comes from the
++     * descriptor class below; valid title entries may use the SW engine bits. */
++    instance = (context & 0x0000FFFFu) << 4;
++    if ((uint64_t)instance + 16u > 0x100000u) {
++        *why = "DMA descriptor outside PRAMIN";
++        return 0;
++    }
++    {
++        const uint32_t *dma = ramin + instance / 4u;
++        flags = dma[0];
++        limit = dma[1];
++        frame = dma[2];
++    }
++    if ((flags & 0xFFFu) != 0x03Du) {
++        *why = "DMA object is not a semaphore";
++        return 0;
++    }
++    if ((flags & 0x00030000u) != 0x00020000u) {
++        *why = "semaphore DMA target is not PCI memory";
++        return 0;
++    }
++    /* NV2A treats the DMA limit as an exclusive address: reaching it faults.
++     * Require all four bytes of the release word to remain below that limit. */
++    if ((offset & 3u) || offset >= limit
++        || limit - offset < sizeof(uint32_t)) {
++        *why = "semaphore offset exceeds DMA limit";
++        return 0;
++    }
++    physical = (frame & 0xFFFFF000u) | (flags & 0xFFF00000u);
++    end = (uint64_t)physical + offset + sizeof(uint32_t);
++    if (end > XBOX_CONTIG_SIZE || end < physical) {
++        *why = "semaphore physical address outside Xbox RAM";
++        return 0;
++    }
++    *guest_va = XBOX_CONTIG_BASE + physical + offset;
++    *instance_out = instance;
++    *flags_out = flags;
++    *limit_out = limit;
++    *frame_out = frame;
++    *why = "ok";
++    return 1;
++}
++
++static uint32_t s_semaphore_dma_handle;
++static uint32_t s_semaphore_offset;
++
+ static int surface_write_refused(uint32_t base, uint32_t bytes, const char *what)
+ {
+     static int said;
+@@ -160,6 +280,9 @@ static int surface_write_refused(uint32_t base, uint32_t bytes, const char *what
+ #define NV097_SET_SURFACE_FORMAT          0x0208
+ #define NV097_SET_SURFACE_PITCH           0x020C
+ #define NV097_SET_SURFACE_COLOR_OFFSET    0x0210
++#define NV097_SET_CONTEXT_DMA_SEMAPHORE   0x01A4
++#define NV097_SET_SEMAPHORE_OFFSET        0x1D6C
++#define NV097_BACK_END_WRITE_SEMAPHORE_RELEASE 0x1D70
+ #define NV097_SET_COLOR_CLEAR_VALUE       0x1D90
+ #define NV097_CLEAR_SURFACE               0x1D94
+ #define NV097_SET_VERTEX_DATA_ARRAY_OFFSET 0x1720   /* +i*4, 16 attributes */
+@@ -187,6 +310,7 @@ static int surface_write_refused(uint32_t base, uint32_t bytes, const char *what
+ #define NV097_SET_FLIP_MODULO             0x0128
+ #define NV097_FLIP_INCREMENT_WRITE        0x012C
+ #define NV097_FLIP_STALL                  0x0130
++#define NV097_WAIT_FOR_IDLE               0x0110
+ #define NV097_ARRAY_ELEMENT16             0x1800
+ /* Draw a run of vertices straight out of the arrays, with no index list:
+  * bits 0..23 are the first vertex, bits 24..31 the count minus one. It may
+@@ -284,6 +408,8 @@ static struct {
+     uint64_t pixels;
+     uint32_t pixel_max;   /* brightest value any pixel write carried */
+     uint32_t clip_x, clip_w, clip_y, clip_h;
++    uint32_t clear_x_min, clear_x_max, clear_y_min, clear_y_max;
++    uint8_t clear_rect_valid; /* bit 0: horizontal, bit 1: vertical */
+     uint32_t clear_color;
+     uint32_t clears, unhandled_total;
+     uint32_t flip_read, flip_write, flip_modulo, flips;
+@@ -324,6 +450,12 @@ static struct {
+     uint32_t zeta_offset, zstencil_clear;
+ } s_gpu;
+ 
++static int s_logo_depth_zero_valid;
++static uint32_t s_logo_depth_zero_offset;
++static uint32_t s_logo_depth_zero_color_offset;
++static int s_logo_depth_cleared;
++static uint32_t s_logo_depth_clear_offset;
++
+ /* Unhandled methods, ranked. The interesting output is not that something was
+  * skipped but which things dominate, because that is the order to implement
+  * them in. */
+@@ -654,6 +786,19 @@ static void dump_surface_bmp(void)
+                 path, w, h, s_gpu.color_offset, bpp);
+ }
+ 
++/* Capture translated vertex-program draws at their completion boundary. The
++ * older fixed-function dump hook does not see batches routed through
++ * raster_batch_program, so periodic snapshots cannot be paired by draw. */
++static void dump_program_draw_if_requested(void)
++{
++    static unsigned count;
++    if (!getenv("RECOMP_FB_DUMP_PROGRAM_DRAWS") || s_flip_dumping
++        || count >= 16)
++        return;
++    count++;
++    dump_surface_bmp();
++}
++
+ /* Defined below, next to the rest of the rasteriser; the clear path uses it
+  * for RECOMP_RASTER_TEST. */
+ static void raster_triangle(const float a[2], const float b[2],
+@@ -664,11 +809,27 @@ static void clear_surface(uint32_t param)
+ {
+     uint8_t *mem = (uint8_t *)xbox_GetMemoryOffset();
+     uint32_t bpp = surface_bpp();
+-    uint32_t y, x;
++    uint32_t x0, x1, y0, y1, y, x;
+ 
+     if (!(param & NV097_CLEAR_COLOR_MASK))
+         return;                            /* depth/stencil only */
+-    if (!s_gpu.color_offset || !s_gpu.pitch || !s_gpu.clip_h || bpp == 0)
++    if (!s_gpu.color_offset || !s_gpu.pitch || !s_gpu.clip_w
++        || !s_gpu.clip_h || bpp == 0)
++        return;
++    /* SET_CLEAR_RECT uses inclusive surface-space bounds. Intersect them
++     * with the active surface clip, which remains the fallback until each
++     * clear-rectangle axis has been programmed by the guest. */
++    x0 = (s_gpu.clear_rect_valid & 1u) ? s_gpu.clear_x_min : s_gpu.clip_x;
++    x1 = (s_gpu.clear_rect_valid & 1u) ? s_gpu.clear_x_max
++                                      : s_gpu.clip_x + s_gpu.clip_w - 1;
++    y0 = (s_gpu.clear_rect_valid & 2u) ? s_gpu.clear_y_min : s_gpu.clip_y;
++    y1 = (s_gpu.clear_rect_valid & 2u) ? s_gpu.clear_y_max
++                                      : s_gpu.clip_y + s_gpu.clip_h - 1;
++    if (x0 < s_gpu.clip_x) x0 = s_gpu.clip_x;
++    if (y0 < s_gpu.clip_y) y0 = s_gpu.clip_y;
++    if (x1 >= s_gpu.clip_x + s_gpu.clip_w) x1 = s_gpu.clip_x + s_gpu.clip_w - 1;
++    if (y1 >= s_gpu.clip_y + s_gpu.clip_h) y1 = s_gpu.clip_y + s_gpu.clip_h - 1;
++    if (x1 < x0 || y1 < y0)
+         return;
+     {
+         uint32_t base = dma_resolve(s_gpu.color_offset);
+@@ -679,12 +840,12 @@ static void clear_surface(uint32_t param)
+         s_gpu.color_base = base;
+     }
+ 
+-    for (y = 0; y < s_gpu.clip_h; y++) {
++    for (y = y0; y <= y1; y++) {
+         uint8_t *row = mem + s_gpu.color_base
+-                     + (size_t)(s_gpu.clip_y + y) * s_gpu.pitch;
++                     + (size_t)y * s_gpu.pitch;
+         if (bpp == 4) {
+-            uint32_t *p = (uint32_t *)row + s_gpu.clip_x;
+-            for (x = 0; x < s_gpu.clip_w; x++)
++            uint32_t *p = (uint32_t *)row;
++            for (x = x0; x <= x1; x++)
+                 p[x] = s_gpu.clear_color;
+         } else if (bpp == 2) {
+             /* The clear value is always given as A8R8G8B8; a 16-bit surface
+@@ -692,8 +853,8 @@ static void clear_surface(uint32_t param)
+             uint16_t v = (uint16_t)(((s_gpu.clear_color >> 8) & 0xF800)
+                                   | ((s_gpu.clear_color >> 5) & 0x07E0)
+                                   | ((s_gpu.clear_color >> 3) & 0x001F));
+-            uint16_t *p = (uint16_t *)row + s_gpu.clip_x;
+-            for (x = 0; x < s_gpu.clip_w; x++)
++            uint16_t *p = (uint16_t *)row;
++            for (x = x0; x <= x1; x++)
+                 p[x] = v;
+         }
+     }
+@@ -873,6 +1034,34 @@ static int sample_tex(const Texture *t, uint32_t face_offset,
+     const uint8_t *p;
+     uint32_t fmt, base = t->offset + face_offset;
+ 
++    /* Bounded, read-only probe used to identify an invalid texture address
++     * before the first texel read. It does not add a validity guard or change
++     * the sampling branch. */
++    {
++        static volatile LONG trace_configured;
++        static volatile LONG trace_enabled;
++        static volatile LONG trace_count;
++        static volatile LONG invalid_count;
++        if (InterlockedCompareExchange(&trace_configured, 1, 0) == 0)
++            InterlockedExchange(&trace_enabled,
++                getenv("RECOMP_TEX_SAMPLE_TRACE") != NULL);
++        if (trace_enabled) {
++            LONG n = InterlockedIncrement(&trace_count);
++            int in_range = xbox_IsXboxAddress((uintptr_t)base);
++            if (n <= 128 || (!in_range
++                    && InterlockedIncrement(&invalid_count) <= 128)) {
++                fprintf(stderr,
++                    "[TEX-SAMPLE] n=%ld valid=%d in_range=%d base=%08X host=%p "
++                    "offset=%08X face=%08X size=%ux%u pitch=%u fmt=%08X "
++                    "uv=%u,%u wrap=%08X,%08X levels=%u filter=%08X cube=%d\n",
++                    n, t->valid, in_range, base,
++                    (const void *)(mem + base), t->offset, face_offset,
++                    t->width, t->height, t->pitch, t->color,
++                    u, v, t->addr_u, t->addr_v, t->levels, t->filter, t->cube);
++            }
++        }
++    }
++
+     if (!t->valid)
+         return 0;
+     u = wrap_coord(u, t->width,  t->addr_u);
+@@ -1126,6 +1315,9 @@ static void dump_texture_bmp(uint32_t seq)
+  * paces on frames actually presented, so the rasteriser's throughput is the
+  * playback rate. */
+ static uint8_t *s_surface;          /* host address of surface row 0 */
++static volatile LONG s_dsound_surface_trace_count;
++static volatile LONG s_dsound_surface_trace_configured;
++static volatile LONG s_dsound_surface_trace_enabled;
+ 
+ static int surface_begin_batch(const uint8_t *mem)
+ {
+@@ -1171,17 +1363,56 @@ static void blend_factor(uint32_t f, const float s[4], const float d[4],
+ static void put_pixel(uint8_t *mem, uint32_t bpp, int x, int y, uint32_t argb)
+ {
+     uint8_t *row;
++    uint32_t source_argb = argb, blend_dst = 0;
+ 
+     (void)mem;
+-    if (x < (int)s_gpu.clip_x || x >= (int)(s_gpu.clip_x + s_gpu.clip_w))
+-        return;
+-    if (y < (int)s_gpu.clip_y || y >= (int)(s_gpu.clip_y + s_gpu.clip_h))
++    /* raster_xf_triangle clips its integer bounds before publishing a batch,
++     * so every worker pixel is already inside the guest clip rectangle. Keep
++     * the guard for the serial/generic raster paths, which do not carry that
++     * invariant into put_pixel. */
++    if (!s_xf_raster_active
++        && (x < (int)s_gpu.clip_x
++            || x >= (int)(s_gpu.clip_x + s_gpu.clip_w)
++            || y < (int)s_gpu.clip_y
++            || y >= (int)(s_gpu.clip_y + s_gpu.clip_h)))
+         return;
+-    s_gpu.pixels++;
+-    if ((argb & 0x00FFFFFFu) > (s_gpu.pixel_max & 0x00FFFFFFu))
+-        s_gpu.pixel_max = argb;
++    if (!s_xf_raster_active) {
++        s_gpu.pixels++;
++        if ((argb & 0x00FFFFFFu) > (s_gpu.pixel_max & 0x00FFFFFFu))
++            s_gpu.pixel_max = argb;
++    }
+     row = s_surface + (size_t)y * s_gpu.pitch;
+ 
++    /* Narrow diagnostic for the reproduced DirectSound list overwrite. The
++     * address and active NV2A target state are recorded only when a pixel
++     * destination overlaps the three observed host addresses, with a strict
++     * process-wide cap. This does not alter raster or guest behavior. */
++    if (s_dsound_surface_trace_configured == 0
++        && InterlockedCompareExchange(&s_dsound_surface_trace_configured,
++                                      1, 0) == 0) {
++        InterlockedExchange(&s_dsound_surface_trace_enabled,
++                            getenv("RECOMP_DSOUND_SURFACE_TRACE") != NULL);
++    }
++    if (s_dsound_surface_trace_enabled) {
++        uintptr_t pixel_address = (uintptr_t)(row + (size_t)x * bpp);
++        if (pixel_address >= (uintptr_t)0x8039C08Cu
++            && pixel_address <= (uintptr_t)0x8039C09Fu
++            && InterlockedIncrement(&s_dsound_surface_trace_count) <= 16) {
++            fprintf(stderr,
++                    "[DS-SURFACE-PIXEL] n=%ld addr=%p guest_candidate=0x%08X "
++                    "color=0x%08X resolved=0x%08X pitch=%u format=0x%X "
++                    "clip=%u,%u %ux%u xy=%d,%d bpp=%u argb=0x%08X "
++                    "surface=%p mem=%p xf=%d\n",
++                    s_dsound_surface_trace_count, (void *)pixel_address,
++                    (uint32_t)(pixel_address - (uintptr_t)0x1000u),
++                    s_gpu.color_offset, dma_resolve(s_gpu.color_offset),
++                    s_gpu.pitch, s_gpu.format, s_gpu.clip_x,
++                    s_gpu.clip_y, s_gpu.clip_w, s_gpu.clip_h, x, y, bpp,
++                    argb, s_surface, mem, s_xf_raster_active);
++            fflush(stderr);
++        }
++    }
++
+     /* Blending, with the GL factor set and equations the NV2A takes.
+      *
+      * Only SRC_ALPHA / ONE_MINUS_SRC_ALPHA used to be honoured and every other
+@@ -1200,6 +1431,7 @@ static void put_pixel(uint8_t *mem, uint32_t bpp, int x, int y, uint32_t argb)
+             dst = 0xFF000000u | ((t & 0xF800u) << 8) | ((t & 0x07E0u) << 5)
+                 | ((t & 0x001Fu) << 3);
+         }
++        blend_dst = dst;
+         for (k = 0; k < 4; k++) {           /* r g b a, 0..1 */
+             int sh = k == 3 ? 24 : 16 - 8 * k;
+             sc[k] = (float)((argb >> sh) & 0xFF) / 255.0f;
+@@ -1243,6 +1475,23 @@ static void put_pixel(uint8_t *mem, uint32_t bpp, int x, int y, uint32_t argb)
+                                         | ((argb >> 5) & 0x07E0)
+                                         | ((argb >> 3) & 0x001F));
+     }
++    {
++        /* Observe opaque source pixels in the textured title logo. The source
++         * colour is captured before blending; the stored colour is after it. */
++        static int trace = -1;
++        static unsigned shown;
++        if (trace < 0)
++            trace = getenv("RECOMP_PIXEL_TRACE") != NULL;
++        if (trace && s_gpu.draws == 2 && s_gpu.texs[0].valid
++            && (source_argb & 0xFF000000u) != 0 && shown < 32) {
++            shown++;
++            fprintf(stderr,
++                    "[PX] draw=%u #%u xy=%d,%d src=%08X dst=%08X out=%08X blend=%u %X/%X surf=%08X\n",
++                    s_gpu.draws, shown, x, y, source_argb, blend_dst, argb,
++                    s_gpu.blend_enable, s_gpu.blend_sfactor,
++                    s_gpu.blend_dfactor, s_gpu.color_offset);
++        }
++    }
+ }
+ 
+ /* Half-space fill. Barycentric edge functions rather than scanline slopes:
+@@ -1669,6 +1918,7 @@ static void rc_texel(const Texture *t, uint32_t face, float u, float v,
+         int32_t iu = (int32_t)floorf(fu), iv = (int32_t)floorf(fv), k, j;
+         wu = fu - (float)iu;
+         wv = fv - (float)iv;
++
+         for (k = 0; k < 4; k++) {
+             if (sample_tex(t, face, (uint32_t)(iu + (k & 1)),
+                            (uint32_t)(iv + (k >> 1)), &texel))
+@@ -1794,10 +2044,154 @@ typedef struct {
+     const float *a, *b, *c;
+     float iw[3], uv[3][2], stc[3][4][4], vfog[3], fogc[4], inv_area;
+     float *zb;
+-    int minx, maxx, miny, maxy, use_rc, textured;
++    int minx, maxx, miny, maxy, use_rc, textured, depth_only;
++    int opaque_black, validate_opaque_black;
+ } XfTri;
+ 
+-typedef struct { uint64_t depth_fail, pixels; uint32_t zpass; } XfCount;
++typedef struct {
++    uint64_t depth_fail, pixels, black_checked, black_mismatches;
++    uint64_t mul_rc_checked, mul_rc_mismatches;
++    uint64_t passthrough_checked, passthrough_mismatches;
++    uint32_t pixel_max;
++    uint32_t zpass;
++} XfCount;
++
++static void xf_count_add(XfCount *dst, const XfCount *src)
++{
++    dst->depth_fail += src->depth_fail;
++    dst->pixels += src->pixels;
++    dst->black_checked += src->black_checked;
++    dst->black_mismatches += src->black_mismatches;
++    dst->mul_rc_checked += src->mul_rc_checked;
++    dst->mul_rc_mismatches += src->mul_rc_mismatches;
++    dst->passthrough_checked += src->passthrough_checked;
++    dst->passthrough_mismatches += src->passthrough_mismatches;
++    if ((src->pixel_max & 0x00FFFFFFu) > (dst->pixel_max & 0x00FFFFFFu))
++        dst->pixel_max = src->pixel_max;
++    dst->zpass += src->zpass;
++}
++
++/* Runtime modes for the exact Steel Battalion startup format-0x12 pass. */
++static int xf_opaque_black_mode(void)
++{
++    static int mode = -1;
++    if (mode < 0) {
++        if (getenv("RECOMP_VALIDATE_OPAQUE_BLACK_RASTER")) mode = 1;
++        else if (getenv("RECOMP_DISABLE_OPAQUE_BLACK_RASTER")) mode = 0;
++        else mode = 2;
++    }
++    return mode;
++}
++
++static int xf_opaque_black_gate(const XfTri *T)
++{
++    const Nv2aVshOutput *v[3] = {T->va, T->vb, T->vc};
++    float tex[4][4] = {{0}}, fog[4] = {0}, out[4];
++    uint32_t i, j;
++
++    if (!xf_opaque_black_mode() || !T->use_rc || !T->textured
++        || (s_gpu.xf_mode & 3) != 2 || !s_gpu.texs[0].valid
++        || s_gpu.texs[0].color != 0x12
++        || s_gpu.texs[0].width != 1024 || s_gpu.texs[0].height != 1024
++        || s_gpu.blend_enable || s_gpu.alpha_test || s_gpu.fog_enable
++        || !s_gpu.depth_test || s_gpu.depth_func != 0x203 || s_gpu.depth_mask
++        || s_gpu.zpass_enable || s_gpu.color_mask != 0x01010101u
++        || s_gpu.texs[0].filter != 0x02022000
++        || !s_gpu.rc_seen || s_gpu.rc.control != 0x00011101
++        || s_gpu.rc.stage_program != 0
++        || s_gpu.rc.color_icw[0] != 0xC4200000
++        || s_gpu.rc.alpha_icw[0] != 0xD4301010
++        || s_gpu.rc.color_ocw[0] != 0x000000C0
++        || s_gpu.rc.alpha_ocw[0] != 0x000000C0
++        || s_gpu.rc.final0 != 0x200C0000
++        || s_gpu.rc.final1 != 0x00001C80
++        || surface_bpp() != 4 || s_gpu.pitch != 640u * 4u
++        || s_gpu.clip_x != 0 || s_gpu.clip_y != 0
++        || s_gpu.clip_w != 640 || s_gpu.clip_h != 480)
++        return 0;
++
++    for (i = 0; i < 3; i++) {
++        if ((v[i]->pos[0] != 0.0f && v[i]->pos[0] != 640.0f)
++            || (v[i]->pos[1] != 0.0f && v[i]->pos[1] != 480.0f)
++            || v[i]->pos[2] != 0.0f || v[i]->pos[3] != 1.0f
++            || v[i]->d0[0] != 0.0f || v[i]->d0[1] != 0.0f
++            || v[i]->d0[2] != 0.0f || v[i]->d0[3] != 1.0f)
++            return 0;
++        for (j = 0; j < 4; j++)
++            if (v[i]->d1[j] != T->va->d1[j])
++                return 0;
++        if (v[i]->tex[0][0] != 0.0f || v[i]->tex[0][1] != 0.0f
++            || v[i]->tex[0][2] != 0.0f || v[i]->tex[0][3] != 1.0f)
++            return 0;
++    }
++
++    /* Verify both texture extremes with the actual interpolated constants.
++     * Validation mode also compares every covered reference fragment. */
++    tex[0][3] = 1.0f;
++    nv2a_rc_eval(&s_gpu.rc, T->va->d0, T->va->d1, fog,
++                 (const float (*)[4])tex, out);
++    if (pack_color(out) != 0xFF000000u)
++        return 0;
++    tex[0][0] = tex[0][1] = tex[0][2] = tex[0][3] = 1.0f;
++    nv2a_rc_eval(&s_gpu.rc, T->va->d0, T->va->d1, fog,
++                 (const float (*)[4])tex, out);
++    return pack_color(out) == 0xFF000000u;
++}
++
++/* This exact one-stage program computes interpolated diffuse * texture.
++ * Keep texture sampling, triangle coverage, depth, alpha, and framebuffer
++ * writes in the reference path; specialize only the combiner arithmetic. */
++static int xf_diffuse_texture_mul_gate(const XfTri *T)
++{
++    const Nv2aCombiner *rc = &s_gpu.rc;
++    int equivalent_2d_stage = rc->stage_program == 0x00000001;
++
++    /* Steel Battalion uses mode 3 for this non-cubemap screen texture. The
++     * executor's mode-3 non-cube fetch uses c.xy directly, which is identical
++     * to PROJECT2D (mode 1) when q is exactly one at all three vertices. */
++    if (rc->stage_program == 0x00000003) {
++        uint32_t i;
++        const Texture *tex = &s_gpu.texs[0];
++        if (!T->textured || !tex->valid || tex->cube)
++            return 0;
++        for (i = 0; i < 3; i++)
++            if (T->stc[i][0][3] != 1.0f)
++                return 0;
++        equivalent_2d_stage = 1;
++    }
++
++    return T->use_rc && T->textured && !s_gpu.alpha_test
++        && rc->control == 0x00011101 && equivalent_2d_stage
++        && rc->color_icw[0] == 0xC4C80000
++        && rc->alpha_icw[0] == 0xD4D81010
++        && rc->color_ocw[0] == 0x000000C0
++        && rc->alpha_ocw[0] == 0x000000C0
++        && rc->final0 == 0x200C0000
++        && rc->final1 == 0x00001C80;
++}
++
++/* The measured format-0x0E fade configures no texture stage and this exact
++ * combiner returns interpolated diffuse color unchanged. Preserve per-pixel
++ * coverage, depth, and blending while skipping the generic combiner program. */
++static int xf_diffuse_passthrough_gate(const XfTri *T)
++{
++    const Nv2aCombiner *rc = &s_gpu.rc;
++    const Texture *tex = &s_gpu.texs[0];
++    return T->use_rc && T->textured && tex->valid && tex->color == 0x0E
++        && tex->width == 512 && tex->height == 512
++        && tex->filter == 0x02022000 && tex->addr_u == 1 && tex->addr_v == 1
++        && !s_gpu.alpha_test && s_gpu.blend_enable
++        && s_gpu.blend_sfactor == 0x0302 && s_gpu.blend_dfactor == 0x0303
++        && s_gpu.blend_equation == 0x8006 && s_gpu.depth_test
++        && s_gpu.depth_func == 0x203 && !s_gpu.depth_mask
++        && !s_gpu.zpass_enable && s_gpu.color_mask == 0x01010101u
++        && rc->control == 0x00011101 && rc->stage_program == 0
++        && rc->color_icw[0] == 0xC4200000
++        && rc->alpha_icw[0] == 0xD4301010
++        && rc->color_ocw[0] == 0x000000C0
++        && rc->alpha_ocw[0] == 0x000000C0
++        && rc->final0 == 0x200C0000 && rc->final1 == 0x00001C80;
++}
+ 
+ /* Rows y0, y0+step, ... < maxy of triangle T. */
+ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+@@ -1805,6 +2199,18 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+     const float *a = T->a, *b = T->b, *c = T->c;
+     const Nv2aVshOutput *va = T->va, *vb = T->vb, *vc = T->vc;
+     int x, y, k;
++    int diffuse_texture_mul = xf_diffuse_texture_mul_gate(T);
++    int diffuse_passthrough = xf_diffuse_passthrough_gate(T);
++    int validate_mul = diffuse_texture_mul
++                     && getenv("RECOMP_VALIDATE_DIFFUSE_TEXTURE_MUL") != NULL;
++    int validate_passthrough = diffuse_passthrough
++                             && getenv("RECOMP_VALIDATE_DIFFUSE_PASSTHROUGH") != NULL;
++    /* This test is inside the per-pixel loop below. Cache the process-static
++     * trace flag once per triangle so worker threads do not contend on the CRT
++     * environment lock for every covered pixel. */
++    int pixel_trace = s_gpu.draws == 2 && getenv("RECOMP_PIXEL_TRACE") != NULL;
++    int was_xf_raster_active = s_xf_raster_active;
++    s_xf_raster_active = 1;
+ 
+     for (y = y0; y < T->maxy; y += step) {
+         for (x = T->minx; x < T->maxx; x++) {
+@@ -1826,16 +2232,79 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+                 /* Depth test, then shade, then alpha test, and only then the
+                  * depth write: an alpha-tested texel that is cut away must
+                  * not leave its depth behind (foliage, fences). */
+-                if (zp && s_gpu.depth_test && !depth_pass(z, *zp)) {
+-                    cnt->depth_fail++;
++                if (zp && s_gpu.depth_test) {
++                    int depth_ok = depth_pass(z, *zp);
++                    if (!depth_ok) {
++                        cnt->depth_fail++;
++                        continue;
++                    }
++                }
++                if (T->depth_only) {
++                    if (zp && s_gpu.depth_mask)
++                        *zp = z;
++                    if (s_gpu.zpass_enable)
++                        cnt->zpass++;
++                    if (s_gpu.color_mask & 0x01010101u)
++                        cnt->pixels++;
+                     continue;
+                 }
+                 argb = 0;
+-                if (shade) {
++                if (shade && T->opaque_black && !T->validate_opaque_black) {
++                    argb = 0xFF000000u;
++                } else if (shade) {
+                     for (k = 0; k < 4; k++)
+                         col[k] = l0 * va->d0[k] + l1 * vb->d0[k] + l2 * vc->d0[k];
+                     pw = l0 * T->iw[0] + l1 * T->iw[1] + l2 * T->iw[2];
+-                    if (T->use_rc) {
++                    if (T->use_rc && diffuse_texture_mul) {
++                        float tc[4], texel[4], out[4], reference[4];
++                        float d1[4] = {0}, fog[4] = {0};
++                        float stage_tex[4][4] = {{0}};
++                        int j;
++                        for (j = 0; j < 4; j++)
++                            tc[j] = (l0 * T->stc[0][0][j]
++                                   + l1 * T->stc[1][0][j]
++                                   + l2 * T->stc[2][0][j]) / pw;
++                        if (!rc_stage_fetch(0, tc, texel))
++                            continue;
++                        for (j = 0; j < 4; j++) {
++                            float product = col[j] * texel[j];
++                            out[j] = product < 0.0f ? 0.0f
++                                   : product > 1.0f ? 1.0f : product;
++                            stage_tex[0][j] = texel[j];
++                        }
++                        stage_tex[1][3] = stage_tex[2][3] = stage_tex[3][3] = 1.0f;
++                        argb = pack_color(out);
++                        if (validate_mul) {
++                            uint32_t reference_argb;
++                            nv2a_rc_eval(&s_gpu.rc, col, d1, fog,
++                                         (const float (*)[4])stage_tex,
++                                         reference);
++                            reference_argb = pack_color(reference);
++                            cnt->mul_rc_checked++;
++                            if (argb != reference_argb) {
++                                cnt->mul_rc_mismatches++;
++                                argb = reference_argb;
++                            }
++                        }
++                    } else if (T->use_rc && diffuse_passthrough) {
++                        float d1[4] = {0}, fog[4] = {0};
++                        float stage_tex[4][4] = {{0}}, reference[4];
++                        stage_tex[0][3] = stage_tex[1][3]
++                            = stage_tex[2][3] = stage_tex[3][3] = 1.0f;
++                        argb = pack_color(col);
++                        if (validate_passthrough) {
++                            uint32_t reference_argb;
++                            nv2a_rc_eval(&s_gpu.rc, col, d1, fog,
++                                         (const float (*)[4])stage_tex,
++                                         reference);
++                            reference_argb = pack_color(reference);
++                            cnt->passthrough_checked++;
++                            if (argb != reference_argb) {
++                                cnt->passthrough_mismatches++;
++                                argb = reference_argb;
++                            }
++                        }
++                    } else if (T->use_rc) {
+                         float d1[4], fog[4], t[4][4], out[4], tc[4];
+                         int st, j, keep = 1;
+                         for (k = 0; k < 4; k++)
+@@ -1860,6 +2329,14 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+                         if (s_gpu.alpha_test && !alpha_test_pass(out[3]))
+                             continue;
+                         argb = pack_color(out);
++                        if (pixel_trace
++                            && ((x == 220 && y == 234) || (x == 300 && y == 240)))
++                            fprintf(stderr,
++                                    "[RCPIX] draw=%u xy=%d,%d v0=%g,%g,%g,%g d1=%g,%g,%g,%g t0=%g,%g,%g,%g out=%g,%g,%g,%g\n",
++                                    s_gpu.draws, x, y, col[0], col[1], col[2], col[3],
++                                    d1[0], d1[1], d1[2], d1[3],
++                                    t[0][0], t[0][1], t[0][2], t[0][3],
++                                    out[0], out[1], out[2], out[3]);
+                     } else {
+                         argb = pack_color(col);
+                         if (T->textured) {
+@@ -1876,6 +2353,11 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+                             continue;
+                     }
+                 }
++                if (T->opaque_black && T->validate_opaque_black) {
++                    cnt->black_checked++;
++                    if (argb != 0xFF000000u)
++                        cnt->black_mismatches++;
++                }
+                 if (zp && s_gpu.depth_mask)
+                     *zp = z;
+                 if (s_gpu.zpass_enable)
+@@ -1884,9 +2366,12 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+                     continue;              /* colour writes off: depth only */
+                 cnt->pixels++;
+             }
++            if ((argb & 0x00FFFFFFu) > (cnt->pixel_max & 0x00FFFFFFu))
++                cnt->pixel_max = argb;
+             put_pixel(T->mem, T->bpp, x, y, argb);
+         }
+     }
++    s_xf_raster_active = was_xf_raster_active;
+ }
+ 
+ /* Worker threads for big triangles.
+@@ -1897,10 +2382,12 @@ static void xf_rows(const XfTri *T, int y0, int step, XfCount *cnt)
+  * split cleanly by row: every pixel reads only its own depth and colour, so
+  * interleaved rows on N threads need no locking. Small triangles stay on the
+  * executor thread, where waking workers would cost more than it saves.
+- * RECOMP_RASTER_THREADS=<n> sets the count (1 = off); the default leaves a
+- * few cores for the title and the host.
+- * ponytail: s_gpu.pixels/pixel_max in put_pixel are unsynchronised stats and
+- * may undercount; nothing depends on them. */
++ * RECOMP_RASTER_THREADS=<n> sets the total thread count (1 = off). Four is
++ * the default after a 512x512 Steel Battalion startup sample cut median CPU
++ * raster time from 45.89 ms to 15.74 ms; broader gameplay still needs testing.
++ * The XF worker path accumulates pixel totals and maxima per worker, then
++ * merges them once per triangle. Legacy single-thread raster paths keep their
++ * direct counters. */
+ #define NV_RASTER_MAX_THREADS 16
+ #define NV_RASTER_MT_MIN_PIXELS 8192
+ 
+@@ -1909,19 +2396,186 @@ static struct {
+     int n;                                  /* threads incl. the caller */
+     HANDLE start[NV_RASTER_MAX_THREADS], done;
+     volatile LONG pending;
+-    const XfTri *tri;
++    const XfTri *tris;
++    int ntris;
++    uint64_t work_ticks[NV_RASTER_MAX_THREADS];
+     XfCount cnt[NV_RASTER_MAX_THREADS];
+ } s_pool;
++static int s_raster_sync_trace;
++static volatile LONG s_raster_active_batches;
++static volatile LONG s_raster_active_workers;
++static volatile LONG s_raster_batch_serial;
++static volatile LONG s_raster_last_batch_id;
++static volatile LONG s_raster_last_batch_triangles;
++static volatile LONG s_raster_worker_start_mask;
++static volatile LONG s_raster_worker_wake_mask;
++static volatile LONG s_raster_worker_complete_mask;
++static volatile LONG s_raster_worker_waiting_mask;
++static volatile LONG s_raster_worker_start_fail_mask;
++static volatile LONG s_raster_worker_wait_fail_mask;
++static volatile LONG s_raster_join_waiting;
++static volatile LONG s_raster_join_result = -1;
++static volatile LONG s_raster_done_signal_failed;
++
++/* Opt-in timing for the translated scene's CPU raster path. The counters are
++ * collected only on the executor thread, after all workers have joined. */
++static int s_raster_perf_trace;
++static LARGE_INTEGER s_raster_perf_freq;
++static uint64_t s_raster_perf_last;
++static uint64_t s_raster_perf_batches, s_raster_perf_parallel;
++static uint64_t s_raster_perf_tris, s_raster_perf_bbox_pixels;
++static uint64_t s_raster_perf_pixels, s_raster_perf_wall_ticks;
++static uint64_t s_raster_perf_active_ticks;
++static uint64_t s_raster_perf_min_tris = UINT64_MAX;
++static uint64_t s_raster_perf_max_tris, s_raster_perf_max_wall_ticks;
++static uint64_t s_raster_perf_max_active_ticks;
++
++void xbox_nv2a_get_raster_snapshot(XBOX_NV2A_RASTER_SNAPSHOT *snapshot)
++{
++    if (!snapshot)
++        return;
++    snapshot->active_batches = InterlockedCompareExchange(
++            &s_raster_active_batches, 0, 0);
++    snapshot->active_workers = InterlockedCompareExchange(
++            &s_raster_active_workers, 0, 0);
++    snapshot->pending_workers = InterlockedCompareExchange(
++            &s_pool.pending, 0, 0);
++    snapshot->pool_threads = s_pool.n;
++    snapshot->last_batch_id = InterlockedCompareExchange(
++            &s_raster_last_batch_id, 0, 0);
++    snapshot->last_batch_triangles = InterlockedCompareExchange(
++            &s_raster_last_batch_triangles, 0, 0);
++    snapshot->worker_start_mask = InterlockedCompareExchange(
++            &s_raster_worker_start_mask, 0, 0);
++    snapshot->worker_wake_mask = InterlockedCompareExchange(
++            &s_raster_worker_wake_mask, 0, 0);
++    snapshot->worker_complete_mask = InterlockedCompareExchange(
++            &s_raster_worker_complete_mask, 0, 0);
++    snapshot->worker_waiting_mask = InterlockedCompareExchange(
++            &s_raster_worker_waiting_mask, 0, 0);
++    snapshot->worker_start_fail_mask = InterlockedCompareExchange(
++            &s_raster_worker_start_fail_mask, 0, 0);
++    snapshot->worker_wait_fail_mask = InterlockedCompareExchange(
++            &s_raster_worker_wait_fail_mask, 0, 0);
++    snapshot->join_waiting = InterlockedCompareExchange(
++            &s_raster_join_waiting, 0, 0);
++    snapshot->join_result = InterlockedCompareExchange(
++            &s_raster_join_result, 0, 0);
++    snapshot->done_signal_failed = InterlockedCompareExchange(
++            &s_raster_done_signal_failed, 0, 0);
++}
++
++static uint64_t raster_perf_now(void)
++{
++    LARGE_INTEGER now;
++    QueryPerformanceCounter(&now);
++    return (uint64_t)now.QuadPart;
++}
++
++static void raster_perf_record(int nthreads, int parallel, int ntris,
++                               uint64_t bbox_pixels, uint64_t pixels,
++                               uint64_t wall_ticks, uint64_t active_ticks)
++{
++    uint64_t now;
++    if (!s_raster_perf_trace)
++        return;
++    s_raster_perf_batches++;
++    s_raster_perf_parallel += parallel != 0;
++    s_raster_perf_tris += (uint64_t)ntris;
++    s_raster_perf_bbox_pixels += bbox_pixels;
++    s_raster_perf_pixels += pixels;
++    s_raster_perf_wall_ticks += wall_ticks;
++    s_raster_perf_active_ticks += active_ticks;
++    if ((uint64_t)ntris < s_raster_perf_min_tris)
++        s_raster_perf_min_tris = (uint64_t)ntris;
++    if ((uint64_t)ntris > s_raster_perf_max_tris)
++        s_raster_perf_max_tris = (uint64_t)ntris;
++    if (wall_ticks > s_raster_perf_max_wall_ticks)
++        s_raster_perf_max_wall_ticks = wall_ticks;
++    if (active_ticks > s_raster_perf_max_active_ticks)
++        s_raster_perf_max_active_ticks = active_ticks;
++    now = raster_perf_now();
++    if (!s_raster_perf_last)
++        s_raster_perf_last = now;
++    if (now - s_raster_perf_last >= (uint64_t)s_raster_perf_freq.QuadPart * 2) {
++        double scale = 1000.0 / (double)s_raster_perf_freq.QuadPart;
++        fprintf(stderr,
++                "[RASTER-PERF] tick_ms=%llu batches=%llu parallel=%llu threads=%d "
++                "triangles=%llu batch_tri_min=%llu batch_tri_avg=%.2f batch_tri_max=%llu "
++                "bbox_pixels=%llu pixel_writes=%llu batch_wall_ms=%.2f "
++                "raster_active_ms=%.2f max_batch_wall_ms=%.2f max_raster_active_ms=%.2f\n",
++                (unsigned long long)GetTickCount64(),
++                (unsigned long long)s_raster_perf_batches,
++                (unsigned long long)s_raster_perf_parallel, nthreads,
++                (unsigned long long)s_raster_perf_tris,
++                (unsigned long long)(s_raster_perf_batches ? s_raster_perf_min_tris : 0),
++                s_raster_perf_batches ? (double)s_raster_perf_tris / (double)s_raster_perf_batches : 0.0,
++                (unsigned long long)s_raster_perf_max_tris,
++                (unsigned long long)s_raster_perf_bbox_pixels,
++                (unsigned long long)s_raster_perf_pixels,
++                (double)s_raster_perf_wall_ticks * scale,
++                (double)s_raster_perf_active_ticks * scale,
++                (double)s_raster_perf_max_wall_ticks * scale,
++                (double)s_raster_perf_max_active_ticks * scale);
++        s_raster_perf_batches = s_raster_perf_parallel = 0;
++        s_raster_perf_tris = s_raster_perf_bbox_pixels = 0;
++        s_raster_perf_pixels = s_raster_perf_wall_ticks = 0;
++        s_raster_perf_active_ticks = 0;
++        s_raster_perf_min_tris = UINT64_MAX;
++        s_raster_perf_max_tris = s_raster_perf_max_wall_ticks = 0;
++        s_raster_perf_max_active_ticks = 0;
++        s_raster_perf_last = now;
++    }
++}
++
++/* Assign each framebuffer row to one worker across the whole draw batch.
++ * Every worker visits triangles in submission order, preserving blend/depth
++ * order for overlapping pixels while allowing disjoint rows to run in parallel. */
++static void xf_rows_owned(const XfTri *tris, int ntris, int k, int n,
++                          XfCount *cnt)
++{
++    int i;
++    for (i = 0; i < ntris; i++) {
++        int offset = (k - tris[i].miny) % n;
++        int y0 = tris[i].miny + (offset + n) % n;
++        xf_rows(&tris[i], y0, n, cnt);
++    }
++}
+ 
+ static DWORD WINAPI raster_worker(LPVOID arg)
+ {
+     int k = (int)(intptr_t)arg;
++    LONG worker_bit = 1L << k;
+     for (;;) {
+-        WaitForSingleObject(s_pool.start[k], INFINITE);
++        uint64_t begin, end;
++        DWORD start_result;
++        if (s_raster_sync_trace)
++            InterlockedOr(&s_raster_worker_waiting_mask, worker_bit);
++        start_result = WaitForSingleObject(s_pool.start[k], INFINITE);
++        if (s_raster_sync_trace) {
++            InterlockedAnd(&s_raster_worker_waiting_mask, ~worker_bit);
++            if (start_result == WAIT_OBJECT_0)
++                InterlockedOr(&s_raster_worker_wake_mask, worker_bit);
++            else
++                InterlockedOr(&s_raster_worker_wait_fail_mask, worker_bit);
++        }
++        if (s_raster_sync_trace)
++            InterlockedIncrement(&s_raster_active_workers);
+         memset(&s_pool.cnt[k], 0, sizeof s_pool.cnt[k]);
+-        xf_rows(s_pool.tri, s_pool.tri->miny + k, s_pool.n, &s_pool.cnt[k]);
+-        if (InterlockedDecrement(&s_pool.pending) == 0)
+-            SetEvent(s_pool.done);
++        begin = s_raster_perf_trace ? raster_perf_now() : 0;
++        xf_rows_owned(s_pool.tris, s_pool.ntris, k, s_pool.n, &s_pool.cnt[k]);
++        end = s_raster_perf_trace ? raster_perf_now() : 0;
++        if (s_raster_perf_trace)
++            s_pool.work_ticks[k] = end - begin;
++        if (s_raster_sync_trace)
++            InterlockedDecrement(&s_raster_active_workers);
++        if (s_raster_sync_trace)
++            InterlockedOr(&s_raster_worker_complete_mask, worker_bit);
++        if (InterlockedDecrement(&s_pool.pending) == 0) {
++            BOOL done_signaled = SetEvent(s_pool.done);
++            if (s_raster_sync_trace && !done_signaled)
++                InterlockedExchange(&s_raster_done_signal_failed, 1);
++        }
+     }
+     return 0;
+ }
+@@ -1931,14 +2585,31 @@ static int raster_pool_size(void)
+     static int init;
+     if (!init) {
+         const char *e = getenv("RECOMP_RASTER_THREADS");
+-        SYSTEM_INFO si;
+         int n, k;
+         init = 1;
+-        GetSystemInfo(&si);
+-        n = e ? atoi(e) : (int)si.dwNumberOfProcessors - 4;
++        n = e ? atoi(e) : 4;
+         if (n < 1) n = 1;
+         if (n > NV_RASTER_MAX_THREADS) n = NV_RASTER_MAX_THREADS;
+         s_pool.n = n;
++        s_raster_perf_trace = getenv("RECOMP_RASTER_PERF_TRACE") != NULL;
++        s_raster_sync_trace = getenv("RECOMP_SB_DCF4_PRODUCER_TRACE") != NULL;
++        if (getenv("RECOMP_SYNC_TRACE")) {
++            fprintf(stderr,
++                    "[SYNC-RASTER-INIT] tick_ms=%llu threads=%d perf_trace=%d\n",
++                    (unsigned long long)GetTickCount64(), n,
++                    s_raster_perf_trace);
++            fflush(stderr);
++        }
++        if (s_raster_perf_trace) {
++            if (!QueryPerformanceFrequency(&s_raster_perf_freq)
++                || s_raster_perf_freq.QuadPart <= 0) {
++                s_raster_perf_trace = 0;
++                fprintf(stderr,
++                        "[RASTER-PERF] disabled: performance clock unavailable\n");
++            } else {
++                s_raster_perf_last = raster_perf_now();
++            }
++        }
+         if (n > 1) {
+             s_pool.done = CreateEventA(NULL, FALSE, FALSE, NULL);
+             for (k = 0; k < n - 1; k++) {
+@@ -1951,45 +2622,176 @@ static int raster_pool_size(void)
+     return s_pool.n;
+ }
+ 
+-static void xf_rows_parallel(const XfTri *T, XfCount *total)
++static void xf_rows_parallel(const XfTri *T, int ntris, uint64_t px,
++                             XfCount *total)
+ {
+     int n = raster_pool_size(), k;
+-    long px = (long)(T->maxx - T->minx) * (T->maxy - T->miny);
++    int sync_trace = s_raster_sync_trace;
++    uint64_t begin = s_raster_perf_trace ? raster_perf_now() : 0;
++
++    if (sync_trace) {
++        LONG batch_id = InterlockedIncrement(&s_raster_batch_serial);
++        InterlockedIncrement(&s_raster_active_batches);
++        InterlockedExchange(&s_raster_last_batch_id, batch_id);
++        InterlockedExchange(&s_raster_last_batch_triangles, ntris);
++        InterlockedExchange(&s_raster_worker_start_mask, 0);
++        InterlockedExchange(&s_raster_worker_wake_mask, 0);
++        InterlockedExchange(&s_raster_worker_complete_mask, 0);
++        InterlockedExchange(&s_raster_worker_start_fail_mask, 0);
++        InterlockedExchange(&s_raster_worker_wait_fail_mask, 0);
++        InterlockedExchange(&s_raster_join_waiting, 0);
++        InterlockedExchange(&s_raster_join_result, -1);
++        InterlockedExchange(&s_raster_done_signal_failed, 0);
++    }
+ 
+-    if (n <= 1 || px < NV_RASTER_MT_MIN_PIXELS || T->maxy - T->miny < n) {
+-        xf_rows(T, T->miny, 1, total);
++    if (n <= 1 || px < NV_RASTER_MT_MIN_PIXELS) {
++        if (sync_trace)
++            InterlockedIncrement(&s_raster_active_workers);
++        for (k = 0; k < ntris; k++)
++            xf_rows(&T[k], T[k].miny, 1, total);
++        if (sync_trace) {
++            InterlockedDecrement(&s_raster_active_workers);
++            InterlockedDecrement(&s_raster_active_batches);
++        }
++        if (s_raster_perf_trace) {
++            uint64_t end = raster_perf_now();
++            raster_perf_record(n, 0, ntris, px, total->pixels,
++                               end - begin, end - begin);
++        }
+         return;
+     }
+-    s_pool.tri = T;
++    s_pool.tris = T;
++    s_pool.ntris = ntris;
+     s_pool.pending = n - 1;
+-    for (k = 0; k < n - 1; k++)
+-        SetEvent(s_pool.start[k]);
++    for (k = 0; k < n - 1; k++) {
++        BOOL worker_signaled = SetEvent(s_pool.start[k]);
++        if (sync_trace) {
++            LONG worker_bit = 1L << k;
++            if (worker_signaled)
++                InterlockedOr(&s_raster_worker_start_mask, worker_bit);
++            else
++                InterlockedOr(&s_raster_worker_start_fail_mask, worker_bit);
++        }
++    }
+     {
+-        XfCount mine = {0, 0, 0};
+-        xf_rows(T, T->miny + (n - 1), n, &mine);
+-        WaitForSingleObject(s_pool.done, INFINITE);
+-        total->depth_fail += mine.depth_fail;
+-        total->pixels += mine.pixels;
+-        total->zpass += mine.zpass;
++        XfCount mine = {0};
++        uint64_t main_begin = s_raster_perf_trace ? raster_perf_now() : 0;
++        if (sync_trace)
++            InterlockedIncrement(&s_raster_active_workers);
++        xf_rows_owned(T, ntris, n - 1, n, &mine);
++        if (sync_trace)
++            InterlockedDecrement(&s_raster_active_workers);
++        if (s_raster_perf_trace)
++            s_pool.work_ticks[n - 1] = raster_perf_now() - main_begin;
++        if (sync_trace)
++            InterlockedExchange(&s_raster_join_waiting, 1);
++        {
++            DWORD join_result = WaitForSingleObject(s_pool.done, INFINITE);
++            if (sync_trace) {
++                InterlockedExchange(&s_raster_join_result, (LONG)join_result);
++                InterlockedExchange(&s_raster_join_waiting, 0);
++            }
++        }
++        xf_count_add(total, &mine);
+     }
+-    for (k = 0; k < n - 1; k++) {
+-        total->depth_fail += s_pool.cnt[k].depth_fail;
+-        total->pixels += s_pool.cnt[k].pixels;
+-        total->zpass += s_pool.cnt[k].zpass;
++    for (k = 0; k < n - 1; k++)
++        xf_count_add(total, &s_pool.cnt[k]);
++    if (s_raster_perf_trace) {
++        uint64_t end = raster_perf_now(), busy = 0;
++        for (k = 0; k < n; k++)
++            busy += s_pool.work_ticks[k];
++        raster_perf_record(n, 1, ntris, px, total->pixels,
++                           end - begin, busy);
+     }
++    if (sync_trace)
++        InterlockedDecrement(&s_raster_active_batches);
+ }
+ #else
+-static void xf_rows_parallel(const XfTri *T, XfCount *total)
++static void xf_rows_parallel(const XfTri *T, int ntris, uint64_t px,
++                             XfCount *total)
+ {
+-    xf_rows(T, T->miny, 1, total);
++    int k;
++    (void)px;
++    for (k = 0; k < ntris; k++)
++        xf_rows(&T[k], T[k].miny, 1, total);
+ }
+ #endif
+ 
++#define XF_QUEUE_MAX 2048
++typedef struct { XfTri tri; Nv2aVshOutput v[3]; } XfQueuedTri;
++static XfQueuedTri s_xf_queue[XF_QUEUE_MAX];
++static XfTri s_xf_queue_tris[XF_QUEUE_MAX];
++static int s_xf_queue_count;
++static uint64_t s_xf_queue_area;
++
++static void xf_queue_flush(void)
++{
++    XfCount cnt = {0};
++    int i;
++
++    if (!s_xf_queue_count)
++        return;
++    for (i = 0; i < s_xf_queue_count; i++)
++        s_xf_queue_tris[i] = s_xf_queue[i].tri;
++    xf_rows_parallel(s_xf_queue_tris, s_xf_queue_count,
++                     s_xf_queue_area, &cnt);
++    s_gpu.pixels += cnt.pixels;
++    if ((cnt.pixel_max & 0x00FFFFFFu) > (s_gpu.pixel_max & 0x00FFFFFFu))
++        s_gpu.pixel_max = cnt.pixel_max;
++    s_gpu.xf_depth_fail += cnt.depth_fail;
++    s_gpu.xf_pixels += cnt.pixels;
++    s_gpu.zpass_count += cnt.zpass;
++    s_xf_queue_count = 0;
++    s_xf_queue_area = 0;
++}
++
++/* A texture that reads from the current render target observes earlier draws.
++ * Keep those batches on the ordered executor path; row ownership alone cannot
++ * preserve a cross-row read-after-write dependency. */
++static int xf_texture_feedback(const XfTri *T)
++{
++    const Texture *tex = &s_gpu.texs[0];
++    uintptr_t tex_start, tex_end, surface_start, surface_end;
++    uint64_t tex_bytes, surface_bytes;
++
++    if (!T->textured || !s_surface)
++        return 0;
++    tex_start = (uintptr_t)T->mem + tex->offset;
++    tex_bytes = tex->pitch
++        ? (uint64_t)tex->pitch * tex->height
++        : (uint64_t)tex->width * tex->height * 4u;
++    surface_start = (uintptr_t)s_surface;
++    surface_bytes = (uint64_t)s_gpu.pitch
++                  * (s_gpu.clip_y + s_gpu.clip_h);
++    if (!tex_bytes || tex_bytes > UINTPTR_MAX - tex_start
++        || surface_bytes > UINTPTR_MAX - surface_start)
++        return 1;
++    tex_end = tex_start + (uintptr_t)tex_bytes;
++    surface_end = surface_start + (uintptr_t)surface_bytes;
++    return tex_start < surface_end && surface_start < tex_end;
++}
++
++static int xf_queue_push(const XfTri *T)
++{
++    XfQueuedTri *q;
++
++    if (s_xf_queue_count == XF_QUEUE_MAX)
++        xf_queue_flush();
++    q = &s_xf_queue[s_xf_queue_count++];
++    q->tri = *T;
++    q->v[0] = *T->va; q->v[1] = *T->vb; q->v[2] = *T->vc;
++    q->tri.va = &q->v[0]; q->tri.vb = &q->v[1]; q->tri.vc = &q->v[2];
++    q->tri.a = q->v[0].pos; q->tri.b = q->v[1].pos; q->tri.c = q->v[2].pos;
++    s_xf_queue_area += (uint64_t)(T->maxx - T->minx)
++                     * (uint64_t)(T->maxy - T->miny);
++    return 1;
++}
++
+ static void raster_xf_triangle(const Nv2aVshOutput *va, const Nv2aVshOutput *vb,
+                                const Nv2aVshOutput *vc)
+ {
+     XfTri T;
+-    XfCount cnt = {0, 0, 0};
++    XfCount cnt = {0};
+     const Nv2aVshOutput *v[3];
+     const float *a, *b, *c;
+     float area, su = 1.0f, sv = 1.0f;
+@@ -2002,6 +2804,7 @@ static void raster_xf_triangle(const Nv2aVshOutput *va, const Nv2aVshOutput *vb,
+     T.mem = (uint8_t *)xbox_GetMemoryOffset();
+     T.bpp = surface_bpp();
+     T.textured = s_gpu.texs[0].valid;
++    T.depth_only = 0;
+     T.use_rc = s_gpu.rc_seen && !no_rc;
+     T.va = va; T.vb = vb; T.vc = vc;
+ 
+@@ -2051,6 +2854,9 @@ static void raster_xf_triangle(const Nv2aVshOutput *va, const Nv2aVshOutput *vb,
+         nv2a_rc_unpack(s_gpu.fog_color, T.fogc);
+         { float r = T.fogc[2]; T.fogc[2] = T.fogc[0]; T.fogc[0] = r; }
+     }
++    T.opaque_black = xf_opaque_black_gate(&T);
++    T.validate_opaque_black = T.opaque_black
++                            && xf_opaque_black_mode() == 1;
+ 
+     T.minx = (int)floorf(fminf(a[0], fminf(b[0], c[0])));
+     T.maxx = (int)ceilf (fmaxf(a[0], fmaxf(b[0], c[0])));
+@@ -2070,10 +2876,43 @@ static void raster_xf_triangle(const Nv2aVshOutput *va, const Nv2aVshOutput *vb,
+     s_gpu.xf_drawn++;
+     T.inv_area = 1.0f / area;
+ 
+-    xf_rows_parallel(&T, &cnt);
+-    s_gpu.xf_depth_fail += cnt.depth_fail;
+-    s_gpu.xf_pixels += cnt.pixels;
+-    s_gpu.zpass_count += cnt.zpass;
++    if (getenv("RECOMP_OPAQUE_BLACK_TRACE")
++        || getenv("RECOMP_VALIDATE_DIFFUSE_TEXTURE_MUL")
++        || getenv("RECOMP_VALIDATE_DIFFUSE_PASSTHROUGH")
++        || xf_texture_feedback(&T)
++        || !xf_queue_push(&T)) {
++        uint64_t pixels = (uint64_t)(T.maxx - T.minx)
++                        * (uint64_t)(T.maxy - T.miny);
++        /* Preserve submission order when a diagnostic or feedback-sensitive
++         * draw takes the serial path. */
++        xf_queue_flush();
++        xf_rows_parallel(&T, 1, pixels, &cnt);
++        if (T.opaque_black && getenv("RECOMP_OPAQUE_BLACK_TRACE"))
++            fprintf(stderr,
++                    "[OPAQUE-BLACK] mode=%s pixels=%llu checked=%llu mismatches=%llu\n",
++                    T.validate_opaque_black ? "validate" : "fast",
++                    (unsigned long long)cnt.pixels,
++                    (unsigned long long)cnt.black_checked,
++                    (unsigned long long)cnt.black_mismatches);
++        if (getenv("RECOMP_VALIDATE_DIFFUSE_TEXTURE_MUL")
++            && cnt.mul_rc_checked)
++            fprintf(stderr,
++                    "[DIFFUSE-TEXTURE-MUL] pixels=%llu mismatches=%llu\n",
++                    (unsigned long long)cnt.mul_rc_checked,
++                    (unsigned long long)cnt.mul_rc_mismatches);
++        if (getenv("RECOMP_VALIDATE_DIFFUSE_PASSTHROUGH")
++            && cnt.passthrough_checked)
++            fprintf(stderr,
++                    "[DIFFUSE-PASSTHROUGH] pixels=%llu mismatches=%llu\n",
++                    (unsigned long long)cnt.passthrough_checked,
++                    (unsigned long long)cnt.passthrough_mismatches);
++        s_gpu.pixels += cnt.pixels;
++        if ((cnt.pixel_max & 0x00FFFFFFu) > (s_gpu.pixel_max & 0x00FFFFFFu))
++            s_gpu.pixel_max = cnt.pixel_max;
++        s_gpu.xf_depth_fail += cnt.depth_fail;
++        s_gpu.xf_pixels += cnt.pixels;
++        s_gpu.zpass_count += cnt.zpass;
++    }
+     s_gpu.tris_drawn++;
+     note_drawn();
+ }
+@@ -2171,18 +3010,600 @@ static int transform_vertex(uint32_t index, Nv2aVshOutput *out)
+     float in[NV2A_VSH_INPUTS][4];
+     uint32_t a;
+ 
+-    for (a = 0; a < NV2A_VSH_INPUTS; a++)
+-        fetch_attr(&s_gpu.attr[a], index, in[a]);   /* absent: 0,0,0,1 */
+-    return nv2a_vsh_run((const float (*)[4])in, out);
++    for (a = 0; a < NV2A_VSH_INPUTS; a++) {
++        /* An attribute with no array reads its current value, which is set by
++         * SET_VERTEX_DATA* methods. XboxRecomp upstream PR #210 corrected this
++         * hardware behavior; use the same state already tracked by this executor. */
++        if (!s_gpu.attr[a].size && a < NV_VERTEX_ATTRS)
++            memcpy(in[a], s_gpu.imm_attr[a], sizeof in[a]);
++        else
++            fetch_attr(&s_gpu.attr[a], index, in[a]);
++    }
++    if (!nv2a_vsh_run((const float (*)[4])in, out))
++        return 0;
++    /* Screen-space vertex programs may intentionally leave oPos.w at +0.
++     * Treat it as 1 so the clipper does not discard their already projected
++     * coordinates; preserve -0 as behind the eye, matching xemu/upstream #188. */
++    if (out->pos[3] == 0.0f && !signbit(out->pos[3]))
++        out->pos[3] = 1.0f;
++    return 1;
++}
++
++/* The first observed splash pass is an exact opaque-black fullscreen strip.
++ * Write its pixels and depth values directly on the CPU; the following logo
++ * texture pass is submitted to the fixed Vulkan renderer. */
++static int nv2a_black_depth_quad(void)
++{
++    float tex[4][4] = {{0}};
++    float fog[4] = {0, 0, 0, 0};
++    float out[4];
++    float *zb;
++    float left, top, right, bottom;
++    uint32_t v, width, height;
++    uint8_t *mem = (uint8_t *)xbox_GetMemoryOffset();
++    /* The reference path initializes a fresh depth surface to far depth, and
++     * a matching depth clear writes one uniform nonnegative value. With z=0
++     * and LEQUAL, this fullscreen draw passes every covered pixel in either
++     * case, then leaves those pixels at zero. */
++    int cleared_depth = s_logo_depth_cleared
++                     && s_logo_depth_clear_offset == s_gpu.zeta_offset;
++    int fresh_depth = !s_logo_depth_zero_valid && !cleared_depth
++                   && !s_logo_depth_cleared && zbuf_current(0) == NULL;
++    static int reported;
++
++    if ((!fresh_depth && !cleared_depth && !s_logo_depth_zero_valid)
++        || (s_logo_depth_zero_valid
++            && (s_logo_depth_zero_offset != s_gpu.zeta_offset
++                || s_logo_depth_zero_color_offset != s_gpu.color_offset))
++        || s_gpu.prim != NV_PRIM_TRIANGLE_STRIP || s_gpu.idx_count != 4
++        || s_gpu.color_mask != 0x01010101u
++        || (s_gpu.texs[0].valid && s_gpu.rc.stage_program != 0)
++        || s_gpu.blend_enable || s_gpu.alpha_test
++        || !s_gpu.depth_test || !s_gpu.depth_mask || s_gpu.depth_func != 0x203
++        || !s_gpu.rc_seen || s_gpu.rc.control != 0x00011101
++        || s_gpu.rc.stage_program != 0
++        || s_gpu.rc.final0 != 0x200C0000
++        || s_gpu.rc.final1 != 0x00001C80
++        || !(fresh_depth || cleared_depth
++             || (s_logo_depth_zero_valid
++                 && s_logo_depth_zero_offset == s_gpu.zeta_offset))
++        || s_gpu.zpass_enable
++        || surface_bpp() != 4)
++        return 0;
++
++    left = (float)s_gpu.clip_x;
++    top = (float)s_gpu.clip_y;
++    right = left + (float)s_gpu.clip_w;
++    bottom = top + (float)s_gpu.clip_h;
++    if (s_xf[0].pos[0] != left || s_xf[0].pos[1] != top
++        || s_xf[1].pos[0] != left || s_xf[1].pos[1] != bottom
++        || s_xf[2].pos[0] != right || s_xf[2].pos[1] != top
++        || s_xf[3].pos[0] != right || s_xf[3].pos[1] != bottom)
++        return 0;
++    for (v = 0; v < 4; v++) {
++        if (s_xf[v].pos[2] != 0.0f || s_xf[v].pos[3] != 1.0f
++            || s_xf[v].d0[0] != 0.0f || s_xf[v].d0[1] != 0.0f
++            || s_xf[v].d0[2] != 0.0f || s_xf[v].d0[3] != 1.0f)
++            return 0;
++    }
++
++    tex[0][3] = 1.0f;
++    nv2a_rc_eval(&s_gpu.rc, s_xf[0].d0, s_xf[0].d1, fog,
++                 (const float (*)[4])tex, out);
++    if (pack_color(out) != 0xFF000000u)
++        return 0;
++
++    width = s_gpu.pitch / 4;
++    height = s_gpu.clip_y + s_gpu.clip_h;
++    zb = zbuf_current(fresh_depth);
++    if (!zb)
++        return 0;
++    if (!surface_begin_batch(mem))
++        return 0;
++
++    {
++        uint32_t x, y;
++        for (y = 0; y < s_gpu.clip_h; y++) {
++            uint32_t *row = (uint32_t *)(s_surface
++                + (size_t)(s_gpu.clip_y + y) * s_gpu.pitch
++                + (size_t)s_gpu.clip_x * sizeof(uint32_t));
++            for (x = 0; x < s_gpu.clip_w; x++)
++                row[x] = 0xFF000000u;
++        }
++    }
++
++    /* This exact full-surface pass follows the guest's Z clear. Its constant
++     * z=0 with LEQUAL passes every cleared sample and writes zero. Mirror that
++     * in the software depth buffer with row fills instead of per-pixel tests. */
++    {
++        uint32_t y;
++        for (y = 0; y < s_gpu.clip_h; y++)
++            memset(&zb[(size_t)(s_gpu.clip_y + y) * NV_ZBUF_W + s_gpu.clip_x],
++                   0, (size_t)s_gpu.clip_w * sizeof(*zb));
++    }
++    s_gpu.tris_drawn += 2;
++    s_gpu.xf_drawn += 2;
++    s_gpu.xf_pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
++    s_gpu.pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
++    note_drawn();
++    s_logo_depth_cleared = 0;
++    s_logo_depth_zero_valid = 1;
++    s_logo_depth_zero_offset = s_gpu.zeta_offset;
++    s_logo_depth_zero_color_offset = s_gpu.color_offset;
++    if (!reported) {
++        reported = 1;
++        fprintf(stderr,
++                "[NV2A] opaque-black depth quad completed at %ux%u\n",
++                s_gpu.clip_w, s_gpu.clip_h);
++    }
++    return 1;
++}
++
++/* The second startup draw is a full-screen DXT1 logo quad. Its captured
++ * combiner computes diffuse * texture, then uses SRC_ALPHA / ONE_MINUS_SRC_ALPHA
++ * over the black surface. Keep this exact-state gate narrow; unsupported
++ * methods continue through the software reference rasterizer. */
++static int vulkan_logo_fade_quad(void)
++{
++    static const uint32_t quad[6] = {0, 1, 2, 1, 2, 3};
++    const Texture *t = &s_gpu.texs[0];
++    float vtx[6][8];
++    uint8_t *rgba = NULL;
++    uint32_t width, height, i, x, y, argb;
++    size_t bytes;
++    uint8_t *mem = (uint8_t *)xbox_GetMemoryOffset();
++    int rgba_cached = 0;
++    int logo_cacheable;
++    int logo_cache_hit = 0;
++    static int reported;
++    static int logo_cache_valid;
++    static uint32_t logo_cache_offset;
++    static uint8_t logo_source_cache[512u * 512u / 2u];
++    static uint8_t logo_rgba_cache[512u * 512u * 4u];
++
++    if (!s_logo_depth_zero_valid
++        || s_logo_depth_zero_offset != s_gpu.zeta_offset
++        || s_logo_depth_zero_color_offset != s_gpu.color_offset
++        || s_gpu.prim != NV_PRIM_TRIANGLE_STRIP || s_gpu.idx_count != 4
++        || s_gpu.color_mask != 0x01010101u || !t->valid
++        || (t->color != 0x0C && t->color != 0x0E)
++        || t->filter != 0x02022000
++        || t->addr_u != 1 || t->addr_v != 1
++        || s_gpu.blend_enable != 1 || s_gpu.blend_sfactor != 0x0302
++        || s_gpu.blend_dfactor != 0x0303 || s_gpu.blend_equation != 0x8006
++        || s_gpu.alpha_test || !s_gpu.depth_test
++        || s_gpu.depth_func != 0x203 || s_gpu.zpass_enable || !s_gpu.rc_seen
++        || s_gpu.rc.control != 0x00011101
++        || s_gpu.rc.stage_program != 1
++        || s_gpu.rc.color_icw[0] != 0xC4C80000
++        || s_gpu.rc.alpha_icw[0] != 0xD4D81010
++        || s_gpu.rc.color_ocw[0] != 0x000000C0
++        || s_gpu.rc.alpha_ocw[0] != 0x000000C0
++        || s_gpu.rc.final0 != 0x200C0000
++        || s_gpu.rc.final1 != 0x00001C80
++        || t->width != 512 || t->height != 512
++        || surface_bpp() != 4)
++        return 0;
++
++    width = s_gpu.pitch / 4;
++    height = s_gpu.clip_y + s_gpu.clip_h;
++    if (width != 640 || s_gpu.clip_x || s_gpu.clip_y
++        || s_gpu.clip_w != 640 || s_gpu.clip_h != 480
++        || !surface_begin_batch(mem))
++        return 0;
++    for (i = 0; i < 4; i++) {
++        if (s_xf[i].pos[2] != 0.0f || s_xf[i].pos[3] != 1.0f
++            || s_xf[i].tex[0][2] != 0.0f || s_xf[i].tex[0][3] != 1.0f)
++            return 0;
++    }
++    if (s_xf[0].pos[0] != 0.0f || s_xf[0].pos[1] != 0.0f
++        || s_xf[1].pos[0] != 0.0f || s_xf[1].pos[1] != 480.0f
++        || s_xf[2].pos[0] != 640.0f || s_xf[2].pos[1] != 0.0f
++        || s_xf[3].pos[0] != 640.0f || s_xf[3].pos[1] != 480.0f)
++        return 0;
++    if (tex_size_from_format(t->color) == 0
++        || (size_t)t->width > SIZE_MAX / (size_t)t->height / 4)
++        return 0;
++    bytes = (size_t)t->width * t->height * 4;
++    logo_cacheable = t->color == 0x0C && t->width == 512
++                  && t->height == 512 && !t->cube;
++    if (logo_cacheable) {
++        const uint8_t *source = mem + t->offset;
++        logo_cache_hit = logo_cache_valid && logo_cache_offset == t->offset
++            && memcmp(logo_source_cache, source, sizeof(logo_source_cache)) == 0;
++        rgba = logo_rgba_cache;
++        rgba_cached = 1;
++        if (!logo_cache_hit)
++            logo_cache_valid = 0;
++    } else {
++        rgba = (uint8_t *)malloc(bytes);
++    }
++    if (!rgba)
++        return 0;
++    if (!logo_cache_hit) {
++        for (y = 0; y < t->height; y++) {
++            for (x = 0; x < t->width; x++) {
++                size_t at = ((size_t)y * t->width + x) * 4;
++                if (!sample_tex(t, 0, x, y, &argb)) {
++                    if (!rgba_cached)
++                        free(rgba);
++                    return 0;
++                }
++                rgba[at + 0] = (uint8_t)(argb >> 16);
++                rgba[at + 1] = (uint8_t)(argb >> 8);
++                rgba[at + 2] = (uint8_t)argb;
++                rgba[at + 3] = (uint8_t)(argb >> 24);
++            }
++        }
++        if (logo_cacheable) {
++            memcpy(logo_source_cache, mem + t->offset,
++                   sizeof(logo_source_cache));
++            logo_cache_offset = t->offset;
++            logo_cache_valid = 1;
++        }
++    }
++    if (getenv("RECOMP_TEXTURE_CACHE_TRACE"))
++        fprintf(stderr, "[TEXTURE-CACHE] logo decode %s\n",
++                logo_cache_hit ? "reused byte-verified RGBA" : "refreshed RGBA");
++    for (i = 0; i < 6; i++) {
++        uint32_t n = quad[i];
++        vtx[i][0] = s_xf[n].pos[0];
++        vtx[i][1] = s_xf[n].pos[1];
++        vtx[i][2] = s_xf[n].tex[0][0];
++        vtx[i][3] = s_xf[n].tex[0][1];
++        vtx[i][4] = s_xf[n].d0[0];
++        vtx[i][5] = s_xf[n].d0[1];
++        vtx[i][6] = s_xf[n].d0[2];
++        vtx[i][7] = s_xf[n].d0[3];
++    }
++#if defined(_WIN32)
++    if (!xbox_vulkan_raster_textured_triangles(
++            s_surface, s_gpu.pitch, width, height, s_gpu.clip_x, s_gpu.clip_y,
++            s_gpu.clip_w, s_gpu.clip_h, (const float (*)[8])vtx, 6,
++            rgba, t->width, t->height)) {
++        if (!rgba_cached)
++            free(rgba);
++        return 0;
++    }
++#else
++    if (!rgba_cached)
++        free(rgba);
++    return 0;
++#endif
++    if (!rgba_cached)
++        free(rgba);
++
++    /* Depth is still zero from the immediately preceding exact quad. This
++     * draw also has constant z=0 and LEQUAL, so its depth pass/write is a no-op. */
++    s_gpu.tris_drawn += 2;
++    s_gpu.xf_drawn += 2;
++    s_gpu.xf_pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
++    s_gpu.pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
++    note_drawn();
++    s_logo_depth_zero_valid = 1;
++    s_logo_depth_zero_offset = s_gpu.zeta_offset;
++    s_logo_depth_zero_color_offset = s_gpu.color_offset;
++    if (!reported) {
++        reported = 1;
++        fprintf(stderr,
++                "[Vulkan] textured logo fade completed at %ux%u\n",
++                s_gpu.clip_w, s_gpu.clip_h);
++    }
++    return 1;
++}
++
++/* Exact no-depth title quad using a linear ARGB texture. This is intentionally
++ * restricted to the observed 1024x1024 state: the CPU reference samples this
++ * format at texel coordinates with nearest filtering and clamp addressing.
++ * The Vulkan helper uses a separate nearest/clamp sampler, and receives
++ * normalized coordinates. Keep this state-gated; all other draws fall back. */
++static int s_linear_quad_candidate;
++
++static int vulkan_linear_nearest_quad(void)
++{
++    static const uint32_t quad[6] = {0, 1, 2, 1, 2, 3};
++    const Texture *t = &s_gpu.texs[0];
++    float vtx[6][8];
++    uint8_t *rgba = NULL;
++    uint8_t *mem = (uint8_t *)xbox_GetMemoryOffset();
++    uint32_t width, height, i, x, y, argb;
++    size_t bytes;
++
++    s_linear_quad_candidate = 0;
++    if (s_gpu.prim != NV_PRIM_TRIANGLE_STRIP || s_gpu.idx_count != 4
++        || s_gpu.color_mask != 0x01010101u || !t->valid || t->cube
++        || t->color != 0x12 || t->width != 1024 || t->height != 1024
++        || t->pitch != 4096 || t->filter != 0x04074000
++        || t->addr_u != 3 || t->addr_v != 3
++        || s_gpu.blend_enable != 1 || s_gpu.blend_sfactor != 0x0302
++        || s_gpu.blend_dfactor != 0x0303 || s_gpu.blend_equation != 0x8006
++        || s_gpu.alpha_test || s_gpu.depth_test || s_gpu.depth_mask
++        || s_gpu.zpass_enable
++        || !s_gpu.rc_seen || s_gpu.rc.control != 0x00011101
++        || s_gpu.rc.stage_program != 1
++        || s_gpu.rc.color_icw[0] != 0xC4C80000
++        || s_gpu.rc.alpha_icw[0] != 0xD4D81010
++        || s_gpu.rc.color_ocw[0] != 0x000000C0
++        || s_gpu.rc.alpha_ocw[0] != 0x000000C0
++        || s_gpu.rc.final0 != 0x200C0000
++        || s_gpu.rc.final1 != 0x00001C80
++        || surface_bpp() != 4 || s_gpu.pitch != 640u * 4u
++        || s_gpu.clip_x || s_gpu.clip_y
++        || s_gpu.clip_w != 640 || s_gpu.clip_h != 480
++        || !surface_begin_batch(mem))
++        return 0;
++
++    width = s_gpu.pitch / 4;
++    height = s_gpu.clip_y + s_gpu.clip_h;
++    for (i = 0; i < 4; i++) {
++        if (s_xf[i].pos[2] != 0.0f || s_xf[i].pos[3] != 1.0f
++            || s_xf[i].tex[0][2] != 0.0f || s_xf[i].tex[0][3] != 1.0f
++            || s_xf[i].d0[0] != 1.0f || s_xf[i].d0[1] != 1.0f
++            || s_xf[i].d0[2] != 1.0f
++            || s_xf[i].d0[3] != s_xf[0].d0[3])
++            return 0;
++    }
++    if (s_xf[0].pos[0] != 0.0f || s_xf[0].pos[1] != 0.0f
++        || s_xf[1].pos[0] != 0.0f || s_xf[1].pos[1] != 480.0f
++        || s_xf[2].pos[0] != 640.0f || s_xf[2].pos[1] != 0.0f
++        || s_xf[3].pos[0] != 640.0f || s_xf[3].pos[1] != 480.0f)
++        return 0;
++    s_linear_quad_candidate = 1;
++    if (getenv("RECOMP_FORCE_CPU_RASTER"))
++        return 0;
++
++    if ((size_t)t->width > SIZE_MAX / (size_t)t->height / 4)
++        return 0;
++    bytes = (size_t)t->width * t->height * 4;
++    rgba = (uint8_t *)malloc(bytes);
++    if (!rgba)
++        return 0;
++    for (y = 0; y < t->height; y++) {
++        for (x = 0; x < t->width; x++) {
++            size_t at = ((size_t)y * t->width + x) * 4;
++            if (!sample_tex(t, 0, x, y, &argb)) {
++                free(rgba);
++                return 0;
++            }
++            rgba[at + 0] = (uint8_t)(argb >> 16);
++            rgba[at + 1] = (uint8_t)(argb >> 8);
++            rgba[at + 2] = (uint8_t)argb;
++            rgba[at + 3] = (uint8_t)(argb >> 24);
++        }
++    }
++    for (i = 0; i < 6; i++) {
++        uint32_t n = quad[i];
++        vtx[i][0] = s_xf[n].pos[0];
++        vtx[i][1] = s_xf[n].pos[1];
++        vtx[i][2] = s_xf[n].tex[0][0] / (float)t->width;
++        vtx[i][3] = s_xf[n].tex[0][1] / (float)t->height;
++        vtx[i][4] = s_xf[n].d0[0];
++        vtx[i][5] = s_xf[n].d0[1];
++        vtx[i][6] = s_xf[n].d0[2];
++        vtx[i][7] = s_xf[n].d0[3];
++    }
++#if defined(_WIN32)
++    i = xbox_vulkan_raster_textured_triangles_nearest_clamp(
++        s_surface, s_gpu.pitch, width, height, s_gpu.clip_x, s_gpu.clip_y,
++        s_gpu.clip_w, s_gpu.clip_h, (const float (*)[8])vtx, 6,
++        rgba, t->width, t->height);
++#else
++    i = 0;
++#endif
++    free(rgba);
++    if (!i)
++        return 0;
++    s_gpu.tris_drawn += 2;
++    s_gpu.xf_drawn += 2;
++    s_gpu.xf_pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
++    s_gpu.pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
++    note_drawn();
++    return 1;
++}
++
++/* A later startup pass uses a full-screen, almost opaque black diffuse quad.
++ * Its programmed combiner result is independent of the bound texture; the
++ * texture fetch is vestigial for this exact register state. Preserve the
++ * verified zero-depth invariant and apply the guest blend equation directly
++ * to the guest surface, avoiding the general per-pixel combiner/raster path. */
++static int nv2a_black_fade_quad(void)
++{
++    const Texture *t = &s_gpu.texs[0];
++    uint32_t i, x, y, alpha8;
++    float alpha;
++    uint8_t *mem = (uint8_t *)xbox_GetMemoryOffset();
++    static int reported;
++
++    if (!s_logo_depth_zero_valid
++        || s_logo_depth_zero_offset != s_gpu.zeta_offset
++        || s_logo_depth_zero_color_offset != s_gpu.color_offset
++        || s_gpu.prim != NV_PRIM_TRIANGLE_STRIP || s_gpu.idx_count != 4
++        || s_gpu.color_mask != 0x01010101u || !t->valid
++        || t->color != 0x0E || t->width != 512 || t->height != 512
++        || s_gpu.blend_enable != 1 || s_gpu.blend_sfactor != 0x0302
++        || s_gpu.blend_dfactor != 0x0303 || s_gpu.blend_equation != 0x8006
++        || s_gpu.alpha_test || !s_gpu.depth_test || s_gpu.depth_func != 0x203
++        || s_gpu.depth_mask || s_gpu.zpass_enable || !s_gpu.rc_seen
++        || s_gpu.rc.control != 0x00011101
++        || s_gpu.rc.stage_program != 0
++        || s_gpu.rc.color_icw[0] != 0xC4200000
++        || s_gpu.rc.alpha_icw[0] != 0xD4301010
++        || s_gpu.rc.color_ocw[0] != 0x000000C0
++        || s_gpu.rc.alpha_ocw[0] != 0x000000C0
++        || s_gpu.rc.final0 != 0x200C0000
++        || s_gpu.rc.final1 != 0x00001C80
++        || surface_bpp() != 4 || s_gpu.pitch != 640u * 4u
++        || s_gpu.clip_x != 0 || s_gpu.clip_y != 0
++        || s_gpu.clip_w != 640 || s_gpu.clip_h != 480
++        || !surface_begin_batch(mem))
++        return 0;
++
++    if (s_xf[0].pos[0] != 0.0f || s_xf[0].pos[1] != 0.0f
++        || s_xf[1].pos[0] != 0.0f || s_xf[1].pos[1] != 480.0f
++        || s_xf[2].pos[0] != 640.0f || s_xf[2].pos[1] != 0.0f
++        || s_xf[3].pos[0] != 640.0f || s_xf[3].pos[1] != 480.0f)
++        return 0;
++    for (i = 0; i < 4; i++) {
++        if (s_xf[i].pos[2] != 0.0f || s_xf[i].pos[3] != 1.0f
++            || s_xf[i].d0[0] != 0.0f || s_xf[i].d0[1] != 0.0f
++            || s_xf[i].d0[2] != 0.0f
++            || s_xf[i].d0[3] != s_xf[0].d0[3])
++            return 0;
++    }
++    if (!(s_xf[0].d0[3] >= 0.0f && s_xf[0].d0[3] <= 1.0f))
++        return 0;
++
++    /* The exact combiner state above produces (0,0,0,diffuse alpha) for any
++     * texture sample. Match put_pixel's source-color quantization and blend
++     * arithmetic, including alpha-channel blending and round-to-nearest. */
++    alpha = s_xf[0].d0[3];
++    alpha8 = (uint32_t)(alpha * 255.0f + 0.5f);
++    alpha = (float)alpha8 / 255.0f;
++    for (y = s_gpu.clip_y; y < s_gpu.clip_y + s_gpu.clip_h; y++) {
++        uint32_t *row = (uint32_t *)(s_surface + (size_t)y * s_gpu.pitch);
++        for (x = s_gpu.clip_x; x < s_gpu.clip_x + s_gpu.clip_w; x++) {
++            uint32_t dst = row[x];
++            float dst_a = (float)(dst >> 24) / 255.0f;
++            float red = (float)((dst >> 16) & 0xFF) / 255.0f;
++            float green = (float)((dst >> 8) & 0xFF) / 255.0f;
++            float blue = (float)(dst & 0xFF) / 255.0f;
++            uint32_t r = (uint32_t)(red * (1.0f - alpha) * 255.0f + 0.5f);
++            uint32_t g = (uint32_t)(green * (1.0f - alpha) * 255.0f + 0.5f);
++            uint32_t b = (uint32_t)(blue * (1.0f - alpha) * 255.0f + 0.5f);
++            uint32_t a = (uint32_t)((alpha * alpha
++                + dst_a * (1.0f - alpha)) * 255.0f + 0.5f);
++            row[x] = (a << 24) | (r << 16) | (g << 8) | b;
++        }
++    }
++
++    s_gpu.tris_drawn += 2;
++    s_gpu.xf_drawn += 2;
++    s_gpu.xf_pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
++    s_gpu.pixels += (uint64_t)s_gpu.clip_w * s_gpu.clip_h;
++    note_drawn();
++    if (!reported) {
++        reported = 1;
++        fprintf(stderr,
++                "[NV2A] exact black fade completed at %ux%u (alpha=%u/255)\n",
++                s_gpu.clip_w, s_gpu.clip_h, alpha8);
++    }
++    return 1;
++}
++
++/* A draw with depth writes disabled cannot change a depth surface already
++ * known to contain zero. Keep that proof across CPU-reference colour draws so
++ * a following fullscreen fade can use Vulkan without weakening the depth
++ * surface identity gate. */
++static int logo_depth_zero_survives_cpu_draw(void)
++{
++    if (!s_logo_depth_zero_valid
++        || s_logo_depth_zero_offset != s_gpu.zeta_offset
++        || s_gpu.depth_mask)
++        return 0;
++    /* The colour target can change while the same depth allocation remains
++     * bound. Record that pairing after a no-write draw; the depth contents
++     * themselves remain unchanged. */
++    s_logo_depth_zero_color_offset = s_gpu.color_offset;
++    return 1;
+ }
+ 
+ static void raster_batch_program(void)
+ {
+     uint32_t i, n = s_gpu.idx_count;
++    uint32_t tris_before = s_gpu.tris_drawn;
++#if defined(_WIN32)
++    LARGE_INTEGER timing_start = { 0 };
++    static unsigned timing_records;
++    int timing = getenv("RECOMP_PB_TIMING") != NULL;
++    if (timing)
++        QueryPerformanceCounter(&timing_start);
++#endif
++
++#if defined(_WIN32)
++#define REPORT_BATCH_TIME(path_name) do { \
++    if (timing) { \
++        LARGE_INTEGER timing_end, timing_frequency; \
++        QueryPerformanceCounter(&timing_end); \
++        QueryPerformanceFrequency(&timing_frequency); \
++        double timing_ms = (double)(timing_end.QuadPart - timing_start.QuadPart) \
++                         * 1000.0 / (double)timing_frequency.QuadPart; \
++        if (timing_records < 32 || timing_ms >= 10.0) { \
++            fprintf(stderr, "  [PB-DRAW-TIME] packet=0x%08X param=0x%08X " \
++                    "method=0x%04X path=%s vertices=%u prim=%u " \
++                    "tex=%u off=0x%08X size=%ux%u fmt=0x%X pitch=%u " \
++                    "blend=%u/%u/%u depth=%u/%u/%u elapsed=%.3fms\n", \
++                    s_pb_packet_header_va, s_pb_parameter_va, \
++                    s_pb_current_method, path_name, n, s_gpu.prim, \
++                    s_gpu.texs[0].valid, \
++                    s_gpu.texs[0].offset, s_gpu.texs[0].width, \
++                    s_gpu.texs[0].height, s_gpu.texs[0].color, \
++                    s_gpu.texs[0].pitch, s_gpu.blend_enable, \
++                    s_gpu.blend_sfactor, s_gpu.blend_dfactor, \
++                    s_gpu.depth_test, s_gpu.depth_func, s_gpu.depth_mask, \
++                    timing_ms); \
++            fprintf(stderr, "    [PB-DRAW-STATE] color=0x%08X zeta=0x%08X " \
++                    "mask=0x%08X clip=%u,%u %ux%u " \
++                    "filter=0x%08X addr=%u/%u blendEq=0x%08X " \
++                    "alpha=%u zpass=%u rc=%u/%08X/%08X " \
++                    "icw=%08X/%08X ocw=%08X/%08X " \
++                    "aicw=%08X/%08X aocw=%08X/%08X final=%08X/%08X " \
++                    "depthValid=%u depthSurface=0x%08X/0x%08X\n", \
++                    s_gpu.color_offset, s_gpu.zeta_offset, s_gpu.color_mask, \
++                    s_gpu.clip_x, s_gpu.clip_y, s_gpu.clip_w, s_gpu.clip_h, \
++                    s_gpu.texs[0].filter, s_gpu.texs[0].addr_u, \
++                    s_gpu.texs[0].addr_v, s_gpu.blend_equation, \
++                    s_gpu.alpha_test, s_gpu.zpass_enable, \
++                    s_gpu.rc_seen, s_gpu.rc.control, \
++                    s_gpu.rc.stage_program, \
++                    s_gpu.rc.color_icw[0], s_gpu.rc.color_icw[1], \
++                    s_gpu.rc.color_ocw[0], s_gpu.rc.color_ocw[1], \
++                    s_gpu.rc.alpha_icw[0], s_gpu.rc.alpha_icw[1], \
++                    s_gpu.rc.alpha_ocw[0], s_gpu.rc.alpha_ocw[1], \
++                    s_gpu.rc.final0, s_gpu.rc.final1, \
++                    s_logo_depth_zero_valid, s_logo_depth_zero_offset, \
++                    s_logo_depth_zero_color_offset); \
++            if (s_gpu.texs[0].color == 0xFF \
++                || s_gpu.texs[0].offset == 0x80FFFFFFu) { \
++                fprintf(stderr, "    [PB-TEXTURE-RAW] offset=0x%08X format=0x%08X " \
++                        "palette=0x%08X address=0x%08X control1=0x%08X " \
++                        "filter=0x%08X imageRect=0x%08X set=%u%u%u%u%u%u%u\n", \
++                        s_tex_reg[0], s_tex_reg[1], s_tex_reg[2], \
++                        s_tex_reg[3], s_tex_reg[4], s_tex_reg[5], \
++                        s_tex_reg[7], s_tex_set[0], s_tex_set[1], \
++                        s_tex_set[2], s_tex_set[3], s_tex_set[4], \
++                        s_tex_set[5], s_tex_set[7]); \
++            } \
++            for (uint32_t timing_vertex = 0; timing_vertex < n \
++                 && timing_vertex < 4; timing_vertex++) \
++                fprintf(stderr, "    [PB-DRAW-VERTEX] i=%u pos=%g,%g,%g,%g " \
++                        "uv=%g,%g,%g,%g diffuse=%g,%g,%g,%g\n", \
++                        timing_vertex, \
++                        s_xf[timing_vertex].pos[0], \
++                        s_xf[timing_vertex].pos[1], \
++                        s_xf[timing_vertex].pos[2], \
++                        s_xf[timing_vertex].pos[3], \
++                        s_xf[timing_vertex].tex[0][0], \
++                        s_xf[timing_vertex].tex[0][1], \
++                        s_xf[timing_vertex].tex[0][2], \
++                        s_xf[timing_vertex].tex[0][3], \
++                        s_xf[timing_vertex].d0[0], \
++                        s_xf[timing_vertex].d0[1], \
++                        s_xf[timing_vertex].d0[2], \
++                        s_xf[timing_vertex].d0[3]); \
++            fflush(stderr); \
++        } \
++        timing_records++; \
++    } \
++} while (0)
++#endif
+ 
+     for (i = 0; i < n; i++)
+-        if (!transform_vertex(s_gpu.idx[i], &s_xf[i]))
++        if (!transform_vertex(s_gpu.idx[i], &s_xf[i])) {
++#if defined(_WIN32)
++            REPORT_BATCH_TIME("transform-failed");
++#endif
+             return;                                    /* no program loaded */
++        }
+     s_gpu.batches_program++;
+     s_gpu.verts_program += n;
+     if (s_gpu.blend_enable) {
+@@ -2201,8 +3622,6 @@ static void raster_batch_program(void)
+             const char *t = getenv("RECOMP_VSH_TRACE");
+             left = t ? atoi(t) : 0;
+         }
+-        /* Spread out: one every 20000 program batches, so a run that spends
+-         * its first half in menus still traces the 3D scene. */
+         if (left > 0 && n >= 3 && s_gpu.batches_program % 20000 == 0) {
+             float in[4];
+             left--;
+@@ -2244,6 +3663,42 @@ static void raster_batch_program(void)
+     if (s_gpu.texs[0].valid)
+         note_texture_use();
+ 
++    if (nv2a_black_depth_quad()) {
++#if defined(_WIN32)
++        REPORT_BATCH_TIME("black-depth");
++#endif
++        dump_program_draw_if_requested();
++        return;
++    }
++    if (nv2a_black_fade_quad()) {
++#if defined(_WIN32)
++        REPORT_BATCH_TIME("black-fade");
++#endif
++        dump_program_draw_if_requested();
++        return;
++    }
++    if (vulkan_logo_fade_quad()) {
++        /* This exact fullscreen draw uses z=0 with LEQUAL and writes zero, so
++         * the known-zero depth invariant remains true for later same-zeta
++         * surfaces. The fast path itself records the current color target. */
++#if defined(_WIN32)
++        REPORT_BATCH_TIME("vulkan-logo");
++#endif
++        dump_program_draw_if_requested();
++        return;
++    }
++    if (vulkan_linear_nearest_quad()) {
++#if defined(_WIN32)
++        REPORT_BATCH_TIME("vulkan-linear-nearest");
++#endif
++        if (getenv("RECOMP_LINEAR_QUAD_CAPTURE"))
++            dump_surface_bmp();
++        dump_program_draw_if_requested();
++        return;
++    }
++    s_logo_depth_zero_valid = logo_depth_zero_survives_cpu_draw();
++    s_logo_depth_cleared = 0;
++
+     switch (s_gpu.prim) {
+     case NV_PRIM_TRIANGLES:
+         for (i = 0; i + 2 < n; i += 3)
+@@ -2273,6 +3728,17 @@ static void raster_batch_program(void)
+     default:
+         break;
+     }
++    xf_queue_flush();
++#if defined(_WIN32)
++    REPORT_BATCH_TIME("cpu-raster");
++#endif
++    if (s_linear_quad_candidate && getenv("RECOMP_LINEAR_QUAD_CAPTURE"))
++        dump_surface_bmp();
++    if (s_gpu.tris_drawn != tris_before)
++        dump_program_draw_if_requested();
++#if defined(_WIN32)
++#undef REPORT_BATCH_TIME
++#endif
+ }
+ 
+ static void raster_batch(void)
+@@ -2289,6 +3755,8 @@ static void raster_batch(void)
+         raster_batch_program();
+         return;
+     }
++    s_logo_depth_zero_valid = logo_depth_zero_survives_cpu_draw();
++    s_logo_depth_cleared = 0;
+     if (!batch_is_screen_space()) {
+         s_gpu.batches_untransformed++;
+         return;
+@@ -2417,7 +3885,7 @@ static void draw_primitive(void)
+     if (!s_gpu.prim || !s_gpu.idx_count)
+         return;
+     s_gpu.draws++;
+-    if ((s_gpu.draws % 200) == 0)
++    if (getenv("RECOMP_GPU_DRAW_TRACE") && (s_gpu.draws % 200) == 0)
+         fprintf(stderr, "  [GPU] draw #%u\n", s_gpu.draws);
+     s_gpu.verts += s_gpu.idx_count;
+ 
+@@ -2460,6 +3928,13 @@ static void draw_primitive(void)
+                         s_xf[0].pos[0], s_xf[0].pos[1], s_xf[0].pos[2],
+                         s_xf[0].pos[3], s_xf[1].pos[0], s_xf[1].pos[1],
+                         s_xf[2].pos[0], s_xf[2].pos[1], 10);
++            if ((s_gpu.xf_mode & 3) == 2) {
++                uint32_t v;
++                for (v = 0; v < s_gpu.idx_count && v < 4; v++)
++                    fprintf(stderr, "[FTRACE]     t0v%u %g %g %g %g%c", v,
++                            s_xf[v].tex[0][0], s_xf[v].tex[0][1],
++                            s_xf[v].tex[0][2], s_xf[v].tex[0][3], 10);
++            }
+             if (s_gpu.rc_seen) {
+                 int st;
+                 fprintf(stderr, "[FTRACE]     rc stages %u ctl %08X prog %05X fin %08X %08X",
+@@ -2628,6 +4103,32 @@ static void draw_inline_array(void)
+     s_gpu.idx_count = count;
+ 
+     s_gpu.inline_active = 1;
++    {
++        /* Diagnostic only: show the packed inline attributes for the first
++         * few batches so a zero UV can be distinguished from a bad slot or
++         * stride. This observes the same decoded values the renderer reads. */
++        static int trace = -1;
++        static unsigned shown;
++        if (trace < 0)
++            trace = getenv("RECOMP_PB_VERTEX_TRACE") != NULL;
++        if (trace && shown < 8) {
++            unsigned v;
++            shown++;
++            fprintf(stderr, "[VTX] inline batch %u vertices=%u stride=%u\n",
++                    shown, count, vsize);
++            for (v = 0; v < count && v < 4; v++) {
++                for (a = 0; a < NV_VERTEX_ATTRS; a++) {
++                    float value[4];
++                    if (s_gpu.attr[a].size
++                            && fetch_attr(&s_gpu.attr[a], v, value))
++                        fprintf(stderr,
++                                "[VTX] v%u a%u type=%u size=%u = %.6g %.6g %.6g %.6g\n",
++                                v, a, s_gpu.attr[a].type, s_gpu.attr[a].size,
++                                value[0], value[1], value[2], value[3]);
++                }
++            }
++        }
++    }
+     draw_primitive();
+     s_gpu.inline_active = 0;
+ 
+@@ -2679,6 +4180,31 @@ static void draw_immediate(void)
+     /* fetch_attr bounds-checks against inline_count dwords. */
+     s_gpu.inline_count = s_gpu.imm_count * IMM_VERTEX_DWORDS;
+     s_gpu.inline_active = 1;
++    {
++        /* Diagnostic only: dump the decoded attributes emitted by the
++         * immediate-mode path. */
++        static int trace = -1;
++        static unsigned shown;
++        if (trace < 0)
++            trace = getenv("RECOMP_PB_VERTEX_TRACE") != NULL;
++        if (trace && shown < 8) {
++            unsigned v;
++            shown++;
++            fprintf(stderr, "[VTX-IMM] batch %u vertices=%u stride=%u\n",
++                    shown, s_gpu.imm_count, IMM_VERTEX_DWORDS * 4);
++            for (v = 0; v < s_gpu.imm_count && v < 4; v++) {
++                uint32_t a;
++                for (a = 0; a < NV_VERTEX_ATTRS; a++) {
++                    float value[4];
++                    if (fetch_attr(&s_gpu.attr[a], v, value))
++                        fprintf(stderr,
++                                "[VTX-IMM] v%u a%u type=%u size=%u = %.6g %.6g %.6g %.6g\n",
++                                v, a, s_gpu.attr[a].type, s_gpu.attr[a].size,
++                                value[0], value[1], value[2], value[3]);
++                }
++            }
++        }
++    }
+     draw_primitive();
+     s_gpu.inline_active = 0;
+ 
+@@ -2894,6 +4420,46 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+                     subch, method, param);
+     }
+ 
++    /* NV097_NO_OPERATION is also the Xbox D3D software notification method.
++     * Nonzero payloads trap the method in PGRAPH and synchronously wait for
++     * the guest interrupt handler to acknowledge it. */
++    if (method == 0x0100u) { /* NV097_NO_OPERATION */
++        if (getenv("RECOMP_PB_NOTIFY_TRACE") && param != 0) {
++            static unsigned shown;
++            unsigned n = ++shown;
++            if (n <= 2048u || (n % 256u) == 0) {
++                fprintf(stderr,
++                        "[PB-NOP] n=%u tick=%lu tid=%lu sub=%u method=%04X data=%08X header_va=%08X parameter_va=%08X\n",
++                        n, (unsigned long)GetTickCount(),
++                        (unsigned long)GetCurrentThreadId(), subch, method,
++                        param, s_pb_packet_header_va, s_pb_parameter_va);
++                fflush(stderr);
++            }
++        }
++        if (param != 0) {
++            nv2a_pgraph_notify(subch, method, param);
++        }
++        return;
++    }
++
++    /* XDK D3D's fence wait polls PGRAPH_PATT_COLOR0. KickOff writes its
++     * progress marker through SET_DITHER_ENABLE (0x0310) on subchannel 5's
++     * pattern object; this is not the Kelvin dither method on subchannel 0. */
++    if (subch == 5u && method == 0x0310u) {
++        NV2AState *gpu = nv2a_get_state();
++        if (gpu)
++            pgraph_write(gpu, NV_PGRAPH_PATT_COLOR0, param, 4);
++        if (getenv("RECOMP_PB_FENCE_TRACE")) {
++            static unsigned shown;
++            if (shown++ < 32u) {
++                fprintf(stderr, "[PB-FENCE] method 5:0310 -> PGRAPH 0x400B10 = %08X\n",
++                        param);
++                fflush(stderr);
++            }
++        }
++        return;
++    }
++
+     if (s_ftrace == 2) {
+         /* RECOMP_FRAME_TRACE_METHODS: every method of the traced frame,
+          * less the bulk (vertex data, program and constant uploads). */
+@@ -2914,6 +4480,80 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+         return;
+     }
+     switch (method) {
++    case NV097_SET_CONTEXT_DMA_SEMAPHORE:
++        s_semaphore_dma_handle = param;
++        break;
++    case NV097_SET_SEMAPHORE_OFFSET:
++        s_semaphore_offset = param;
++        break;
++    case NV097_BACK_END_WRITE_SEMAPHORE_RELEASE: {
++        static int trace = -1;
++        static int sync_trace = -1;
++        static unsigned shown;
++        static unsigned trace_limit = 256u;
++        static ULONGLONG last_trace_ms;
++        uint32_t guest_va, instance, flags, limit, frame;
++        const char *why;
++        uint8_t *mem = (uint8_t *)((uintptr_t)xbox_GetMemoryOffset());
++        volatile uint32_t *target;
++
++        if (trace < 0) {
++            const char *limit_text;
++            trace = getenv("RECOMP_PB_SEMAPHORE_TRACE") != NULL;
++            limit_text = getenv("RECOMP_PB_SEMAPHORE_TRACE_LIMIT");
++            if (limit_text && *limit_text) {
++                unsigned long parsed = strtoul(limit_text, NULL, 10);
++                if (parsed >= 256u && parsed <= 65536u)
++                    trace_limit = (unsigned)parsed;
++            }
++        }
++        if (sync_trace < 0)
++            sync_trace = getenv("RECOMP_SYNC_TRACE") != NULL;
++        if (!semaphore_target(s_semaphore_dma_handle, s_semaphore_offset,
++                              &guest_va, &instance, &flags, &limit, &frame,
++                              &why)) {
++            note_unhandled(method, param);
++            if (trace && shown++ < 32u)
++                fprintf(stderr,
++                        "  [PB-SEM] release unresolved handle=%08X offset=%08X "
++                        "value=%08X reason=%s\n",
++                        s_semaphore_dma_handle, s_semaphore_offset, param, why);
++            if (sync_trace)
++                fprintf(stderr,
++                        "[SYNC-PBSEM] tick_ms=%llu unresolved handle=%08X offset=%08X value=%08X reason=%s\n",
++                        (unsigned long long)GetTickCount64(),
++                        s_semaphore_dma_handle, s_semaphore_offset, param, why);
++            break;
++        }
++        target = (volatile uint32_t *)(mem + guest_va);
++        *target = param;
++        if (sync_trace)
++            fprintf(stderr,
++                    "[SYNC-PBSEM] tick_ms=%llu handle=%08X instance=%05X flags=%08X limit=%08X frame=%08X guest=%08X value=%08X stored=%08X header_va=%08X parameter_va=%08X\n",
++                    (unsigned long long)GetTickCount64(),
++                    s_semaphore_dma_handle, instance, flags, limit, frame,
++                    guest_va, param, *target,
++                    s_pb_packet_header_va, s_pb_parameter_va);
++        if (trace && shown < trace_limit) {
++            ULONGLONG now_ms = GetTickCount64();
++            if (shown < 32u || now_ms - last_trace_ms >= 1000u) {
++                fprintf(stderr,
++                        "  [PB-SEM] tick_ms=%llu n=%u release "
++                        "handle=%08X instance=%05X flags=%08X "
++                        "limit=%08X frame=%08X physical=%08X guest=%08X "
++                        "value=%08X host=%p stored=%08X\n",
++                        (unsigned long long)now_ms, shown,
++                        s_semaphore_dma_handle, instance, flags, limit, frame,
++                        ((frame & 0xFFFFF000u) | (flags & 0xFFF00000u))
++                            + s_semaphore_offset,
++                        guest_va, param, (const void *)target, *target);
++                fflush(stderr);
++                last_trace_ms = now_ms;
++                shown++;
++            }
++        }
++        break;
++    }
+     case NV097_SET_SURFACE_CLIP_HORIZONTAL:
+         s_gpu.clip_x = param & 0xFFFF;
+         s_gpu.clip_w = (param >> 16) & 0xFFFF;
+@@ -2933,9 +4573,24 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+             fprintf(stderr, "[FTRACE] color offset -> %08X%c", param, 10);
+         s_gpu.color_offset = param;
+         break;
++    case NV097_WAIT_FOR_IDLE:
++        /* Pushbuffer draws complete before the executor returns: CPU raster
++         * writes are immediate and the Vulkan draw helpers wait for the queue.
++         * There is no outstanding host work to block on here. */
++        break;
+     case NV097_SET_COLOR_CLEAR_VALUE:
+         s_gpu.clear_color = param;
+         break;
++    case 0x1D98: /* SET_CLEAR_RECT_HORIZONTAL: inclusive X min/max */
++        s_gpu.clear_x_min = param & 0xFFFFu;
++        s_gpu.clear_x_max = param >> 16;
++        s_gpu.clear_rect_valid |= 1u;
++        break;
++    case 0x1D9C: /* SET_CLEAR_RECT_VERTICAL: inclusive Y min/max */
++        s_gpu.clear_y_min = param & 0xFFFFu;
++        s_gpu.clear_y_max = param >> 16;
++        s_gpu.clear_rect_valid |= 2u;
++        break;
+     case NV097_SET_BLEND_ENABLE:
+         s_gpu.blend_enable = param;
+         break;
+@@ -2999,6 +4654,9 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+         s_gpu.blend_dfactor = param;
+         break;
+     case NV097_CLEAR_SURFACE:
++        s_logo_depth_zero_valid = 0;
++        s_logo_depth_cleared = (param & 0x01) != 0;
++        s_logo_depth_clear_offset = s_gpu.zeta_offset;
+         if (s_ftrace == 2)
+             fprintf(stderr, "[FTRACE] clear %X surf %08X %ux%u colour %08X%c",
+                     param, s_gpu.color_offset, s_gpu.clip_w, s_gpu.clip_h,
+@@ -3179,7 +4837,11 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
+     case 0x030C: s_gpu.depth_test = param; break; /* DEPTH_TEST_ENABLE */
+     case 0x0354: s_gpu.depth_func = param; break; /* DEPTH_FUNC */
+     case 0x035C: s_gpu.depth_mask = param; break; /* DEPTH_MASK */
+-    case 0x0214: s_gpu.zeta_offset = param; break;/* SURFACE_ZETA_OFFSET */
++    case 0x0214:
++        s_logo_depth_zero_valid = 0;
++        s_logo_depth_cleared = 0;
++        s_gpu.zeta_offset = param;
++        break;                                  /* SURFACE_ZETA_OFFSET */
+     case 0x1D8C: s_gpu.zstencil_clear = param; break; /* ZSTENCIL_CLEAR_VALUE */
+ 
+     default:
+@@ -3404,10 +5066,50 @@ static void peek_chain(void)
+     fflush(stderr);
+ }
+ 
++void nv2a_pb_exec_method_at(uint32_t subch, uint32_t method, uint32_t param,
++                           uint32_t header_va, uint32_t parameter_va);
++
++void nv2a_pb_exec_packet(uint32_t subch, uint32_t method,
++                         const uint32_t *params, uint32_t count, int noninc)
++{
++    uint32_t i;
++    for (i = 0; i < count; i++) {
++        const uint32_t current = noninc ? method : method + i * 4u;
++        nv2a_pb_exec_method_at(subch, current, params[i],
++                               s_pb_packet_header_va,
++                               s_pb_packet_header_va + 4u + i * 4u);
++    }
++}
++
++/* The DMA walker may resume a packet that was split across two DMA_PUT
++ * updates. Preserve the original packet header while passing each fetched
++ * parameter independently to the existing method executor. */
++void nv2a_pb_exec_method_at(uint32_t subch, uint32_t method, uint32_t param,
++                           uint32_t header_va, uint32_t parameter_va)
++{
++    s_pb_packet_header_va = header_va;
++    s_pb_parameter_va = parameter_va;
++    s_pb_current_method = method;
++    nv2a_pb_exec_method(subch, method, param);
++}
++
+ void nv2a_pb_exec_report(void)
+ {
+     peek_addresses();
+     peek_chain();
++    if (getenv("RECOMP_TITLE_TIMER_TRACE")) {
++        const uint8_t *mem = (const uint8_t *)xbox_GetMemoryOffset();
++        const float timer = *(const float *)(mem + 0x6874BCu);
++        const float threshold0 = *(const float *)(mem + 0x25D94Cu);
++        const float threshold1 = *(const float *)(mem + 0x25D950u);
++        const float step = *(const float *)(mem + 0x26042Cu);
++        const uint32_t clock = *(const uint32_t *)(mem + 0x6BA384u);
++        fprintf(stderr,
++                "[SB-LOGO] draws=%u flips=%u timer=%g thresholds=%g/%g "
++                "step=%g clock=%08X\n",
++                s_gpu.draws, s_gpu.flips, timer, threshold0, threshold1,
++                step, clock);
++    }
+     if (getenv("RECOMP_FIND_NAN")) {
+         /* Every report, not once: the matrix is fine early on and only turns
+          * to NaN later, so a single scan at startup finds nothing and says
+@@ -3443,7 +5145,7 @@ void nv2a_pb_exec_report(void)
+             s_gpu.min_x, s_gpu.max_x, s_gpu.min_y, s_gpu.max_y);
+     /* One picture per report rather than per clear: a title clears hundreds of
+      * times a second and nobody wants that many files. */
+-    if (!s_flip_dumping)
++    if (!s_flip_dumping && !getenv("RECOMP_FB_DUMP_PROGRAM_DRAWS"))
+         dump_surface_bmp();
+ 
+     /* Drawn and skipped separately: "nothing appeared" and "every batch needed
