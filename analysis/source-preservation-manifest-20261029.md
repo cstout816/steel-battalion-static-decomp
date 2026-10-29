@@ -6,7 +6,7 @@ Project and XboxRecomp checkouts remain dirty and uncommitted. The latest tracke
 
 | Checkout | Base commit | Patch | SHA-256 | Bytes |
 |---|---|---|---|---:|
-| Project workspace | `d314e3c7bce6d4121f15631634dce84fb81789c0` | `patches/preservation-project-current-20261029.patch` | `2228AB4B00345ACA0267D21203CCD375A6870C360CC23207E4AF0EAD93C96890` | 148,646 |
+| Project workspace | `d314e3c7bce6d4121f15631634dce84fb81789c0` | `patches/preservation-project-current-20261029.patch` | `290196B16E297BFDAA392A267853CD137B4EDE4FC14FEADFE771C8BBEAF09536` | 951,896 |
 | XboxRecomp checkout | `193e2995ffaec871bb3be43a43bd66aa5fccfeb1` | `patches/preservation-xboxrecomp-current-20261029.patch` | `065D5A953C1A81BE9233856E34DEA2C702F5C0868D5E99DB909096145012559A` | 673,505 |
 
 The current r342 diagnostic EXE/PDB/MAP and r340 matching dump identities are recorded in `analysis/m3-r340-r344-surface-and-storage-20261029.md`. The bounded overlap trace is in `patches/diagnostics/dsound-surface-overlap-r341.patch` (100,382 bytes, SHA-256 `C79C2407BE0A5A849DCFE705447A730EF797097152F26D6EA5FF671AE4DC2DCC`). `tools/Start-ProducerTrace.ps1` exposes `-EnableDsoundSurfaceTrace`; source and candidate artifacts are reproducible from the retained checkouts and warm build tree. Generated AOT code and game assets remain local only.
