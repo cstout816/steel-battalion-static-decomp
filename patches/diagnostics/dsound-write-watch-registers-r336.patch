@@ -1,0 +1,36 @@
+diff --git a/local-tools/steel-battalion-game/src/dsound_write_watch.c b/local-tools/steel-battalion-game/src/dsound_write_watch.c
+--- a/local-tools/steel-battalion-game/src/dsound_write_watch.c
++++ b/local-tools/steel-battalion-game/src/dsound_write_watch.c
+@@ -59,7 +59,7 @@ static LONG CALLBACK ds_watch_exception_handler(PEXCEPTION_POINTERS ep)
+     DWORD tid;
+     uint32_t guest_esp;
+     LONG record;
+     LARGE_INTEGER qpc;
+-    char line[384];
++    char line[512];
+     int length;
+     unsigned i;
+@@ -90,13 +90,21 @@ static LONG CALLBACK ds_watch_exception_handler(PEXCEPTION_POINTERS ep)
+             volatile uint32_t *watched = (volatile uint32_t *)
+                 (g_watch_host_address[i]);
+             uint32_t value = *watched;
+             length = _snprintf_s(line, sizeof(line), _TRUNCATE,
+                 "[DS-LINK-WRITE] n=%ld qpc=%lld tick_ms=%lu tid=%lu "
+-                "guest_va=%08lX value=%08lX guest_esp=%08lX host_rip=%016llX\r\n",
++                "guest_va=%08lX value=%08lX guest_esp=%08lX host_rip=%016llX "
++                "host_rsi=%016llX host_r9=%016llX host_rbx=%016llX "
++                "host_rdi=%016llX host_rcx=%016llX host_r8=%016llX\r\n",
+                 record, qpc.QuadPart, (unsigned long)GetTickCount(),
+                 (unsigned long)tid, (unsigned long)g_watch_guest_address[i],
+                 (unsigned long)value, (unsigned long)guest_esp,
+-                (unsigned long long)rip);
++                (unsigned long long)rip,
++                (unsigned long long)ep->ContextRecord->Rsi,
++                (unsigned long long)ep->ContextRecord->R9,
++                (unsigned long long)ep->ContextRecord->Rbx,
++                (unsigned long long)ep->ContextRecord->Rdi,
++                (unsigned long long)ep->ContextRecord->Rcx,
++                (unsigned long long)ep->ContextRecord->R8);
+             if (length > 0)
+                 ds_watch_write(line, (DWORD)length);
+         }
