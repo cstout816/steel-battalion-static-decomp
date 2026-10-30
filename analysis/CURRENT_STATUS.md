@@ -1,39 +1,38 @@
 # Steel Battalion AOT project — current status
 
-**Current milestone:** Milestone 3, boot and compatibility. **First visually verified mission frame: 0/1.**
+**Current milestone:** Milestone 3, boot and compatibility. **First visually verified mission frame: 0/1.** Latest completed diagnostics: r400/r401, 2026-10-30.
 
 ## Progress bars
 
 ```text
-Decompilation / AOT execution   [##########----------] 50%  AOT route reaches NOW LOADING; no mission frame
-Boot and campaign entry         [#######-------------] 35%  New-pilot route and Normal selection verified
-Runtime compatibility          [######--------------] 30%  Kernel, input, audio, and graphics remain incomplete
-Rendering and performance       [###-----------------] 15%  Loading transition measured; 60 FPS unverified
-Controller compatibility       [#####---------------] 25%  XID input path verified; full controller unverified
+Decompilation / AOT execution   [##########----------] 50%  AOT retained; mission frame not reached
+Boot and campaign entry         [#######-------------] 35%  Campaign entry reached in r400, then crashed
+Runtime compatibility          [######--------------] 30%  Kernel, audio, graphics remain incomplete
+Rendering and performance       [###-----------------] 15%  60 FPS unverified
+Controller compatibility       [#####---------------] 25%  XID delivery is traced; full support unverified
 Launcher and installation      [##------------------] 10%  Not the current milestone
-Debugging and evidence          [#############-------] 65%  Bounded traces and matching r367 stack bundles retained
-Storage control                 [##############------] 70%  5,021,696 bytes reclaimed in r394/r395 evidence cleanup
-Overall project                 [#####---------------] 25%  Early compatibility work; campaign is not playable yet
+Debugging and evidence          [##############------] 70%  Matching r399 bundle and r400/r401 evidence retained
+Storage control                 [###############-----] 75%  80,239,114 bytes saved by lossless compression this pass
+Overall project                 [#####---------------] 25%  Campaign is not yet playable
 ```
 
-Bars are rough engineering estimates. The current milestone acceptance check is one visually verified first mission frame.
+Bars are rough engineering estimates. Acceptance remains one visually verified first mission frame.
 
 ## Current findings
 
-- r396 (`m3-3fff-screen-gated-writer-r396-20261030`, PID 19912) used the exact r367 AOT EXE/PDB/MAP and the r368 save root. The route reached the new-pilot editor, default date, YES, `HAI SHI DAO 2080 [NORMAL]`, and a guest framebuffer showing `NOW LOADING`. The host window later showed black at 0.0 FPS; no first mission frame appeared.
-- Screen-gated input from XID DMA at guest buffer `0x01081763` through the edge predicate at `0x000C8064`, pilot callback `0x000E18D8`, selected branch `0x000E193B`, and row action `0x000E19CF` is correlated in r396. `LIST AS NEW` was selected as owner 8; the action changed item `+0x28` from `0x3F800000` to zero.
-- Loading mode 2 stopped at progress pair `0x000ABA00/0`. Sampled reads through read count 11,000 completed with matching byte counts and zero status. File lifecycle and per-handle read traces were disabled, so the first stalled file dependency is still unknown.
-- The same loading run ended with thread 187972 waiting on guest event `0x0021DCF4`; the 180-second DCF4 watchdog stopped only PID 19912 after no wait return. The final synchronized trace had no DCF4 signal, no new raster batches, and static DMA PUT/GET. DCF4 is a separate observed wait; it is not yet proven to be the loader readiness cause.
-- Matching-bundle StackWalk64 reached host `xbox_KeWaitForSingleObject` and stopped at synthetic address `0xF34`. Guest addresses found by raw stack scanning are candidates only, not validated unwinds. No missing guest import was seeded; no behavior fix was made.
-- The r396 guest-write watch on `0x82A9BFFC` used host address `0x82AABFFC`, read zero when attached, and logged no write hit. This does not validate the prior `0xFFFFFFFF` table-entry candidate or its expected writer.
-- r130 `ObReferenceObjectByHandle` and worker completion propagation remain current; do not repeat the old null-output diagnosis. Keep title DCF4, DirectSound-list corruption, rendering cost, and loading readiness distinct.
-- r396 reused the writable r368 save root without cloning or hard-linking it. `UserData` remained empty; TitleData save files were retained. Partition-image timestamps changed at process start and `Cache\\COPYCHECK.DAT` changed during the run, so their contents are not claimed unchanged.
-- No game build, runtime fix, controller-map change, guest-fence change, or rasterizer change was made. A tiny local trace-helper executable was built from `tools/GuestWriteBreakpoint.c`; the warm game build cache remains unchanged.
+- r400 (`m3-apu-guard-loader-r400-20261030`) used the exact r399 diagnostic EXE/PDB/MAP and existing r368 save root. It reached the Campaign menu and crashed on a later input before the pilot list or loader.
+- r400 captured invalid DirectSound-list values at guest node `0x8038C098` / predecessor state, followed by a null node and AV at host `0x7FF6B8B04F08`, guest VA `0xFFFFFFF4`. Guest callsite `0x0021FECA` passes `EBX-0x20`; `EBX=0` yields `ESI=0xFFFFFFEC` in `sub_0021ED29+0x88`, source `recomp_0016.c:1717`. This explains the immediate read fault, not the earlier corrupting write.
+- Exact-bundle native unwind for r400 TID 177512 stopped after the faulting module frame at a non-module address. Source/callsite and guest registers correlate the failure, but this is not a complete validated guest unwind.
+- r401 (`m3-dsound-node-writer-r401-20261030`) armed a cross-thread hardware write watch at guest `0x8038C098` / host `0x8039C098`, but did not reach the same Campaign failure and recorded no write hit. It therefore does not identify or rule out the writer. Its visible screen went black at 0 FPS during the title transition.
+- r401’s snapshot TID 186840 has a valid native unwind through `xbox_KeWaitForSingleObject+0x29`; it does not expose the guest object at capture. An earlier DCF4 wait returned 15 ms after a signal. A persistent DCF4 hang was not reproduced, and sparse/first-window traces leave the later terminal wait state unknown.
+- The r399 APU bounds guard addresses a separate invalid voice index observed in r398. It did not fire in r400. It is not established as a fix for the current blocker.
+- r400/r401 never reached pilot selection or loading. The mode-2 first missing file/dependency, mission frame, audio, full controller behavior, campaign progression, and 60 FPS remain unverified. Keep title DCF4, DirectSound list corruption, rendering cost, and post-difficulty loading plateaus distinct.
+- Preserve AOT execution, controller mapping, guest fences, and rasterizer `1ea1871`. No guest checks were bypassed, no signals forced, and no imports seeded.
 
 ## Storage and next action
 
-The final path-summed inventory after r396 and current status/report files is **41,534,686,538 allocated bytes (38.68 GiB)** and **1,397,141,523,641 logical bytes**, including the 13 separately measured executable reparse entries. The inventory counted 77,689 ordinary files; sparse logical lengths are not disk usage. The warm build cache remains 6,918,921,034 allocated bytes; the last incremental build measurement is about 9.1 seconds, and no game rebuild ran. No build ran in r396.
+Final scan: 77,780 ordinary files, **41,498,777,888 allocated bytes** plus **165,381,632 allocated bytes** for 13 separately measured executable reparse entries: **41,664,159,520 allocated bytes (38.803 GiB)** total. Logical file lengths total **1,397,464,756,894 bytes** plus the separately measured reparse files; the logical total is not disk use because save images are sparse. Inventory CSV and skipped-path list are stored outside the repository as `sb-inventory-current-r401-final3-20261030.csv` and its `.skipped.txt` companion.
 
-Verified r394/r395 closed-evidence cleanup reclaimed **5,021,696 allocated bytes**. The r396 audit found 22 historical cache files that match retained extracted media exactly (178,721,934 logical / 143,407,758 allocated bytes), but the automatic execution review rejected the removal command; none were removed. The r396 run retains four bounded, lossless screenshots and two small dumps; its 64 MiB budget was not triggered, no relay drops occurred, and no trace caps were hit. See [r394–r396 report](m3-r394-r396-loading-storage-followup-20261030.md), [r396 cache audit](r396-redundant-cache-audit-20261030.csv), and [r396 cleanup manifest](current-cleanup-manifest-r396-20261030.md).
+Lossless, hash-verified compression reclaimed **80,239,114 allocated bytes** this pass. No files were deleted. The warm seeded build tree is **6,991,569,062 allocated bytes**; it was preserved. The candidate build took about 6.5 seconds and emitted no compiler warnings. The 22 hash-matched historical cache copies remain because automatic execution review rejected their deletion command as “blocked by policy”; no deletion savings are claimed. Details: [r400/r401 report](m3-r400-r401-first-blocker-followup-20261030.md), [cleanup manifest](current-cleanup-manifest-r401-20261030.md), and [r401 source preservation manifest](r401-source-preservation-manifest.md).
 
-**Next:** use the exact r367 bundle and existing save root for one focused follow-up with bounded per-handle file completion, loader state producer/consumer, and wait-state evidence. Keep the DCF4 event distinct from the mode-2 readiness pair. Do not seed, bypass, force, or patch a guest state without a source-and-runtime correlation. Stop at the first visually verified mission frame. Campaign completion and 60 FPS remain unverified.
+**Next:** analyze existing r150/r151/r153 dumps with their exact executable/symbol bundles before another run. Then reproduce only the r400 Campaign list fault with a write watch and failure-window telemetry, ensuring the screen-gated route actually reaches the same state. Identify the first writer to `0x8038C098`; do not change list semantics without that evidence. Once this blocker is resolved, return to the new-pilot route and trace loader completion dependencies. Stop at the first visually verified mission frame.

@@ -1,0 +1,157 @@
+diff --git a/src/apu/apu_vp.c b/src/apu/apu_vp.c
+index f45b42b..8e83161 100644
+--- a/src/apu/apu_vp.c
++++ b/src/apu/apu_vp.c
+@@ -21,6 +21,10 @@
+ 
+ #include "apu_state.h"
+ #include "fpconv.h"
++#include <stdio.h>
++
++extern uint8_t *g_apu_ram_ptr;
++uint8_t *mcpx_apu_phys(uint64_t addr);
+ 
+ /* #define DEBUG_MCPX */
+ 
+@@ -492,6 +496,7 @@ static void fe_method(MCPXAPUState *d, uint32_t method, uint32_t argument)
+             d->regs[NV_PAPU_FECTL] |= NV_PAPU_FECTL_FEMETHMODE_TRAPPED;
+             d->regs[NV_PAPU_FECTL] &= ~NV_PAPU_FECTL_FETRAPREASON;
+             d->regs[NV_PAPU_FECTL] |= NV_PAPU_FECTL_FETRAPREASON_REQUESTED;
++            qatomic_or(&d->regs[NV_PAPU_ISTS], NV_PAPU_ISTS_FETINTSTS);
+             d->set_irq = true;
+         }
+         break;
+@@ -1096,6 +1101,49 @@ static void voice_process(MCPXAPUState *d,
+         dbg->vol[i] = vol[i];
+     }
+ 
++    if (getenv("RECOMP_APU_VP_TRACE")) {
++        static bool voice_trace_seen[MCPX_HW_MAX_VOICES];
++        if (v < MCPX_HW_MAX_VOICES && !voice_trace_seen[v]) {
++            float sample_peak = 0.0f;
++            uint32_t buffer_offset = voice_get_mask(
++                d, v, NV_PAVS_VOICE_CUR_PSL_START,
++                NV_PAVS_VOICE_CUR_PSL_START_BA);
++            uint32_t sge_base = d->regs[NV_PAPU_VPSGEADDR];
++            uint32_t sge_entry = buffer_offset / TARGET_PAGE_SIZE;
++            uint32_t prd = ldl_le_phys(address_space_memory,
++                                       sge_base + sge_entry * 8);
++            hwaddr sample_addr = prd + buffer_offset % TARGET_PAGE_SIZE;
++            uint16_t raw16 = lduw_le_phys(address_space_memory, sample_addr);
++            for (int i = 0; i < NUM_SAMPLES_PER_FRAME; i++) {
++                for (int ch = 0; ch < 2; ch++) {
++                    float value = samples[i][ch];
++                    if (value < 0.0f) value = -value;
++                    if (value > sample_peak) sample_peak = value;
++                }
++            }
++            fprintf(stderr,
++                    "[APU-VP-VOICE] v=%u BA=%06X CBO=%06X LBO=%06X EBO=%06X "
++                    "FMT=%08X STATE=%08X env=%.6f vol0=%03X "
++                    "SGE=%08X[%u]=%08X sample_at=%08llX raw16=%04X "
++                    "sample_peak=%.7f first={%.7f,%.7f}\n",
++                    v,
++                    voice_get_mask(d, v, NV_PAVS_VOICE_CUR_PSL_START,
++                                   NV_PAVS_VOICE_CUR_PSL_START_BA),
++                    voice_get_mask(d, v, NV_PAVS_VOICE_PAR_OFFSET,
++                                   NV_PAVS_VOICE_PAR_OFFSET_CBO),
++                    voice_get_mask(d, v, NV_PAVS_VOICE_CUR_PSH_SAMPLE,
++                                   NV_PAVS_VOICE_CUR_PSH_SAMPLE_LBO),
++                    voice_get_mask(d, v, NV_PAVS_VOICE_PAR_NEXT,
++                                   NV_PAVS_VOICE_PAR_NEXT_EBO),
++                    voice_get_mask(d, v, NV_PAVS_VOICE_CFG_FMT, 0xFFFFFFFFu),
++                    voice_get_mask(d, v, NV_PAVS_VOICE_PAR_STATE, 0xFFFFFFFFu),
++                    ea_value, vol[0], sge_base, sge_entry, prd,
++                    (unsigned long long)sample_addr, raw16, sample_peak,
++                    samples[0][0], samples[0][1]);
++            voice_trace_seen[v] = true;
++        }
++    }
++
+     if (voice_should_mute(v)) return;
+ 
+     /* Low-pass filter */
+@@ -1178,6 +1226,9 @@ static void voice_process(MCPXAPUState *d,
+ void mcpx_apu_vp_frame(MCPXAPUState *d,
+                         float mixbins[NUM_MIXBINS][NUM_SAMPLES_PER_FRAME])
+ {
++    static unsigned long trace_frame;
++    unsigned active_voices = 0;
++    unsigned listed_voices = 0;
+     memset(d->vp.sample_buf, 0, sizeof(d->vp.sample_buf));
+ 
+     for (int list = 0; list < 3; list++) {
+@@ -1194,7 +1245,40 @@ void mcpx_apu_vp_frame(MCPXAPUState *d,
+                 break;
+             }
+ 
+-            uint16_t v = (uint16_t)d->regs[current];
++            uint32_t voice_entry = d->regs[current];
++            if (voice_entry >= MCPX_HW_MAX_VOICES) {
++                static uint32_t invalid_voice_entries;
++                static uint32_t invalid_voice_trace_dropped;
++                uint32_t event = ++invalid_voice_entries;
++
++                if (event <= 16) {
++                    fprintf(stderr,
++                            "[APU-VP-INVALID-VOICE] n=%u list=%d "
++                            "top_reg=%08llX top=%08X current_reg=%08llX "
++                            "entry=%08X next_reg=%08llX next=%08X "
++                            "vpvaddr=%08X limit=%u\n",
++                            event, list, (unsigned long long)top,
++                            d->regs[top], (unsigned long long)current,
++                            voice_entry, (unsigned long long)next,
++                            d->regs[next],
++                            d->regs[NV_PAPU_VPVADDR], MCPX_HW_MAX_VOICES);
++                } else {
++                    uint32_t dropped = ++invalid_voice_trace_dropped;
++                    if (dropped == 1 || (dropped & 127u) == 0) {
++                        fprintf(stderr,
++                                "[APU-VP-INVALID-VOICE-CAP] limit=16 "
++                                "observed=%u dropped=%u\n",
++                                event, dropped);
++                    }
++                }
++
++                /* The next link is stored inside the indexed voice record,
++                 * so it cannot be read safely for an out-of-range handle. */
++                break;
++            }
++
++            uint16_t v = (uint16_t)voice_entry;
++            listed_voices++;
+             d->regs[next] = voice_get_mask(d, v, NV_PAVS_VOICE_TAR_PITCH_LINK,
+                                NV_PAVS_VOICE_TAR_PITCH_LINK_NEXT_VOICE_HANDLE);
+ 
+@@ -1202,6 +1286,7 @@ void mcpx_apu_vp_frame(MCPXAPUState *d,
+                                 NV_PAVS_VOICE_PAR_STATE_ACTIVE_VOICE)) {
+                 fe_method(d, SE2FE_IDLE_VOICE, v);
+             } else {
++                active_voices++;
+                 /* Process voice directly (single-threaded) */
+                 voice_process(d, mixbins, d->vp.sample_buf, v, list);
+             }
+@@ -1209,6 +1294,23 @@ void mcpx_apu_vp_frame(MCPXAPUState *d,
+         }
+     }
+ 
++    if (getenv("RECOMP_APU_VP_TRACE")) {
++        unsigned long frame = trace_frame++;
++        if (frame < 8 || frame % 120 == 0) {
++            float peak = 0.0f;
++            for (int bin = 0; bin < NUM_MIXBINS; bin++) {
++                for (int sample = 0; sample < NUM_SAMPLES_PER_FRAME; sample++) {
++                    float value = mixbins[bin][sample];
++                    if (value < 0.0f) value = -value;
++                    if (value > peak) peak = value;
++                }
++            }
++            fprintf(stderr, "[APU-VP] frame=%lu listed=%u active=%u peak=%.7f\n",
++                    frame, listed_voices, active_voices, peak);
++            fflush(stderr);
++        }
++    }
++
+     /* VP monitor output */
+     if (d->monitor.point == MCPX_APU_DEBUG_MON_VP) {
+         int16_t isamp[NUM_SAMPLES_PER_FRAME * 2];

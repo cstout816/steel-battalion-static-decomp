@@ -1,23 +1,23 @@
 # Steel Battalion project status
 
-## Current index — r391, 2026-10-30
+## Current index — r400/r401, 2026-10-30
 
-**Milestone 3 remains active. First visually verified mission frame: 0/1.** r391 reached the new-pilot route through Normal difficulty, then stopped at a solid white framebuffer. It did not verify a visible `NOW LOADING` label or mission frame. Mode-2 loader scans stopped at pair `0x000ABA00/0`; file samples succeeded; one worker completed with status 1; DCF4 was signaled and raster workers drained. The first missing dependency and expected readiness producer remain unknown. See the [r386–r391 loader and storage review](../analysis/m3-r386-r391-loader-and-storage-review-20261030.md).
+**Milestone 3 remains active. First visually verified mission frame: 0/1.** r400 reached Campaign then faulted before pilot selection. The immediate failure is a null DirectSound-list node read at guest VA `0xFFFFFFF4` in `sub_0021ED29+0x88`; the earlier corrupting writer is not yet identified. r401's watch did not reproduce the same state, so it neither confirms nor rules out the writer. Neither run reached the loader. See the [r400/r401 report](../analysis/m3-r400-r401-first-blocker-followup-20261030.md) and [current detailed status](../analysis/CURRENT_STATUS.md).
 
 | Area | Verified state | Next evidence |
 | --- | --- | --- |
-| AOT/XBE | Exact r367 EXE/PDB/MAP bundle retained; AOT path unchanged. | Keep the same image and symbols. |
-| Loader/readiness | r391 helper index `0x1E` reached decision 6; mode-2 pair stopped at `0xABA00/0`; worker pending-to-exit status propagated. | Trace the specific readiness producer and consumer with a bounded state probe. |
-| Stacks | Main TID 177520 unwound to `sub_0020EC00+0xCD` only; no validated guest caller chain. | Capture a valid guest PC/stack or producer-consumer state at the plateau. |
-| Files/audio | 2,599 lifecycle opens, 2,185 closes; sampled reads succeeded; no missing dependency established. | Name a dependency only from correlated completion/status evidence. |
-| Rendering/synchronization | White framebuffer; terminal DCF4=1, batches/workers/pending=0. | Keep separate from r387 title DCF4 and earlier renderer cost. |
-| Controller/campaign | New-pilot route reached Normal; no mission frame or campaign progression. | Stop at the first visually verified mission frame. |
+| AOT/XBE | Matching r399 diagnostic EXE/PDB/MAP retained; AOT execution unchanged. | Inspect existing r150/r151/r153 dumps with exact matching bundles before another run. |
+| Campaign entry | r400 reached Campaign; invalid list links then null-node AV. | Reproduce the same screen-gated state and capture the first write to `0x8038C098`. |
+| Stacks | r400 unwind stopped at the fault frame; r401 TID 186840 has a valid native wait unwind but no guest object. | Treat only genuine native unwind frames as stack evidence. |
+| DCF4 | r401's sampled wait returned 15 ms after signal; no persistent hang reproduced. | Capture bounded failure-window tail only if a DCF4 wait recurs and persists. |
+| Loader/files | r400/r401 never reached pilot selection or loading; first dependency unknown. | Resume the new-pilot route only after the Campaign-list blocker is understood. |
+| Controller/performance | XID route evidence exists; complete controller support and 60 FPS remain unverified. | Validate at the first mission frame, then continue the mission matrix. |
 
-**Testable hypothesis:** after worker `0x00034720` completes, a separate loader readiness producer fails to update the state consumed after helper index `0x1E`. Confirm only if a bounded trace shows no producer update while that consumer continues polling; reject if the expected state was updated or accepted. No code behavior fix is supported yet.
+**Current testable hypothesis:** a guest write corrupts list node `0x8038C098` before r400's invalid traversal. Confirmation requires a write-watch hit from the reproduced Campaign state with guest address, value, thread, and matching-bundle source location. No DirectSound behavior fix is supported yet.
 
-**Storage:** fresh scan measured **41,523,774,808 bytes allocated (38.67 GiB)** including 13 separately measured Rust reparse executables; logical total **1,397,117,750,835 bytes**. This is 27,672,977 bytes above r385, a net difference not attributed to one run. Closed r386–r390 compression reclaimed **11,522,408 bytes** with hashes preserved; r391 compression saved 0; no files were deleted or moved. Warm build cache remains 6,918,921,034 bytes, canonical generated source 155,887,568, saves 166,480,594 allocated, and logs 3,043,619,235 allocated. Last measured incremental build: about 9.1 seconds; no build ran. See the [r391 cleanup manifest](../analysis/current-cleanup-manifest-r391-20261030.md).
+**Storage:** final3 inventory measured **41,664,159,520 allocated bytes (38.803 GiB)** including 13 separately measured executable reparse entries; ordinary-file logical lengths were **1,397,464,756,894 bytes**. Hash-verified lossless compression reclaimed **80,239,114 allocated bytes** this pass; nothing was deleted. The warm seeded build tree is 6,991,569,062 allocated bytes; the isolated r399 build took about 6.5 seconds and emitted no compiler warnings. Automatic review rejected deletion of 22 verified historical cache duplicates as “blocked by policy”; no deletion savings are claimed. See the [r401 cleanup manifest](../analysis/current-cleanup-manifest-r401-20261030.md). The [r401 source patch manifest](../analysis/r401-source-preservation-manifest.md) documents the dirty APU file change.
 
-Overall `██░░░░░░ 2/8` · decompilation `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `████░ 4/5` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
+Overall `#####--------------- 25%` · AOT `##########---------- 50%` · boot/campaign `#######------------- 35%` · runtime `######-------------- 30%` · rendering `###----------------- 15%` · controller `#####--------------- 25%` · debugging `##############------ 70%` · storage `###############----- 75%` · mission frame `0/1` · stable 60 FPS `0/1`.
 
 **Current milestone:** 3 — boot and compatibility. **Next acceptance point:** first visually verified mission frame.
 ## Previous verified state — r349–r354
