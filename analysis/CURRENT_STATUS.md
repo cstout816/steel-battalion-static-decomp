@@ -1,36 +1,37 @@
-# Steel Battalion AOT — current status (r431, 2026-10-30)
+# Steel Battalion AOT — current status (r433, 2026-10-30)
 
-**Milestone 3: boot and compatibility. First visually verified mission frame: 0/1.** r427 is the latest run to show `NOW LOADING`; it plateaued in the mode-2 scan. r430/r431 stopped in separate title transitions. No supported runtime fix yet.
+**Milestone 3: boot and compatibility. First visually verified mission frame: 0/1.** r433's exact final screenshot is black; it does not establish `NOW LOADING` or a mission. r432 separately reached visible `NOW LOADING`. No gameplay fix is supported by current traces.
 
 ## Progress
 
 ```text
-Decompilation / AOT execution   [##########----------] 50%  Exact-bundle diagnosis retained
-Boot and campaign entry         [########------------] 40%  Loading screen reached; mission not shown
-Kernel/runtime compatibility   [######--------------] 30%  Loader handoff/owner still unknown
+Decompilation / AOT execution   [##########----------] 50%  Exact AOT/symbol bundle retained
+Boot and campaign entry         [########------------] 40%  New-pilot route reaches black transition
+Kernel/runtime compatibility   [######--------------] 30%  Owner snapshot timing corrected for next run
 Graphics / rendering            [###-----------------] 15%  First mission framebuffer unverified
-Controller compatibility       [#####---------------] 25%  Screen-gated XID/guest edge traced
+Controller compatibility       [#####---------------] 25%  Screen-gated XID/guest edge path remains traced
 Audio / DSP                     [###-----------------] 15%  Campaign audio unverified
-Debugging and evidence          [##################--] 92%  r150–r153 reviewed; r427–r431 retained
-Storage control                 [##################--] 94%  Fresh allocation scan; bounded run evidence
+Debugging and evidence          [##################--] 94%  r432/r433 exact bundles and bounded evidence retained
+Storage control                 [##################--] 94%  39.24 GiB allocated; cleanup removal blocked
 Overall project                 [#####---------------] 26%  Mission acceptance remains 0/1
 ```
 
-## Latest verified findings
+## Current findings
 
-- r427 visibly reached `NOW LOADING` through the new-pilot route. Mode-2 load-pass calls 6–15 returned 0; the last scan range was 2–11 with `last_index=28`. Terminal NV2A frame/counter/fence stopped at `0x117A/0x17591/0x1758F`; DCF4 was signaled and raster workers were idle. The first incomplete file or expected producer is not identified: r427 lacked file-lifecycle tracing, and sampled successful reads do not prove all requests completed.
-- r427 TID 17312 reached native `xbox_DispatchGateEnter+0xE1`; TID 1736 reached `guest_cpu_acquire+0x6E`. Those StackWalks stopped at error 487. Raw guest address scans are not validated guest unwinds; ownership/lock cycle remains unproven.
-- r430/r431 are title-stage cases, not loader runs. r431 logged one title route advance to `0x002B29B0`, then a black presentation; terminal frame/DMA/raster were stationary/idle. Last retained DCF4 wait at index 64 returned signaled; later wait rows were skipped by the 64-record trace policy, so no persistent terminal DCF4 wait is established.
-- Current `ObReferenceObjectByHandle` resolves thread completion even when guest output pointer is null. r430/r431 did not reach loader completion; runtime semantics at that stage remain unverified.
-- The identified pilot-list callback remains `sub_000E1820` at `0x000E18D8`; it did not execute in r430/r431. Do not reopen `sub_000E0870` as a candidate.
-- Keep the post-difficulty loader plateau, title wait/transition, DirectSound corruption, and rendering cost separate. No behavior change, build, or regression run occurred. AOT, controller mapping, guest fences, and rasterizer `1ea1871` remain untouched.
+- r433 used exact r426 EXE/PDB/MAP and reused the unchanged 29-file r368 save root. After Normal confirmation its final captured frame is black; `NOW LOADING` and a mission frame were not visually verified in this run. The prior r432 loading-screen result is separate evidence, not progress claimed for r433.
+- r433 recorded 5,075 successful reads, 985 opens / 926 closes and no proven incomplete read or first missing asset. The loader changed from mode 2 to mode 1 with zero progress, then stopped advancing. Do not merge it with r432's mode-2 plateau.
+- At the terminal r433 sample DCF4 was signaled and raster batches/workers/pending were zero; NV2A frame `0xDA8` stopped progressing for 600 seconds. No rendering backlog was demonstrated. Native dumps provide partial stacks only. Main TID 13072 near `deliver_one_apc`, worker TID 27064 near the duplicate-object bridge, and critical-section contention at guest lock `0x23FE18` are candidates, not a proven cause. Exception `0xE06D7363` near `_snprintf_s` in the DirectSound watch is kept distinct from the historical DirectSound list corruption.
+- r433's guest-owner watchdog snapshot was scheduled at 720s while its separate NV2A watchdog stopped the run at 600s. The missing `watchdog-snapshot.log` is explained by this ordering. `[SB-SNAPSHOT]` is the controller-copy trace in guest `sub_00048890`, not the guest-owner snapshot; that routine did not run on this route. Next repeat should schedule the single owner/critical-section snapshot before the NV2A stop threshold and change no gameplay behavior absent confirming evidence.
+- r150/r151/r153 were reviewed against their exact r149 bundle before new runs. They provide only partial native unwinds and no validated guest caller chain. r130's current null-output `ObReferenceObjectByHandle` completion behavior remains the implementation to verify; it is not re-diagnosed here.
 
 ## Storage
 
-Latest full scan is recorded in `analysis/current-cleanup-manifest-r431-20261030.md` and compressed inventory `C:\Project\sb-inventory-current-r431-final-20261030.csv.gz`. Workspace footprint is about 39.2 GiB allocated; logical file length is about 1.27 TiB due sparse files. r430/r431 closed text compression reclaimed 816,717 allocated bytes after per-file hash/length verification. Their dumps, screenshots, and exact r426 symbols remain. The warm build cache was not purged and no build ran. Three verified duplicate ZIPs remain quarantined because the prior deletion attempt was rejected by automatic file-action review.
+Fresh allocated inventory: **42,137,500,778 bytes (39.2436 GiB)** including 13 reparse tool entries; ordinary files total 41,972,119,146 allocated / 1,398,626,450,106 logical bytes. Net allocation change since r432 inventory: +2,606,309 bytes. The r433 folder adds 2,708,360 allocated bytes; the reused save root is unchanged at 952,898,778 allocated / 5,422,128,858 logical bytes. Warm build tree remains 7,354,916,122 allocated bytes; no build or cache purge ran. Cleanup savings this pass: 0 bytes. The earlier exact deletion attempt for three hash-verified duplicate ZIPs was blocked by policy; no alternate removal path was tried.
 
-Detailed report: `analysis/m3-r427-r431-loader-and-storage-20261030.md`. Compression audit: `analysis/r430-r431-closed-evidence-compression-20261030.csv`.
+Full report: `analysis/m3-r433-black-transition-and-watchdog-20261030.md`. Cleanup inventory: `analysis/current-cleanup-manifest-r433-20261030.md`. Fresh path inventory: `C:\Project\sb-inventory-current-r433-20261030.csv`.
 
 ## Next discriminating test
 
-Repeat the r427 route/save root with file lifecycle and read-completion correlation, thread-object state, guest-CPU owner/wait snapshots, mode-2 helper records, and a non-stopping plateau dump. Identify one incomplete operation and its expected producer before changing behavior. Stop only at the first visually verified mission frame or preserve the exact plateau evidence.
+Repeat the same known new-pilot route with r426 and the existing save root. Schedule a single guest CPU/critical-section watchdog snapshot at 480 seconds, before the 600-second NV2A progress stop. Correlate its owner/waiters and call sites with thread completion, loader state, file completions, and NV2A state. Stop on the first visually verified mission frame or retain the bounded failure window. Preserve AOT, controller mapping, guest fences, and rasterizer `1ea1871`.
+
+**Storage note (2026-10-30):** exact-path deletion of the three duplicate ZIP candidates was rejected by automatic file-action review as blocked by policy; no candidates were removed. Do not try another deletion mechanism. Their combined 976,265,216 allocated bytes remain deferred candidates, with hashes and keepers in the r432 cleanup manifest.
