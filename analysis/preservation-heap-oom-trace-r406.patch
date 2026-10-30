@@ -1,0 +1,54 @@
+diff --git a/local-tools/xboxrecomp/src/kernel/xbox_memory_layout.c b/local-tools/xboxrecomp/src/kernel/xbox_memory_layout.c
+index 1bb4a0a..388c234 100644
+--- a/local-tools/xboxrecomp/src/kernel/xbox_memory_layout.c
++++ b/local-tools/xboxrecomp/src/kernel/xbox_memory_layout.c
+@@ -3681,8 +3681,13 @@ uint32_t xbox_HeapAlloc(uint32_t size, uint32_t alignment);
+ #define XBOX_MAX_THREAD_STACKS  8
+ 
+ static int g_thread_stacks_used = 0;
+ 
++/* A heap failure can strand a loader without identifying who requested the
++ * block. Keep a small, failure-only guest stack sample so a diagnostic run can
++ * map the allocator request back to its AOT caller without flooding startup. */
++static unsigned g_heap_oom_trace_count = 0;
++
+ /* A TIB and TLS block for a newly spawned guest thread.
+  *
+  * A TIB is per-thread on the console and was per-process here: one address,
+  * 0x1000, for everyone. Two things live in it that must not be shared. fs:[0]
+@@ -4081,8 +4086,35 @@ static uint32_t heap_alloc_locked(uint32_t size, uint32_t alignment)
+     if (result + size > XBOX_HEAP_TOP) {
+         fprintf(stderr, "xbox_HeapAlloc: out of memory (requested %u, used %u/%u)\n",
+                 size, g_heap_next - XBOX_HEAP_BASE,
+                 (unsigned)(XBOX_HEAP_TOP - XBOX_HEAP_BASE));
++        if (g_heap_oom_trace_count < 8) {
++            uint32_t esp = g_esp;
++            uint32_t ebp = g_ebp;
++            uint32_t stack[6] = {0};
++            unsigned stack_words = 0;
++            unsigned long host_tid = 0;
++#if defined(_WIN32)
++            host_tid = (unsigned long)GetCurrentThreadId();
++#endif
++            if (esp && (uint64_t)esp + sizeof(stack) <= g_memory_size) {
++                const uint8_t *guest_stack =
++                    (const uint8_t *)((uintptr_t)esp + g_memory_offset);
++                memcpy(stack, guest_stack, sizeof(stack));
++                stack_words = 6;
++            }
++            fprintf(stderr,
++                    "[HEAP-OOM-TRACE] n=%u tid=%lu request=%u alignment=%u "
++                    "candidate=%08X heap_next=%08X heap_top=%08X "
++                    "esp=%08X ebp=%08X stack_words=%u "
++                    "stack=%08X,%08X,%08X,%08X,%08X,%08X\n",
++                    ++g_heap_oom_trace_count, host_tid, size, alignment,
++                    result, g_heap_next, XBOX_HEAP_TOP, esp, ebp, stack_words,
++                    stack[0], stack[1], stack[2], stack[3], stack[4], stack[5]);
++        } else if (g_heap_oom_trace_count == 8) {
++            fprintf(stderr, "[HEAP-OOM-TRACE-CAP] limit=8\n");
++            g_heap_oom_trace_count++;
++        }
+         /* Who ate the heap? Group live blocks by size -- an exhausted heap is
+          * nearly always one request size repeated, and the count names it. */
+         {
+             static int dumped = 0;

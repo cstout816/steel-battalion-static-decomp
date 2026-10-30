@@ -1,25 +1,25 @@
 # Steel Battalion project status
 
-## Current index — r400/r401, 2026-10-30
+## Current index — r406, 2026-10-30
 
-**Milestone 3 remains active. First visually verified mission frame: 0/1.** r400 reached Campaign then faulted before pilot selection. The immediate failure is a null DirectSound-list node read at guest VA `0xFFFFFFF4` in `sub_0021ED29+0x88`; the earlier corrupting writer is not yet identified. r401's watch did not reproduce the same state, so it neither confirms nor rules out the writer. Neither run reached the loader. See the [r400/r401 report](../analysis/m3-r400-r401-first-blocker-followup-20261030.md) and [current detailed status](../analysis/CURRENT_STATUS.md).
+**Milestone 3 remains active. First visually verified mission frame: 0/1.** r405 and r406 reached the new-pilot route through Normal and entered mode-2 loader work, but neither produced a mission frame. r405 logged a 4 MiB heap allocation failure; r406 did not reproduce it. The current loader stop is at helper index `0x1E`, decision 5, with progress `0/0`; its expected producer and consumer are still unidentified. See the [r402–r406 report](../analysis/m3-r402-r406-loader-storage-followup-20261030.md) and [current detailed status](../analysis/CURRENT_STATUS.md).
 
 | Area | Verified state | Next evidence |
 | --- | --- | --- |
-| AOT/XBE | Matching r399 diagnostic EXE/PDB/MAP retained; AOT execution unchanged. | Inspect existing r150/r151/r153 dumps with exact matching bundles before another run. |
-| Campaign entry | r400 reached Campaign; invalid list links then null-node AV. | Reproduce the same screen-gated state and capture the first write to `0x8038C098`. |
-| Stacks | r400 unwind stopped at the fault frame; r401 TID 186840 has a valid native wait unwind but no guest object. | Treat only genuine native unwind frames as stack evidence. |
-| DCF4 | r401's sampled wait returned 15 ms after signal; no persistent hang reproduced. | Capture bounded failure-window tail only if a DCF4 wait recurs and persists. |
-| Loader/files | r400/r401 never reached pilot selection or loading; first dependency unknown. | Resume the new-pilot route only after the Campaign-list blocker is understood. |
-| Controller/performance | XID route evidence exists; complete controller support and 60 FPS remain unverified. | Validate at the first mission frame, then continue the mission matrix. |
+| AOT/XBE | r406 is an AOT diagnostic executable with exact EXE/PDB/MAP retained. | Continue with the same generated source and save root. |
+| Campaign entry | Screen-gated route reached pilot setup and Normal difficulty. | Stop at the first visually verified mission frame. |
+| Loader | Nine r406 mode-2 scans; last helper index `0x1E`, progress `0/0`; no failed sampled reads or missing-path record. | Identify mode-2 thread start, expected producer, completed handoff, and consumer predicate. |
+| Heap | r405 had one 4 MiB allocation failure; r406's bounded heap trace did not fire. | Capture caller only if the failure recurs; do not increase heap. |
+| Stacks | r406 main and a file worker unwind into `fprintf`; a third thread reaches `KeDelayExecutionThread` then an incomplete boundary. | Reduce synchronous trace volume and capture the loader thread's identity at the plateau. |
+| DCF4/rendering | DCE4 trace capped; terminal DMA/PB semaphore state absent. No persistent DCF4 wait established. | Investigate only if a separate persistent wait reproduces. |
+| DirectSound | r403 independently reproduced r400's invalid-list read; no new writer evidence. | Keep separate from the loader plateau. |
+| Controller/performance | XID route is traced; full control support, mission performance, and 60 FPS are unverified. | Validate at and after the first mission frame. |
 
-**Current testable hypothesis:** a guest write corrupts list node `0x8038C098` before r400's invalid traversal. Confirmation requires a write-watch hit from the reproduced Campaign state with guest address, value, thread, and matching-bundle source location. No DirectSound behavior fix is supported yet.
+The `ObReferenceObjectByHandle` pending/completion implementation remains intact; the old r130 null-output diagnosis is not repeated. Preserve AOT execution, controller mapping, guest fences, and rasterizer `1ea1871`.
 
-The separate thread-object path initializes status `+0x120` to pending and refreshes it from the native thread exit code when polled. r391 verified the transition `0x103 -> 1` for one worker. That proves status propagation for that worker, not loader readiness; the old r130 null-output diagnosis is not being repeated.
+**Storage:** final post-status scan is 41,746,055,330 bytes allocated (38.88 GiB), with 1,397,678,346,351 ordinary-file logical bytes plus separately measured toolchain links. The 4,592,754-byte recovery came from hash-verified lossless compression. No files were deleted; automatic file-action review rejected duplicate screenshot deletion before execution. Historical BMP/log/dump files are already compressed except 12.1 MiB of unresolved dumps and 8.8 KiB of logs, which remain intact. Warm build cache remains 7,064,232,890 allocated bytes. See the [r406 cleanup manifest](../analysis/current-cleanup-manifest-r406-20261030.md) and [source preservation manifest](../analysis/r406-source-preservation-manifest.md).
 
-**Storage:** final3 inventory measured **41,664,159,520 allocated bytes (38.803 GiB)** including 13 separately measured executable reparse entries; ordinary-file logical lengths were **1,397,464,756,894 bytes**. Hash-verified lossless compression reclaimed **80,239,114 allocated bytes** this pass; nothing was deleted. The warm seeded build tree is 6,991,569,062 allocated bytes; the isolated r399 build took about 6.5 seconds and emitted no compiler warnings. Automatic review rejected deletion of 22 verified historical cache duplicates as “blocked by policy”; no deletion savings are claimed. See the [r401 cleanup manifest](../analysis/current-cleanup-manifest-r401-20261030.md). The [r401 source patch manifest](../analysis/r401-source-preservation-manifest.md) documents the dirty APU file change.
-
-Overall `#####--------------- 25%` · AOT `##########---------- 50%` · boot/campaign `#######------------- 35%` · runtime `######-------------- 30%` · rendering `###----------------- 15%` · controller `#####--------------- 25%` · debugging `##############------ 70%` · storage `###############----- 75%` · mission frame `0/1` · stable 60 FPS `0/1`.
+Overall `#####--------------- 26%` · AOT `##########---------- 50%` · boot/campaign `########------------ 40%` · runtime `######-------------- 30%` · rendering `###----------------- 15%` · controller `#####--------------- 25%` · debugging `###############----- 75%` · storage `################---- 80%` · mission frame `0/1` · stable 60 FPS `0/1`.
 
 **Current milestone:** 3 — boot and compatibility. **Next acceptance point:** first visually verified mission frame.
 ## Previous verified state — r349–r354
