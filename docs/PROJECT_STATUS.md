@@ -1,24 +1,26 @@
 # Steel Battalion project status
 
-## Current index — r364–r368, 2026-10-30
+## Current index — r372–r373, 2026-10-30
 
-**Milestone 3 remains active. First mission frame: 0/1.** Start from this table and the linked reports; lower sections are historical evidence, not fresh hypotheses. AOT, controller mapping, guest fences, and rasterizer `1ea1871` remain unchanged.
+**Milestone 3 remains active. First mission frame: 0/1.** This index is current evidence; lower sections preserve history. AOT execution, controller mapping, guest fences, and rasterizer `1ea1871` remain unchanged.
 
 | Failure family | Verified evidence | Current status / next handling |
 | --- | --- | --- |
-| Current title route | r368 used the r367 AOT bundle with `RECOMP_DSOUND_SURFACE_TRACE=1`. Two screen-gated `a:500` pulses reached XID at ticks `570611750` and `570644750`, but no new guest edge or menu callback followed. The title frame remained at 0 FPS / 57 draws. | r368 stopped before Campaign; **not a DirectSound test**. No surface or invalid-node record. The screenshot, logs, and exact r367 symbols are retained. |
-| Pilot list / TDATA | r365/r366 visibly reached the pilot-limit overlay. r366’s empty UserData did not mean empty title data: `Partition1\TDATA` resolved to nine extracted `user*.sav` files. r367 redirected TDATA to an isolated `TitleData` folder but crashed before pilot selection. | **Limit cause unverified.** Do not claim the redirect fixed it or treat r366 as a clean empty-data test. |
-| DirectSound list corruption | r340 matched `put_pixel+0x4AC` storing `FF000000` into guest `0x8038C08C`, `0x8038C098`, `0x8038C09C`, followed by the invalid-list fault. r367 independently saw invalid nodes. | **Active surface at the corrupting store is still unknown.** r368 enabled the existing bounded surface probe but never reached the Campaign route. Reproduce that route with the probe enabled before considering a fix. |
-| Title DCF4 | r150/r151 exact r149 symbols validate a title wait on guest DCF4 `0x0021DCF4`; the later callback lacks a matching index-5 handler/`KeSetEvent`. r364 has a separate valid wait unwind. | Keep this title synchronization observation separate. Do not attribute raster backlog, r367 DirectSound, or loader behavior to it. |
-| Post-difficulty loading | r354 is the latest visually verified `NOW LOADING` run. It showed 34 mode-2 scans and file/raster activity, but no named missing dependency or first mission frame. | **Loader cause unresolved.** Resume only after a visible loading screen; do not infer it from title logs. |
+| Title DCF4 handoff | r373 main guest TID 182860 is in `KeWaitForSingleObject` on `0x0021DCF4`. The last index-5 callback was #2100 / target `0x0021701E`; the main thread reset DCF4, callbacks #2101 and #2102 selected index 1, then callback records stopped. The event remained unsignaled while DCE4 continued. | Strong evidence for a title-stage callback/event handoff stall. The callback worker’s native wait object and releasing producer remain unresolved. Do not force a signal. |
+| Rendering / DMA | At the r373 snapshot USER PUT=GET=`0x1C8D0`, PFIFO registers and PGRAPH pending were zero; the captured DCF4 marker showed PUT=GET=0 and PFB=0. | Does not support queued DMA backlog for this wait. Keep the r340 DirectSound corruption and other raster-cost reports separate. |
+| r371 NVIDIA crash | r372 enabled the in-process crash dump option but did not reproduce the access violation. | r371 remains a separate, unreproduced driver crash; its faulting-thread context is still missing. |
+| Loading / campaign | r372/r373 never showed `NOW LOADING`; captures show the title prompt followed by black. Loader state/pass/preload counts are zero. | No loader dependency is identified. First mission frame remains 0/1. |
 
-**Next discriminating action:** regain the screen-gated path to Campaign, then use the already compiled bounded surface probe to capture target base, offset, pitch, format, clip, and coordinates at the exact r340 list-overlapping stores. No behavior fix is supported before that correlation. Preserve original route saves; use the isolated r368 root if it remains the selected route. Stop at the first visually verified mission frame.
+**Next discriminating action:** use the exact r367 PDB and source to resolve executable `+0x6498042`, then identify the callback worker’s host wait object and the producer that should wake it. The `.data` address `+0x6AC30A0` from the same unwind is excluded as a return frame. Do not patch, start another runtime, or alter guest synchronization until that offline correlation is complete. Full run details: [r372–r373 handoff report](../analysis/m3-r372-r373-title-dcf4-handoff-20261030.md).
 
-**Storage:** 77,240 files; **38.600 GiB allocated / 1,300.849 GiB logical** (sparse files make logical size much larger). Relative to r367, the workspace is up 113,137,593 allocated bytes because the isolated r368 save root and its evidence remain; verified lossless compression saved 68,150,388 bytes this pass. Current warm build tree: **6.445 GiB** (including the retained 72.6 MiB r367 symbol bundle); no build or cache purge occurred. Eight small allocation queries failed. See the [current cleanup manifest](../analysis/current-cleanup-manifest-20261029.md) and [r364–r368 follow-up](../analysis/m3-r364-r368-title-route-and-storage-20261030.md) for category totals and audit hashes.
+**Storage:** 77,346 files; **41,463,405,666 bytes allocated (38.616 GiB)** and **1,396,848,441,688 bytes logical (about 1.270 TiB)**. The warm build cache is **6,918,921,034 allocated bytes**, generated AOT source **155,887,568 bytes**, route saves **110,700,940 allocated / 5,422,134,482 logical bytes**, and logs **2,982,438,620 allocated / 1,035,920,610,872 logical bytes**. Verified compression savings remain **763,160,973 bytes**. r372/r373 added **3,684,718 allocated bytes** of bounded evidence. No files were deleted, and no hot cache or build ran; warm incremental build efficiency is preserved, build time not measured.
 
-Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `███░ 3/4` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
+Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `████ 4/4*` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
+
+\*Earliest title-stage wait has a synchronized reproduction and validated native stacks; the host wait object/wake producer and loader-stage blocker remain unresolved.
 
 **Current milestone:** 3 — boot and compatibility.
+
 **Next acceptance point:** first visually verified mission frame.
 
 ## Previous verified state — r349–r354

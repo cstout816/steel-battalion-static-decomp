@@ -1,4 +1,22 @@
-# Current cleanup manifest — 2026-10-29
+# Current cleanup manifest — 2026-10-30 r373 update
+
+## Authoritative current state — after r373
+
+- Fresh scan: **77,346 files**, **41,463,405,666 bytes allocated (38.616 GiB)** and **1,396,848,441,688 bytes logical (about 1.270 TiB)**. The scan's 13 reparse-point toolchain executables were sized separately and included in allocated totals. Sparse-file logical length is not disk occupancy.
+- Retained workset: warm `local-tools/steel-battalion-game/build-xpp-seeded` **6,918,921,034 allocated / 13,871,927,762 logical bytes** (2,213 files); canonical AOT source **155,887,568 bytes** (27 files); shared route saves **110,700,940 allocated / 5,422,134,482 logical bytes** (31 files); logs **2,982,438,620 allocated / 1,035,920,610,872 logical bytes** (20,626 files). Preserve the cache, saves, and exact r367 EXE/PDB/MAP bundle.
+- The 378 validated staged duplicate/superseded files remain losslessly compressed, preserving hashes. The 34 closed r370/r371 files also remain losslessly compressed with hashes and logical lengths unchanged. Previously measured combined allocated-space reduction remains **763,160,973 bytes**; no files were deleted or moved.
+- r372/r373 added **3,684,718 allocated bytes / 9,655,250 logical bytes** of bounded run evidence. Each run had a 64 MiB cap; neither reached the cap, neither dropped async relay lines, and no trace cap was reported. No hot compiler/Cargo cache was purged and no build ran.
+- r373 supports a title-stage DCF4 callback/event handoff stall; loader traces are absent because the game never reached loading. First mission frame remains unverified. See `analysis/m3-r372-r373-title-dcf4-handoff-20261030.md`.
+
+
+## Authoritative current state — after r371
+
+- Current scan: 77,321 files; **41,459,710,307 bytes allocated (38.62 GiB)** and **1,396,838,775,797 bytes logical (about 1.27 TiB)**; zero allocation-query errors. Logical size is inflated by sparse-file length and should not be treated as disk occupancy.
+- Retained working set: warm `local-tools/steel-battalion-game/build-xpp-seeded` **6,918,921,034 allocated / 13,871,927,762 logical bytes** (2,213 files); canonical AOT source `iso/local-analysis/xboxrecomp-generated-xpp-untraced-current/gen` **155,887,568 bytes** (27 files); shared route saves **110,700,940 allocated / 5,422,134,482 logical bytes** (31 files); logs **2,978,753,902 allocated / 1,035,910,955,622 logical bytes** (20,602 files). Preserve the warm incremental cache, exact r367 EXE/PDB/MAP bundle, and route saves.
+- Verified lossless compression reclaimed **762,760,742 bytes** across 378 hash-validated duplicate/superseded files already staged in `C:\Project\SteelBattalion-Delete-Later-20261026`; closed r370/r371 evidence compression reclaimed **400,231 bytes** with all 34 hashes and logical lengths unchanged. Combined allocation reduction: **763,160,973 bytes**. The staged files remain in place; no deletion or move occurred. See `analysis/r370-r371-closed-evidence-compression-20261030.csv` and the linked r369–r371 report.
+- No hot compiler/Cargo cache was cleared, and no build ran. Warm build efficiency is preserved; incremental-build time and any performance change were not measured this turn. Current free-space delta is not inferred from the workspace scan.
+- Latest diagnostics stopped before loading. r371 crashed in the NVIDIA driver without faulting-thread exception context; first mission frame remains unverified. Analyze the existing r150/r151/r153 dumps with their exact bundle before another run.
+
 
 ## Authoritative current state — post-r356
 
