@@ -1,24 +1,23 @@
 # Steel Battalion project status
 
-## Current index — r382, 2026-10-30
+## Current index — r391, 2026-10-30
 
-**Milestone 3 remains active. First mission frame: 0/1.** r382 visually reached `NOW LOADING` through the new-pilot route. The mode-2 worker completed; loader progress then stopped at `0xABA00`. A guest loop repeatedly retried handle `0x3FFF`, whose table entry remained `FFFFFFFF`, while later graphics telemetry showed an idle raster queue and signaled DCF4. This is the strongest immediate blocker candidate; the expected completion writer remains unknown. No runtime fix or build is justified yet. See the [r382 loading and storage report](../analysis/m3-r382-loading-handle-and-storage-20261030.md).
+**Milestone 3 remains active. First visually verified mission frame: 0/1.** r391 reached the new-pilot route through Normal difficulty, then stopped at a solid white framebuffer. It did not verify a visible `NOW LOADING` label or mission frame. Mode-2 loader scans stopped at pair `0x000ABA00/0`; file samples succeeded; one worker completed with status 1; DCF4 was signaled and raster workers drained. The first missing dependency and expected readiness producer remain unknown. See the [r386–r391 loader and storage review](../analysis/m3-r386-r391-loader-and-storage-review-20261030.md).
 
-| Area | Current verified state | Next evidence |
+| Area | Verified state | Next evidence |
 | --- | --- | --- |
-| AOT/XBE | AOT execution and exact r367 EXE/PDB/MAP bundle preserved. | No recompilation or source regeneration this pass. |
-| Loader/readiness | Mode-2 worker transitioned pending → completed (`0x103` → `1`). Progress stopped at `0xABA00`; helper index `0x1E` output pair returned to `0/0`. | Watch writes to guest `0x82A9BFFC` and correlate the first writer with loader progress. |
-| Guest handle/synchronization | Create and publish of handle `0x3FFF` returned successfully while entry `0x82A9BFF0+0xC` remained `FFFFFFFF`; `sub_0001D980` retried lookup result `0x88760828`. | Identify the expected completion producer; do not seed or force the entry. |
-| Rendering/DMA | Later NV2A samples: batches/workers/pending all zero; DMA PUT/GET stable at `0x38014`; DCF4 signaled. Earlier heavy raster cost remains a separate concern. | Keep queue backlog and guest handle readiness separate. |
-| Files/audio | Successful file opens and sampled reads were observed; 36 misses were not tied to required data. The read trace was sampled. | Only investigate a specific dependency if a complete path/status trace identifies it. |
-| Controller/campaign | New-pilot menu path reached `NOW LOADING`; no gameplay frame, mission completion, or full campaign verification. | Continue to first visually verified mission frame. |
-| Historical failure families | Title DCF4 wait, DirectSound list corruption, and earlier raster slowdowns remain separate. | Reuse only their exact-run evidence; do not infer a common cause. |
+| AOT/XBE | Exact r367 EXE/PDB/MAP bundle retained; AOT path unchanged. | Keep the same image and symbols. |
+| Loader/readiness | r391 helper index `0x1E` reached decision 6; mode-2 pair stopped at `0xABA00/0`; worker pending-to-exit status propagated. | Trace the specific readiness producer and consumer with a bounded state probe. |
+| Stacks | Main TID 177520 unwound to `sub_0020EC00+0xCD` only; no validated guest caller chain. | Capture a valid guest PC/stack or producer-consumer state at the plateau. |
+| Files/audio | 2,599 lifecycle opens, 2,185 closes; sampled reads succeeded; no missing dependency established. | Name a dependency only from correlated completion/status evidence. |
+| Rendering/synchronization | White framebuffer; terminal DCF4=1, batches/workers/pending=0. | Keep separate from r387 title DCF4 and earlier renderer cost. |
+| Controller/campaign | New-pilot route reached Normal; no mission frame or campaign progression. | Stop at the first visually verified mission frame. |
 
-**Next discriminating test:** reuse the r367 bundle and existing save directory; use the existing hardware data-breakpoint tool on guest `0x82A9BFFC` (host watch address `0x82AABFFC` with the logged `+65536` mapping offset). Record writer RIP/thread/value alongside DMA, DCF4, loader pair/progress, and the screen. Fix only if a missing or incorrect completion producer is established.
+**Testable hypothesis:** after worker `0x00034720` completes, a separate loader readiness producer fails to update the state consumed after helper index `0x1E`. Confirm only if a bounded trace shows no producer update while that consumer continues polling; reject if the expected state was updated or accepted. No code behavior fix is supported yet.
 
-**Storage:** after closed-log/dump compression, current workspace allocation is **41,488,764,820 bytes (38.639 GiB)**; logical size is **1,396,989,884,759 bytes**. The 13 Rust tool reparse files contribute **165,381,632 allocated bytes**, measured separately from ordinary files. Final scan after documentation edits: **77,579 ordinary files**, **41,323,383,188 allocated bytes** and **1,396,989,884,759 logical bytes**, plus those reparse files. Inventory: `C:\Project\sb-inventory-current-r382-final-20261030.csv`. Lossless compression reclaimed **12,535,518 allocated bytes** this pass, including 11,709,326 bytes from 2,665 closed log/dump files. Build cache is **6,918,921,034 bytes**, canonical generated AOT source **155,887,568 bytes**, and the r368 save root **110,706,564 allocated / 5,422,140,106 logical bytes**. No files were deleted or moved; saves were neither copied nor hard-linked. The warm cache remains intact, so the last measured incremental build time remains about **9.1 seconds**; no build ran this pass.
+**Storage:** fresh scan measured **41,523,983,574 bytes allocated (38.67 GiB)** including 13 separately measured Rust reparse executables; logical total **1,397,117,959,601 bytes**. This is 27,881,743 bytes above r385, a net difference not attributed to one run. Closed r386–r390 compression reclaimed **11,522,408 bytes** with hashes preserved; r391 compression saved 0; no files were deleted or moved. Warm build cache remains 6,918,921,034 bytes, canonical generated source 155,887,568, saves 166,480,594 allocated, and logs 3,043,619,235 allocated. Last measured incremental build: about 9.1 seconds; no build ran. See the [r391 cleanup manifest](../analysis/current-cleanup-manifest-r391-20261030.md).
 
-Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `████░ 4/5` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
+Overall `██░░░░░░ 2/8` · decompilation `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `████░ 4/5` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
 
 **Current milestone:** 3 — boot and compatibility. **Next acceptance point:** first visually verified mission frame.
 ## Previous verified state — r349–r354
