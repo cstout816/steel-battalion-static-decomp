@@ -1,27 +1,23 @@
 # Steel Battalion project status
 
-## Current index — r372–r373, 2026-10-30
+## Current index — r374–r375, 2026-10-30
 
-**Milestone 3 remains active. First mission frame: 0/1.** This index is current evidence; lower sections preserve history. AOT execution, controller mapping, guest fences, and rasterizer `1ea1871` remain unchanged.
+**Milestone 3 remains active. First mission frame: 0/1.** AOT execution, controller mapping, guest fences, and rasterizer `1ea1871` remain unchanged. The detailed [r374–r375 report](../analysis/m3-r374-r375-loading-and-storage-20261030.md) supersedes earlier next-step guesses; lower sections retain historical evidence.
 
 | Failure family | Verified evidence | Current status / next handling |
 | --- | --- | --- |
-| Title DCF4 handoff | r373 main guest TID 182860 is in `KeWaitForSingleObject` on `0x0021DCF4`. The last index-5 callback was #2100 / target `0x0021701E`; the main thread reset DCF4, callbacks #2101 and #2102 selected index 1, then callback records stopped. The event remained unsignaled while DCE4 continued. | Strong evidence for a title-stage callback/event handoff stall. The callback worker’s native wait object and releasing producer remain unresolved. Do not force a signal. |
-| Rendering / DMA | At the r373 snapshot USER PUT=GET=`0x1C8D0`, PFIFO registers and PGRAPH pending were zero; the captured DCF4 marker showed PUT=GET=0 and PFB=0. | Does not support queued DMA backlog for this wait. Keep the r340 DirectSound corruption and other raster-cost reports separate. |
-| r371 NVIDIA crash | r372 enabled the in-process crash dump option but did not reproduce the access violation. | r371 remains a separate, unreproduced driver crash; its faulting-thread context is still missing. |
-| Loading / campaign | r372/r373 never showed `NOW LOADING`; captures show the title prompt followed by black. Loader state/pass/preload counts are zero. | No loader dependency is identified. First mission frame remains 0/1. |
+| Post-difficulty loading plateau | r375 completed the new-pilot route through Normal and then showed black, without a visible `NOW LOADING` screen. Mode-2 pass 15 returned result 0 with pair `0x000ABA00/0`; later mode-2 scans were absent. Last sampled successful file read was n=8,000. | First incomplete file and expected readiness-pair producer are unknown. The final snapshot has no valid guest unwind or final minidump. Next run should add bounded file lifecycle/completion and thread-object completion traces, then capture a minidump at the internal plateau stop. |
+| Title DCF4 handoff | r373 main guest thread waited on unsignaled DCF4 after index-5 callback #2100; later callbacks selected index 1, with no following index-5 callback recorded. | Historical title-stage issue remains distinct. Correction: callback thread TID 175284 resolved to `kernel_timer_thread+0xE2`, the normal `Sleep(10)` site; `+0x6AC30A0` is `.data`, not a return frame. Worker wait object and wake producer remain unknown. |
+| DirectSound list corruption | r374 faulted in `sub_0021ED29+0x88` reading guest VA `0xFFFFFFF4` after an invalid list value `0xFF000000`; its trace had no writer watch. r375 recorded nine initialization writes, then no later writes to the watched fields. | Separate from loading and DCF4. r340 writer evidence is not disproved; active surface state and r374 corrupting writer remain unknown. |
+| Rendering / DMA | r375 ended with zero raster batches/workers/pending and unchanged NV2A frame/counter/target/fence, while DCF4 remained signaled. Kernel timer/IRQ polling continued. | This does not support a rendering backlog or DCF4 wait as the r375 plateau cause. |
 
-**Next discriminating action:** use the exact r367 PDB and source to resolve executable `+0x6498042`, then identify the callback worker’s host wait object and the producer that should wake it. The `.data` address `+0x6AC30A0` from the same unwind is excluded as a return frame. Do not patch, start another runtime, or alter guest synchronization until that offline correlation is complete. Full run details: [r372–r373 handoff report](../analysis/m3-r372-r373-title-dcf4-handoff-20261030.md).
+**Next discriminating action:** use the post-difficulty route with bounded recent-window file open/read/completion events and thread-object pending-to-completion transitions. Capture validated native/guest stacks and a final minidump at the internal plateau stop; correlate the first missing completion and mode-2 pair to the expected worker. Keep title DCF4, DirectSound corruption, and render cost separate. Do not change runtime behavior absent a supported cause. Full bundle hashes, run identities, trace limits, and evidence are in the [r374–r375 report](../analysis/m3-r374-r375-loading-and-storage-20261030.md).
 
-**Storage:** 77,356 files; **41,463,470,296 bytes allocated (38.616 GiB)** and **1,396,848,506,318 bytes logical (about 1.270 TiB)**. The warm build cache is **6,918,921,034 allocated bytes**, generated AOT source **155,887,568 bytes**, route saves **110,700,940 allocated / 5,422,134,482 logical bytes**, and logs **2,982,438,620 allocated / 1,035,920,610,872 logical bytes**. Verified compression savings remain **763,160,973 bytes**. r372/r373 added **3,684,718 allocated bytes** of bounded evidence. No files were deleted, and no hot cache or build ran; warm incremental build efficiency is preserved, build time not measured.
+**Storage:** 77,402 files plus 13 separately measured reparse entries; **41,477,565,812 bytes allocated (38.629 GiB)** and **1,396,896,367,723 bytes logical (about 1,300.961 GiB)**. The warm build cache is **6,918,921,034 allocated bytes**, generated AOT source **155,887,568 bytes**, route saves **110,700,940 allocated / 5,422,134,482 logical bytes**, and logs **2,996,373,183 allocated / 1,035,968,311,324 logical bytes**. The verified duplicate candidates in the delete-later archive account for **983,048,192 allocated bytes**, but automatic file-action review rejected deletion; realized deletion savings are **0 bytes**. No files were removed, hot cache purged, or build run. Warm build efficiency remains unchanged; last measured incremental build was about 9.1 seconds.
 
 Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `████░ 4/5` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
 
-\*Earliest title-stage wait has a synchronized reproduction and validated native stacks; the host wait object/wake producer and loader-stage blocker remain unresolved.
-
-**Current milestone:** 3 — boot and compatibility.
-
-**Next acceptance point:** first visually verified mission frame.
+**Current milestone:** 3 — boot and compatibility. **Next acceptance point:** first visually verified mission frame.
 
 ## Previous verified state — r349–r354
 
