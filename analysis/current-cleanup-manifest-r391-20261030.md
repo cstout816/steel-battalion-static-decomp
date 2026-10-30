@@ -2,9 +2,9 @@
 
 ## Current footprint
 
-Fresh `tools/Measure-WorkspaceInventory.ps1` scan: **77,580 ordinary files**, **41,358,601,942 allocated bytes**, **1,397,117,959,601 logical bytes**, zero allocation query errors. Thirteen Rust tool reparse executables add **165,381,632 allocated bytes**. Combined path-summed retained working set: **41,523,983,574 bytes / 38.67 GiB**. Logical size is larger because the save images and other sparse files contain large unallocated ranges.
+Fresh `tools/Measure-WorkspaceInventory.ps1` scan: **77,572 ordinary files**, **41,358,393,176 allocated bytes**, **1,397,117,750,835 logical bytes**, zero allocation query errors. Thirteen Rust tool reparse executables add **165,381,632 allocated bytes**. Combined path-summed retained working set: **41,523,774,808 bytes / 38.67 GiB**. Logical size is larger because the save images and other sparse files contain large unallocated ranges.
 
-Inventory outputs are outside the workspace: `C:\Project\sb-inventory-current-r391-20261030.csv` and `.skipped.txt`.
+Inventory outputs are outside the workspace: `C:\Project\sb-inventory-current-r391-postpush-20261030.csv` and `.skipped.txt`.
 
 | Retained working area | Allocated | Logical |
 | --- | ---: | ---: |
@@ -24,4 +24,4 @@ The top-level allocation is dominated by `local-tools` (19.50 GiB) and `iso` (18
 - Forty closed historical `Cache/TEXOBJ.BIN` copies were rehashed against retained extracted media: all are 47,159,808 bytes, SHA-256 `70770E70991737D28898BABF814DD603AFD9E085D740F3A64BB24FB37BFB7C7A`, path-summed allocation 1,396,080,640 bytes. Keep pending safe cleanup authorization/review; earlier direct deletion was rejected. NTFS compression is not a useful alternative for these copies.
 - r391 run storage stayed below the 64 MiB cap; relay drops 0; trace-limit hits 0. Frame history cap=8, saved=25, retained=8, evicted=17, dropped=1. Preserve all current stage/failure captures and exact unresolved dump bundles.
 
-The current total is **27,881,743 bytes above r385**; this is a net inventory difference and is not attributed to one run. Warm incremental build cache remains 6,918,921,034 bytes; last measured incremental build about 9.1 seconds; no build ran during this review.
+The current total is **27,672,977 bytes above r385**; this is a net inventory difference and is not attributed to one run. Warm incremental build cache remains 6,918,921,034 bytes; last measured incremental build about 9.1 seconds; no build ran during this review.

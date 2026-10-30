@@ -49,10 +49,10 @@ The retained `frame.bmp` was visually inspected: a solid white 640×480 framebuf
 
 ## Storage and build impact
 
-Fresh inventory: 77,580 ordinary files, **41,358,601,942 allocated bytes** and **1,397,117,959,601 logical bytes**. Thirteen Cargo tool reparse executables measure another 165,381,632 allocated bytes, for a path-summed retained working set of **41,523,983,574 bytes (38.67 GiB)**. Sparse logical lengths are not allocated usage. The current total is 27,881,743 allocated bytes above r385; this net change is not attributed to a single run.
+Fresh inventory: 77,572 ordinary files, **41,358,393,176 allocated bytes** and **1,397,117,750,835 logical bytes**. Thirteen Cargo tool reparse executables measure another 165,381,632 allocated bytes, for a path-summed retained working set of **41,523,774,808 bytes (38.67 GiB)**. Sparse logical lengths are not allocated usage. The current total is 27,672,977 allocated bytes above r385; this net change is not attributed to a single run.
 
 The r386–r390 closed-evidence compression pass reclaimed **11,522,408 allocated bytes** with SHA-256 checks unchanged. A closure pass over 15 r391 `.log`/`.bmp` files changed no hashes and reclaimed 0 bytes. No files were deleted or moved. A prior automatic file-action review rejected a deletion attempt against verified duplicate cache files; no alternate deletion method was used. Forty closed `TEXOBJ.BIN` caches were revalidated as byte-identical to retained extracted media (1,396,080,640 bytes allocated) but remain untouched.
 
 Warm incremental build tree: 6,918,921,034 allocated bytes; canonical generated source: 155,887,568; current r368 save root: 166,480,594 allocated / 5,422,134,482 logical; logs: 3,043,619,235 allocated / 1,036,190,731,492 logical. Last measured incremental build was about 9.1 seconds. No build or test ran, so build efficiency is unchanged and the new trace run had no build impact.
 
-Inventory CSV and skipped-path list: `C:\Project\sb-inventory-current-r391-20261030.csv` and `.skipped.txt`.
+Inventory CSV and skipped-path list: `C:\Project\sb-inventory-current-r391-postpush-20261030.csv` and `.skipped.txt`.
