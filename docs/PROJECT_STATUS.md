@@ -15,7 +15,7 @@
 
 **Storage:** 77,356 files; **41,463,470,296 bytes allocated (38.616 GiB)** and **1,396,848,506,318 bytes logical (about 1.270 TiB)**. The warm build cache is **6,918,921,034 allocated bytes**, generated AOT source **155,887,568 bytes**, route saves **110,700,940 allocated / 5,422,134,482 logical bytes**, and logs **2,982,438,620 allocated / 1,035,920,610,872 logical bytes**. Verified compression savings remain **763,160,973 bytes**. r372/r373 added **3,684,718 allocated bytes** of bounded evidence. No files were deleted, and no hot cache or build ran; warm incremental build efficiency is preserved, build time not measured.
 
-Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `████ 4/4*` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
+Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `████░ 4/5` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
 
 \*Earliest title-stage wait has a synchronized reproduction and validated native stacks; the host wait object/wake producer and loader-stage blocker remain unresolved.
 
@@ -96,3 +96,4 @@ Dirty checkout recovery: [source preservation manifest](../analysis/source-prese
 
 The 371-row Xbox kernel ordinal-reference set and Java Ghidra scripts are verified in the local Ghidra scripts folder and packaged in `C:\Project\GhidraAnalysis\scripts\XboxKernelOrdinals-GhidraSupport-20261029.zip`. Use the Ghidra 12.1.4 install with the XBE extension; the local 12.2 install lacks it. Exact-name XbeTripper/xberewrite sources remain unverified. Cxbx XBE inspection is useful for read-only metadata/integrity checks, not for validating the AOT runtime. The active XboxRecomp AOT architecture is unchanged; no XBE hooks or edits were made.
 **Still unverified:** the first mission frame, the expected writer for selector `0x3FFF`, audio playback correctness, controller behavior beyond menu navigation, 60 FPS, mission completion, and campaign progression.
+
