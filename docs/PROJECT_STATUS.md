@@ -1,25 +1,25 @@
 # Steel Battalion project status
 
-## Current index — r410, 2026-10-30
+## Current index — r416, 2026-10-30
 
-**Milestone 3 remains active. First visually verified mission frame: 0/1.** r410 reached mode-2 loading after the screen-gated new-pilot route through Normal, then held a white frame. The bounded test rejected the claim that resource `0x1E` stays unready: its ready byte changed 0→1, helper decision changed 5→6, and the pair advanced to `0x000ABA00/0`. The later state producer/consumer is still unknown; no runtime behavior fix is supported. See the [r408–r410 report](../analysis/m3-r408-r410-mode2-readiness-and-storage-20261030.md) and [current status](../analysis/CURRENT_STATUS.md).
+**Milestone 3 remains active. First visually verified mission frame: 0/1.** r415 reproduced the post-difficulty mode-2 plateau after the screen-gated new-pilot route through Normal. The worker completed and resource `0x1E` became ready, but the loader pair stopped at `0x000ABA00/0`; sampled reads succeeded and do not identify the missing dependency or consumer. r416 reproduced a separate title-stage DCF4 wait before pilot-list dispatch; raster workers were idle after a transient queue drained. Neither run reached a verified mission frame, and no runtime fix is supported. See the [r414–r416 report](../analysis/m3-r414-r416-loading-and-title-wait-20261030.md) and [current status](../analysis/CURRENT_STATUS.md).
 
 | Area | Verified state | Next evidence |
 | --- | --- | --- |
-| AOT/XBE | r410 is an AOT diagnostic run with its exact EXE/PDB/MAP and dump retained. | Continue with the canonical generated source and existing save root. |
-| Campaign entry | Screen-gated route reached pilot setup and Normal difficulty. | Stop at the first visually verified mission frame. |
-| Loader | r410 resource `0x1E` became ready; worker completions reached status 1; pair advanced to `0xABA00/0`; mode-2 state then stopped. | Trace the next producer/consumer and exact completion predicate. |
-| Heap | r405 had one 4 MiB allocation failure; r406/r410 did not reproduce it. | Capture caller only if it recurs; do not increase heap. |
-| Stacks | Exact r410 native unwind resolved runtime workers; no valid guest main chain was recovered. | Capture a bounded guest state record alongside the next producer handoff. |
-| DCF4/rendering | r410 DCF4 waits returned signaled; raster pool workers were idle in the plateau dump. Earlier r391 synchronized telemetry found no terminal backlog. | Keep title DCF4, renderer cost, and post-difficulty loader cases separate. |
-| DirectSound | r403 independently reproduced r400's invalid-list read; no new writer evidence. | Keep separate from the loader plateau. |
-| Controller/performance | XID route is traced; full control support, mission performance, and 60 FPS are unverified. | Validate at and after the first mission frame. |
+| AOT/XBE | r414–r416 used the exact r409 AOT executable/PDB/MAP; matching dumps and unwinds are retained. | Keep exact bundle and canonical generation for the next comparison. |
+| Campaign entry | r415 used screen-gated input to reach pilot `A`, DOB, Normal, and mode-2 loader state. | Stop at the first visually verified mission frame. |
+| Loader | Mode-2 worker completed; resource `0x1E` ready byte changed 0→1; pair stopped at `0x000ABA00/0`. Full-read trace volume alone did not cause the plateau. | Correlate bounded file-path completion, loader state, outstanding work, and valid stacks. |
+| Heap | Earlier reserve fallback succeeded; it is not established as the plateau cause. | Revisit only if a new trace shows a failed required allocation. |
+| Stacks | r416 main thread reaches `xbox_KeWaitForSingleObject+0x29`; no deeper guest chain is validated. r415 does not identify a loader dependency. | Capture the stopped loader state and exact expected producer. |
+| DCF4/rendering | r416 title wait had no later return; the raster queue later drained to zero. r415 terminal DCF4 pairing remains uncertain. | Keep title DCF4 and mode-2 plateau distinct. |
+| DirectSound | Historical list corruption remains an independent failure family with no current writer evidence. | Do not merge it with loader or title wait evidence. |
+| Controller/performance | Screen-gated input route is retained; full controls, mission rendering, audio, and 60 FPS are unverified. | Validate in the first mission frame and campaign tests. |
 
-The `ObReferenceObjectByHandle` pending/completion implementation remains intact; the old r130 null-output diagnosis is not repeated. Preserve AOT execution, controller mapping, guest fences, and rasterizer `1ea1871`.
+The current `ObReferenceObjectByHandle` pending/completion implementation remains intact; do not repeat the r130 null-output diagnosis. Preserve AOT execution, controller mapping, guest fences, and rasterizer `1ea1871`.
 
-**Storage:** fresh scan is 41,814,717,222 bytes allocated (38.94 GiB) and 1,397,880,810,882 ordinary-file logical bytes. Hash-verified compression of closed evidence reclaimed 11,934,458 bytes across 36 files. Three exact duplicate tool archives remain because file-action review rejected removal before execution; no alternate deletion route was tried. Warm build tree remains 7,136,856,349 allocated bytes. See the [r410 cleanup manifest](../analysis/current-cleanup-manifest-r410-20261030.md) and [source preservation manifest](../analysis/r410-source-preservation-manifest.md).
+**Storage:** 41,662,809,860 ordinary-file bytes allocated plus 165,381,632 allocated bytes for 13 reparse executables (38.956 GiB combined); ordinary-file logical length is 1,397,939,813,198 bytes. r416 closed-evidence compression reclaimed 789,283 bytes with hashes unchanged. No files were deleted; the warm build tree remains 7,136,856,349 allocated bytes. See the [r416 cleanup manifest](../analysis/current-cleanup-manifest-r416-20261030.md).
 
-Overall `#####--------------- 26%` · AOT `##########---------- 50%` · boot/campaign `########------------ 40%` · runtime `######-------------- 30%` · rendering `###----------------- 15%` · controller `#####--------------- 25%` · debugging `################---- 80%` · storage `################---- 80%` · mission frame `0/1` · stable 60 FPS `0/1`.
+Overall `#####--------------- 26%` · AOT `##########---------- 50%` · boot/campaign `########------------ 40%` · runtime `######-------------- 30%` · rendering `###----------------- 15%` · controller `#####--------------- 25%` · debugging `#################--- 85%` · storage `##################-- 90%` · mission frame `0/1` · stable 60 FPS `0/1`.
 
 **Current milestone:** 3 — boot and compatibility. **Next acceptance point:** first visually verified mission frame.
 ## Previous verified state — r349–r354

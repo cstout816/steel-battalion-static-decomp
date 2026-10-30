@@ -10,7 +10,7 @@
 
 </div>
 
-> **For players:** there is no playable build to download yet. The latest new-pilot route (r410) reached mode-2 loading after Normal, then held a white frame; the first mission frame is still unverified. The last visually verified `NOW LOADING` screen was r382. Complete audio, the original Steel Battalion controller, and campaign completion remain unverified. There is no installer or launcher. Please do not send game files.
+> **For players:** there is no playable build to download yet. The latest screen-gated new-pilot route (r415) reached the mode-2 loader after Normal, then stopped on a white frame before any verified mission image. A separate r416 title-stage DCF4 wait was reproduced before pilot-list dispatch. The last visually verified `NOW LOADING` screen was r382. Complete audio, the original Steel Battalion controller, and campaign completion remain unverified. There is no installer or launcher. Please do not send game files.
 
 ## The game and its controller
 
@@ -33,7 +33,7 @@ These externally hosted images show the original hardware and game. They are not
 
 The goal is to translate the original Xbox version of *Steel Battalion* (2002) ahead of time into a Windows application and recreate the Xbox services it needs. This is called **static recompilation**. The project is not an emulator packaged under another name.
 
-The translated Windows program builds, but it is not reliable or playable. r410 correlated the new-pilot route through Normal and mode-2 loading. Its bounded trace showed resource `0x1E` becoming ready and its worker completing; the later loader state producer remains unknown. Sampled file reads completed without recorded errors, but full file consumption is unverified. The latest visually verified `NOW LOADING` screen remains r382; no mission frame is verified. Keep title DCF4 waits, the r340 Campaign audio-list corruption, raster cost, and post-difficulty loading separate. See the [r408–r410 report](analysis/m3-r408-r410-mode2-readiness-and-storage-20261030.md) and [current status index](analysis/CURRENT_STATUS.md).
+The translated Windows program builds, but it is not reliable or playable. r415 correlated the new-pilot route through Normal and mode-2 loading. Its trace showed resource `0x1E` becoming ready, its worker completing, and sampled file reads succeeding; the loader pair then stopped at `0x000ABA00/0`. A separate r416 title-stage DCF4 wait had idle raster workers after the queue drained. Neither run verified a mission frame. Keep title DCF4 waits, the r340 Campaign audio-list corruption, raster cost, and post-difficulty loading separate. See the [r414–r416 report](analysis/m3-r414-r416-loading-and-title-wait-20261030.md) and [current status index](analysis/CURRENT_STATUS.md).
 
 ## Controller compatibility
 
@@ -51,13 +51,13 @@ When a tested release exists, players will need to provide their own legally obt
 
 | Work area | Progress | Current result |
 | --- | --- | --- |
-| Overall project milestones | [#####---------------] 2/8 | Milestone 3 remains active. r410 reached mode-2 loading, then held a white frame; r382 remains the latest verified `NOW LOADING` screen. No first mission frame is verified. See the [current status index](docs/PROJECT_STATUS.md). |
+| Overall project milestones | [#####---------------] 2/8 | Milestone 3 remains active. r415 reached mode-2 loading, then plateaued; r382 remains the latest verified `NOW LOADING` screen. No first mission frame is verified. See the [current status index](docs/PROJECT_STATUS.md). |
 | Research and architecture | [####################] 3/3 | Approach and technical limits documented. |
 | XBE analysis and decompilation | [##########----------] 2/4 | XBE parsing and ahead-of-time translation output are available; per-function correctness and complete runtime dependencies are not yet verified. |
 | Initial code translation | [####################] 100% | Translation output exists; correctness is not established by output count. |
 | Windows build | [####################] 100% | A local build completes. |
-| Boot and compatibility | [########------------] 4/5 | r410 reached the Normal difficulty selection and mode-2 loader through the new-pilot route. The first mission frame is still unverified. |
-| Loader dependency tracing | [################----] 4/5 | r410 confirmed resource `0x1E` readiness and worker completion; the later mode-2 state producer remains unknown. |
+| Boot and compatibility | [########------------] 4/5 | r415 reached the Normal difficulty selection and mode-2 loader through the new-pilot route. The first mission frame is still unverified. |
+| Loader dependency tracing | [################----] 4/5 | r415 confirmed resource `0x1E` readiness and worker completion; the later mode-2 state producer remains unknown. |
 | First mission frame | [--------------------] 0/1 | No in-mission framebuffer has been verified. |
 | 60-FPS mission performance | [--------------------] 0/1 | No playable mission frame or gameplay frame-time sample has been verified; startup/loading measurements do not count. |
 | Startup rendering performance | [##########----------] 2/4 | r348's sampled NV2A progress stopped after mode-2 scans; no evidence ties the separate r340 list corruption or older title/loading plateaus to a shared render backlog. |
@@ -65,7 +65,7 @@ When a tested release exists, players will need to provide their own legally obt
 | GPU scene rendering | [#####---------------] 1/4 | A narrow splash-render path is verified; general NV2A scene rendering, mission GPU use, and image parity remain unverified. |
 | Virtual controller input | [#############-------] 2/3 | Earlier screen-gated captures correlated XID/DMA, guest edge handling, pilot callback `0x000E18D8` / branch `0x000E193B`, and row action `0x83`. Physical adapter compatibility and the full original controller mapping/outputs remain unverified. |
 | Guest DSP and audio | [█-------------------] 1/2 | r340 captured a `put_pixel` list-field write; r355 logged invalid list nodes but lacks writer/surface correlation. r356 did not reproduce. Audible output and a safe fix are unverified. |
-| Storage and incremental builds | [##############------] 3/4 | Latest scan: 38.94 GiB allocated / about 1.27 TiB logical; warm build tree 6.65 GiB. The cache is preserved; hash-verified compression recovered 11,934,458 bytes from closed evidence. See the [current cleanup manifest](analysis/current-cleanup-manifest-r410-20261030.md). |
+| Storage and incremental builds | [##################--] 3/4 | Latest scan: 38.956 GiB allocated / 1,301.933 GiB logical; warm build tree 6.65 GiB. The cache is preserved; r416 closed-evidence compression recovered 789,283 bytes. See the [current cleanup manifest](analysis/current-cleanup-manifest-r416-20261030.md). |
 | Campaign, controller, launcher | [--------------------] | Not yet verified or available. |
 
 These bars describe engineering work, not playable features or campaign completion. See the [detailed tracker](docs/DEVELOPMENT_STATUS.md) for field-by-field evidence.
