@@ -1,15 +1,27 @@
 # Steel Battalion project status
 
-## Current verified state — r349–r354, 2026-10-29
+## Current index — r364–r368, 2026-10-30
 
-**Milestone 3 remains active.** The new-pilot route again reached a visibly verified `NOW LOADING` screen, but no first mission frame. r354 combined file completion, mode-2 loader, raster/DMA/DCF4 telemetry, and an external minidump using the exact r342 EXE/PDB/MAP bundle. It recorded 34 successful mode-2 scans, successful reads/open activity, advancing raster batches, and paired DCF4 wait returns; the validated stacks do not identify a missing loader producer. Rendering work is heavy but not established as the cause. Do not merge this plateau with title-stage DCF4 waits or the separate DirectSound list crash, and do not change runtime behavior yet. Full findings and the single next test are in the [r349–r354 loading and storage report](../analysis/m3-r349-r354-loading-cause-and-storage-20261029.md).
+**Milestone 3 remains active. First mission frame: 0/1.** Start from this table and the linked reports; lower sections are historical evidence, not fresh hypotheses. AOT, controller mapping, guest fences, and rasterizer `1ea1871` remain unchanged.
 
-Fresh inventory: **38.005 GiB allocated / 1,290.166 GiB logical** across 76,944 files; 13 reparse paths skipped. The reduction from the post-r348 baseline is **11,787,252,252 allocated bytes**. Fourteen inactive unique save images and one historical run-save image were NTFS-compressed with byte hashes preserved; the canonical route save remains uncompressed. Closed-log and lossless screenshot conversion reclaimed another **5,723,425 bytes**. The warm build tree remains **6.241 GiB allocated**; no build ran, so incremental build time was not measured. See the [cleanup manifest](../analysis/current-cleanup-manifest-20261029.md), [retention audit](../analysis/r349-r354-evidence-retention-20261029.csv), and [save-image audit](../analysis/r354-save-image-compression-20261029.csv).
+| Failure family | Verified evidence | Current status / next handling |
+| --- | --- | --- |
+| Current title route | r368 used the r367 AOT bundle with `RECOMP_DSOUND_SURFACE_TRACE=1`. Two screen-gated `a:500` pulses reached XID at ticks `570611750` and `570644750`, but no new guest edge or menu callback followed. The title frame remained at 0 FPS / 57 draws. | r368 stopped before Campaign; **not a DirectSound test**. No surface or invalid-node record. The screenshot, logs, and exact r367 symbols are retained. |
+| Pilot list / TDATA | r365/r366 visibly reached the pilot-limit overlay. r366’s empty UserData did not mean empty title data: `Partition1\TDATA` resolved to nine extracted `user*.sav` files. r367 redirected TDATA to an isolated `TitleData` folder but crashed before pilot selection. | **Limit cause unverified.** Do not claim the redirect fixed it or treat r366 as a clean empty-data test. |
+| DirectSound list corruption | r340 matched `put_pixel+0x4AC` storing `FF000000` into guest `0x8038C08C`, `0x8038C098`, `0x8038C09C`, followed by the invalid-list fault. r367 independently saw invalid nodes. | **Active surface at the corrupting store is still unknown.** r368 enabled the existing bounded surface probe but never reached the Campaign route. Reproduce that route with the probe enabled before considering a fix. |
+| Title DCF4 | r150/r151 exact r149 symbols validate a title wait on guest DCF4 `0x0021DCF4`; the later callback lacks a matching index-5 handler/`KeSetEvent`. r364 has a separate valid wait unwind. | Keep this title synchronization observation separate. Do not attribute raster backlog, r367 DirectSound, or loader behavior to it. |
+| Post-difficulty loading | r354 is the latest visually verified `NOW LOADING` run. It showed 34 mode-2 scans and file/raster activity, but no named missing dependency or first mission frame. | **Loader cause unresolved.** Resume only after a visible loading screen; do not infer it from title logs. |
+
+**Next discriminating action:** regain the screen-gated path to Campaign, then use the already compiled bounded surface probe to capture target base, offset, pitch, format, clip, and coordinates at the exact r340 list-overlapping stores. No behavior fix is supported before that correlation. Preserve original route saves; use the isolated r368 root if it remains the selected route. Stop at the first visually verified mission frame.
+
+**Storage:** 77,240 files; **38.600 GiB allocated / 1,300.849 GiB logical** (sparse files make logical size much larger). Relative to r367, the workspace is up 113,137,593 allocated bytes because the isolated r368 save root and its evidence remain; verified lossless compression saved 68,150,388 bytes this pass. Current warm build tree: **6.445 GiB** (including the retained 72.6 MiB r367 symbol bundle); no build or cache purge occurred. Eight small allocation queries failed. See the [current cleanup manifest](../analysis/current-cleanup-manifest-20261029.md) and [r364–r368 follow-up](../analysis/m3-r364-r368-title-route-and-storage-20261030.md) for category totals and audit hashes.
 
 Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `███░ 3/4` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
 
 **Current milestone:** 3 — boot and compatibility.
 **Next acceptance point:** first visually verified mission frame.
+
+## Previous verified state — r349–r354
 
 ## Prior verified state — r340–r348
 
@@ -30,15 +42,15 @@ Current storage is **48.983 GiB allocated** and **1,290.154 GiB logical**; the [
 
 Overall `██░░░░░░ 2/8` · AOT/XBE `██░░ 2/4` · boot/compatibility `████░ 4/5` · earliest blocker diagnosis `███░ 3/4` · rendering `██░░ 2/4` · controller `██░ 2/3` · audio/DSP `█░ 1/2` · first mission frame `░ 0/1` · stable 60 FPS `░ 0/1`.
 
-## Current investigation — r333–r337
+## Historical DirectSound evidence — r333–r337
 
-See the [r333–r337 DirectSound and storage follow-up](../analysis/m3-r333-r337-directsound-storage-followup-20261029.md). r334 is the latest verified DirectSound crash: the visible Campaign route failed after host TID `178296` wrote `0xFF000000` into guest list fields `0x8038C08C`, `0x8038C098`, and `0x8038C09C`. Its host RIP `0x7FF6FB25345C` resolves inside `raster_batch_program` at a pixel store. The list was invalid at the ensuing crash (`sub_0021ED29+0x88`, guest VA `0xFFFFFFF4`). This establishes raster code writing into the list during r334, but the active color-surface state and the later `FF000000→FF000080` change were not captured. No behavior fix is yet supported.
+See the [r333–r337 DirectSound and storage follow-up](../analysis/m3-r333-r337-directsound-storage-followup-20261029.md). r334 remains the strongest writer-correlated Campaign failure: host TID `178296` wrote `0xFF000000` into guest list fields `0x8038C08C`, `0x8038C098`, and `0x8038C09C`; its host RIP resolves inside `raster_batch_program` at a pixel store, followed by an invalid-list crash at guest VA `0xFFFFFFF4`. This does not establish the active color-surface state, and r355's later invalid-node event has no matched writer evidence. No behavior fix is supported.
 
 r337 added an opt-in register snapshot to the three address watchpoints (reproducible patch: `patches/diagnostics/dsound-write-watch-registers-r336.patch`) and used the same r336 EXE/PDB/MAP bundle. The run remained at a black title-stage frame; XID/DMA saw the second A pulse, but no guest edge followed. NV2A telemetry froze at frame `0xCE`, counter `0x377`, target `0x36D`, fence `0x373`, with zero raster batches/pending jobs. The watched fields showed nine initialization writes and no corruption. Thus r337 does not reject the r334 raster hypothesis because it did not reach Campaign. r335–r337 dumps contain raw guest-address candidates, but valid native unwinds stop at the game-image boundary; none verifies the guest wait call chain or owner. DCF4 was zero in r336/r337. Keep title black-frame behavior, DCF4 waits, DirectSound corruption, render cost, and loading plateaus separate.
 
 r336's 500/500 ms input replay was not comparable to r334. r337 repeated 500/2,000 ms pulses, but still did not reach Campaign. Do not send further input against a black frame. The latest visually verified loading transition remains r328; first mission frame remains 0/1. `ObReferenceObjectByHandle` pending/completion behavior is implemented, but completion has not been tied to loader readiness. AOT, controller mapping, guest fences, and rasterizer `1ea1871` are unchanged.
 
-## Current storage — r337 final inventory
+## Historical storage snapshot — r337
 
 Fresh inventory `C:\Project\sb-inventory-current-r337-final-20261029.csv`: **76,986 files**, **53,463,861,377 bytes allocated (49.792 GiB)** and **1,385,102,464,443 bytes logical (1,289.977 GiB)**; 13 reparse entries skipped. `iso` uses 29.49 GiB allocated; `local-tools` 20.09 GiB. The old r332 measurement was 49.720 GiB allocated; r336's required diagnostic EXE/PDB/MAP and evidence account for the net growth. r334–r335 compression saved 842,384 bytes; r336–r337 plus exact bundle compression saved 1,785,849 bytes, all SHA-256 verified. No files were deleted or moved. The 40 exact duplicate TEXOBJ copies remain because automatic file-action review blocked deletion; their verified path-summed allocation is about 1.30 GiB. No hot cache was purged. The isolated incremental trace build completed in 9.1 seconds; latest gameplay milestone remains unverified.
 
