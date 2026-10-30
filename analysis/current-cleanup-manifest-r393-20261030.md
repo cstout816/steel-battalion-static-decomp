@@ -8,6 +8,19 @@
 - r393 closed diagnostic tree: 14 files, 1,781,485 allocated bytes. r393 dump SHA-256: `AD792F7FDC7BBA9F70FBDEC68D93AA9CAF276AA4224028C7D595E6D903168EB5`.
 - Canonical warm `build-xpp-seeded`: 6,918,921,034 allocated bytes / 13,871,927,762 logical bytes. Canonical generated-source tree: 155,887,568 allocated bytes. r368 isolated save root: 110,706,564 allocated bytes / 5,422,140,106 logical bytes. These are directory totals; do not add overlapping parent/child rows.
 
+### Current major allocation areas
+
+| Area | Allocated | Notes |
+| --- | ---: | --- |
+| `local-tools` | 20,942,184,133 bytes | Includes the warm compiler tree and local analysis tools; inspect references and dirty source before cleanup. |
+| `iso` | 20,195,859,581 bytes | Includes the preserved original ISO and local run/evidence trees. |
+| Original ISO (`iso\other`) | 7,825,170,432 bytes | Keep; user supplied game image. |
+| `iso\local-analysis\logs` | 9,432,796,791 bytes | 24,499 files; logical total is about 1.31 TB due primarily to sparse partition images. |
+| `local-tools\steel-battalion-game\build-xpp-seeded` | 6,918,921,034 bytes | Keep as the hot incremental build cache and current candidate bundles. |
+| `local-tools\steel-battalion-game\iso` | 6,382,599,530 bytes | Separate nested run/assets tree; provenance and exact references need review before retirement. |
+
+Within `iso\local-analysis\logs`, measured allocations are: `.bin` 4,609,266,380 bytes (386 files), `.wav` 1,416,735,240 (561), `.log` 1,233,632,071 (6,579), `.bmp` 1,100,918,784 (10,423), `.exe` 339,112,448 (7), and `.dmp` 91,568,297 (405). The files' logical totals differ substantially from allocated bytes; do not dense-copy sparse `.img`/`.bin` data. These extension totals identify candidates for a provenance/reference audit, not a deletion authorization. The currently isolated r368 save tree and exact r382/r367 executable/symbol bundle remain protected.
+
 ## Retain / protect
 
 - Original ISO and all user game files.
