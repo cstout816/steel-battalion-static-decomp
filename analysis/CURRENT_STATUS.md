@@ -21,8 +21,8 @@ Overall project                 [#####---------------] 26%  Mission acceptance r
 - r411 (`m3-mode2-memory-reserve-followup-r411-20261030`) reused exact r409 EXE/PDB/MAP and the existing r368 save directory. It reached mode-2 loading after Normal, then stayed on a white frame for the 240-second plateau window. No runtime behavior changed.
 - The 4 MiB reserve request did recur. The bridge clamped backing to 2 MiB and returned success; generated guest code checks success and advances using the returned size. The relevant worker completed with status 1. This is not evidence that the clamp caused the plateau.
 - Resource `0x1E` became ready and the worker completed, but the mode-2 pair remained `0x000ABA00/0`. Sampled file reads succeeded; complete dependency consumption is unverified. DCF4 waits returned signaled in r411.
-- r411's exact-symbol unwind recovered only main TID 184224 at EXE+`0x611AF7` (`sub_0001D980+0xB7`, `game_render`) before an invalid non-module boundary. No validated guest wait chain or next producer was established. `PRELOAD-WORKER-SCHEDULE` and `LOAD-SCHED-GATE` were not reached in r411.
-- r412 (`m3-mode2-scheduler-gate-followup-r412-20261030`) crashed at `sub_0021ED29+0x88` with invalid DirectSound list links and guest read VA `0xFFFFFFF4`. It stopped before mode-2; scheduler-gate count is 0. Treat this separately from the r411 loader plateau and historical title DCF4 wait.
+- r411's exact-symbol unwind recovered only main TID 184224 at EXE+`0x611AF7` (`sub_0001D980+0xB7`, `game_render`) before an invalid non-module boundary. No validated guest wait chain or next producer was established. r411 did not enable scheduler-gate tracing, so its zero marker count is inconclusive.
+- r412 (`m3-mode2-scheduler-gate-followup-r412-20261030`) enabled scheduler tracing but crashed at `sub_0021ED29+0x88` with invalid DirectSound list links and guest read VA `0xFFFFFFF4`. It logged only the initial mode-0 startup worker request; the post-difficulty `sub_00017E80` decision and following `sub_0001DAA0` worker creation were not reached. Treat this separately from the r411 loader plateau and historical title DCF4 wait.
 - The r130 null-output `ObReferenceObjectByHandle` diagnosis is not being repeated; current completion behavior is observed separately. No evidence justifies forcing a signal, bypassing a guest check, changing preload mode, or altering fences.
 
 ## Storage
@@ -33,4 +33,4 @@ Detailed findings: [r411–r412 report](m3-r411-r412-loader-and-storage-20261030
 
 ## Next step
 
-Use a bounded `RECOMP_LOAD_SCHED_GATE_TRACE` run only if the new-pilot path reaches that gate. Correlate predicate inputs, selected branch, enqueue result, worker completion, and loader state. If the separate DirectSound crash occurs first, capture the corrupting writer and valid stack before changing it. Stop at the first visually verified mission frame.
+Use bounded `RECOMP_LOAD_SCHED_GATE_TRACE` and `RECOMP_PRELOAD_WORKER_SCHEDULE_TRACE` on the post-difficulty route. Correlate the `sub_00017E80` result with the `sub_0001DAA0` worker creation, worker status, and loader state. If the separate DirectSound crash occurs first, capture the corrupting writer and valid stack before changing it. Stop at the first visually verified mission frame.
