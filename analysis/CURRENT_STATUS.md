@@ -27,7 +27,7 @@ Overall project                 [#####---------------] 26%  Mission acceptance r
 
 ## Storage
 
-Fresh inventory: 78,040 ordinary files, **41,653,150,641 allocated bytes** and **1,397,898,577,651 logical bytes**, plus 165,381,632 allocated bytes for 13 separately measured executable reparse entries. Combined allocated footprint: **41,818,532,273 bytes (38.943 GiB)**. Sparse images explain the logical/allocated gap. Closed r411/r412 evidence was compressed losslessly and hash-checked: **839,530 bytes reclaimed**. No files were deleted. The warm incremental build cache remains **7,136,856,349 allocated bytes**; no build ran. The duplicate archive deletion action was blocked by file-action review before execution, so its savings are zero.
+Post-publication inventory: 78,048 ordinary files, **41,653,173,364 allocated bytes** and **1,397,898,600,374 logical bytes**, plus 165,381,632 allocated bytes for 13 separately measured executable reparse entries. Combined allocated footprint: **41,818,554,996 bytes (38.947 GiB)**. Sparse images explain the logical/allocated gap. Closed r411/r412 evidence was compressed losslessly and hash-checked: **839,530 bytes reclaimed**. No files were deleted. The warm incremental build cache remains **7,136,856,349 allocated bytes**; no build ran. The duplicate archive deletion action was blocked by file-action review before execution, so its savings are zero.
 
 Detailed findings: [r411–r412 report](m3-r411-r412-loader-and-storage-20261030.md). Current size and retention record: [r412 cleanup manifest](current-cleanup-manifest-r412-20261030.md). Latest completed pre-run review: [r408–r410 report](m3-r408-r410-mode2-readiness-and-storage-20261030.md).
 

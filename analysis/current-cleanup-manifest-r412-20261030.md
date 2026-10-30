@@ -2,16 +2,16 @@
 
 ## Current measurement
 
-Source: `C:\Project\sb-inventory-current-r412-20261030.csv`, generated from the workspace with `tools/Measure-WorkspaceInventory.ps1` after r412 closed.
+Source: `C:\Project\sb-inventory-current-r412-postpush-20261030.csv`, generated from the workspace with `tools/Measure-WorkspaceInventory.ps1` after the report commit and push.
 
 | Measure | Result |
 |---|---:|
-| Ordinary files | 78,040 |
-| Allocated bytes (ordinary files) | 41,653,150,641 |
-| Logical bytes (ordinary files) | 1,397,898,577,651 |
+| Ordinary files | 78,048 |
+| Allocated bytes (ordinary files) | 41,653,173,364 |
+| Logical bytes (ordinary files) | 1,397,898,600,374 |
 | Reparse executable entries | 13; separately measured 165,381,632 allocated bytes |
-| Combined allocated footprint | 41,818,532,273 bytes / 38.943 GiB |
-| Logical ordinary-file length | 1,397,898,577,651 bytes / 1,301.895 GiB |
+| Combined allocated footprint | 41,818,554,996 bytes / 38.947 GiB |
+| Logical ordinary-file length | 1,397,898,600,374 bytes / 1,301.895 GiB |
 
 Logical length must not be interpreted as actual disk consumption. The workspace contains sparse save/partition images; never replace them with dense copies. The ordinary-file inventory uses `GetCompressedFileSizeW` to report allocated bytes, and the 13 Rust/Cargo executable reparse entries are listed separately in the CSV's `.skipped.txt` companion.
 

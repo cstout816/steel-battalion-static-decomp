@@ -37,10 +37,8 @@ The first missing loader handoff remains the mode-2 scheduler decision after the
 
 ## Storage and retention
 
-The r412 inventory at `C:\Project\sb-inventory-current-r412-20261030.csv` counted 78,040 ordinary files: **41,653,150,641 allocated bytes** and **1,397,898,577,651 logical bytes**. Thirteen separately measured Rust/Cargo executable reparse entries add 165,381,632 allocated bytes; combined allocation is **41,818,532,273 bytes (38.943 GiB)**. The logical total is path-reported ordinary-file length; sparse partition images account for most of its difference from allocation.
+The post-publication r412 inventory at `C:\Project\sb-inventory-current-r412-postpush-20261030.csv` counted 78,048 ordinary files: **41,653,173,364 allocated bytes** and **1,397,898,600,374 logical bytes**. Thirteen separately measured Rust/Cargo executable reparse entries add 165,381,632 allocated bytes; combined allocation is **41,818,554,996 bytes (38.947 GiB)**. The logical total is path-reported ordinary-file length; sparse partition images account for most of its difference from allocation.
 
 The active build cache remains `build-xpp-seeded` at 7,136,856,349 allocated bytes (2,223 files). Canonical generated source is 155,890,474 allocated bytes; the r368 save root is 110,712,188 allocated / 5,422,145,730 logical bytes. No build cache, save, ISO, source checkout, or symbol bundle was removed. The closed r411/r412 run folders were losslessly NTFS-compressed after hashing: 37 files, 4,087,125 allocated bytes before and 3,247,595 after; hashes and lengths were unchanged, reclaiming **839,530 allocated bytes**. Their traces, frame captures, and r411 dump remain present.
 
 An exact duplicate-archive removal was blocked by file-action review before execution. Deletion savings are **0 bytes**; no alternate deletion path was used. Three validated duplicate archive copies representing 976,265,216 allocated bytes remain candidates only if the action review permits removal. Inventory and compression details are in [the r412 cleanup manifest](current-cleanup-manifest-r412-20261030.md).
-
-
