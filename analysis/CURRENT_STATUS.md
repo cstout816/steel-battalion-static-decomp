@@ -1,36 +1,34 @@
-# Steel Battalion AOT — current status (r412, 2026-10-30)
+# Steel Battalion AOT — current status (r416, 2026-10-30)
 
-**Milestone:** 3 — boot and compatibility. **First visually verified mission frame: 0/1.** r411 reached the post-difficulty mode-2 plateau on a solid white framebuffer; r412 crashed earlier in DirectSound voice-list traversal before reaching the scheduler gate. Neither verified `NOW LOADING` or a mission frame.
+**Milestone 3: boot and compatibility. First visually verified mission frame: 0/1.** r415 reached the same post-difficulty mode-2 plateau as r414 after the new-pilot route. r416 reproduced a separate title-stage DCF4 wait before pilot-list dispatch. No runtime fix or mission progression has been verified.
 
 ## Progress
 
 ```text
-Decompilation / AOT execution   [##########----------] 50%  AOT path retained
-Boot and campaign entry         [########------------] 40%  Mode-2 loader reached on r411
-Kernel/runtime compatibility   [######--------------] 30%  Next mode-2 handoff unresolved
-Graphics / rendering            [###-----------------] 15%  White frame; mission render/60 FPS unverified
-Controller compatibility       [#####---------------] 25%  New-pilot screen route observed
-Audio / DSP                     [###-----------------] 15%  Mission audio unverified; separate DS list crash
-Debugging and evidence          [#################---] 85%  r411 exact dump/bundle and r412 crash trace retained
-Storage control                 [#################---] 85%  839,530 allocated bytes reclaimed this pass
+Decompilation / AOT execution   [##########----------] 50%  AOT execution and exact-bundle diagnosis retained
+Boot and campaign entry         [########------------] 40%  New-pilot route reaches mode 2; loader plateaus
+Kernel/runtime compatibility   [######--------------] 30%  Post-worker loader handoff unresolved
+Graphics / rendering            [###-----------------] 15%  White/title frames only; mission render unverified
+Controller compatibility       [#####---------------] 25%  Screen-gated input route retained
+Audio / DSP                     [###-----------------] 15%  Mission audio unverified; separate DS list issue
+Debugging and evidence          [#################---] 85%  r414–r416 exact binaries, dumps and traces retained
+Storage control                 [##################--] 90%  Allocated/logical inventory refreshed; r416 compressed
 Overall project                 [#####---------------] 26%  Mission acceptance remains 0/1
 ```
 
 ## Current diagnosis
 
-- r411 (`m3-mode2-memory-reserve-followup-r411-20261030`) reused exact r409 EXE/PDB/MAP and the existing r368 save directory. It reached mode-2 loading after Normal, then stayed on a white frame for the 240-second plateau window. No runtime behavior changed.
-- The 4 MiB reserve request did recur. The bridge clamped backing to 2 MiB and returned success; generated guest code checks success and advances using the returned size. The relevant worker completed with status 1. This is not evidence that the clamp caused the plateau.
-- Resource `0x1E` became ready and the worker completed, but the mode-2 pair remained `0x000ABA00/0`. Sampled file reads succeeded; complete dependency consumption is unverified. DCF4 waits returned signaled in r411.
-- r411's exact-symbol unwind recovered only main TID 184224 at EXE+`0x611AF7` (`sub_0001D980+0xB7`, `game_render`) before an invalid non-module boundary. No validated guest wait chain or next producer was established. r411 did not enable scheduler-gate tracing, so its zero marker count is inconclusive.
-- r412 (`m3-mode2-scheduler-gate-followup-r412-20261030`) enabled scheduler tracing but crashed at `sub_0021ED29+0x88` with invalid DirectSound list links and guest read VA `0xFFFFFFF4`. It logged only the initial mode-0 startup worker request; the post-difficulty `sub_00017E80` decision and following `sub_0001DAA0` worker creation were not reached. Treat this separately from the r411 loader plateau and historical title DCF4 wait.
-- The r130 null-output `ObReferenceObjectByHandle` diagnosis is not being repeated; current completion behavior is observed separately. No evidence justifies forcing a signal, bypassing a guest check, changing preload mode, or altering fences.
+- r414 full-read tracing and r415 sampled tracing reached the same mode-2 plateau. r415 rejects full-read trace volume alone as the cause. Its mode-2 worker completed, resource `0x1E` became ready, sampled reads succeeded, and the output pair stopped at `0x000ABA00/0`. The first stalled loader dependency and expected consumer remain unidentified.
+- r416 is a distinct title-stage DCF4 stall. Exact-bundle unwind places main TID 188104 at `xbox_KeWaitForSingleObject+0x29`; raster workers are idle after the transient queue drained. The callback producer continued, but callback #512 selected index 1 / `0x00216EC9`, not a DCF4-setting branch, and no later DCF4 callback/set or wait return was recorded. This does not explain the mode-2 plateau.
+- r415’s terminal DCF4 sample cannot be paired with the last wait using row sequence numbers; it does not prove a DCF4 stall there.
+- DirectSound list corruption, title DCF4, possible rendering cost, and the post-difficulty loader plateau remain separate. No behavior change is supported. AOT, controller mapping, guest fences, and rasterizer `1ea1871` are preserved.
 
 ## Storage
 
-Post-publication inventory: 78,048 ordinary files, **41,653,173,364 allocated bytes** and **1,397,898,600,374 logical bytes**, plus 165,381,632 allocated bytes for 13 separately measured executable reparse entries. Combined allocated footprint: **41,818,554,996 bytes (38.947 GiB)**. Sparse images explain the logical/allocated gap. Closed r411/r412 evidence was compressed losslessly and hash-checked: **839,530 bytes reclaimed**. No files were deleted. The warm incremental build cache remains **7,136,856,349 allocated bytes**; no build ran. The duplicate archive deletion action was blocked by file-action review before execution, so its savings are zero.
+Fresh inventory: [r416 workspace inventory](C:\Project\sb-inventory-final-r416-20261030.csv). It measured 78,142 ordinary files at 41,662,809,860 allocated bytes and 1,397,939,813,198 logical bytes; 13 Rust/Cargo executable reparse entries add 165,381,632 allocated bytes. Combined allocation is 41,828,191,492 bytes (38.956 GiB). The warm incremental build cache remains 7,136,856,349 allocated bytes; canonical generated source is 155,890,474 bytes; r368 saves are 110,715,000 allocated / 5,422,148,542 logical bytes. Sparse saves account for the large logical-versus-allocated gap. r416 closed-evidence compression reclaimed 789,283 allocated bytes with SHA-256 hashes unchanged; no files were deleted. No build ran, preserving the warm build cache.
 
-Detailed findings: [r411–r412 report](m3-r411-r412-loader-and-storage-20261030.md). Current size and retention record: [r412 cleanup manifest](current-cleanup-manifest-r412-20261030.md). Latest completed pre-run review: [r408–r410 report](m3-r408-r410-mode2-readiness-and-storage-20261030.md).
+Detailed findings: [r414–r416 report](m3-r414-r416-loading-and-title-wait-20261030.md). Storage record: [r416 cleanup manifest](current-cleanup-manifest-r416-20261030.md).
 
 ## Next step
 
-Use bounded `RECOMP_LOAD_SCHED_GATE_TRACE` and `RECOMP_PRELOAD_WORKER_SCHEDULE_TRACE` on the post-difficulty route. Correlate the `sub_00017E80` result with the `sub_0001DAA0` worker creation, worker status, and loader state. If the separate DirectSound crash occurs first, capture the corrupting writer and valid stack before changing it. Stop at the first visually verified mission frame.
+Use the same r409 AOT/symbol bundle and r368 save root to capture the mode-2 terminal state with bounded file-path completion/outstanding-operation data, valid loader stacks, worker status, and synchronized graphics/event state. Confirm or reject a missing post-worker loader-state handoff before changing runtime behavior. Stop at the first visually verified mission frame.

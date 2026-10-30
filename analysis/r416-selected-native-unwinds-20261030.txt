@@ -1,0 +1,310 @@
+=== TID 188104 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=188104 StackStart=0x89601EF588 StackBytes=2680
+#00 ntdll.dll+0x161DD4 SP=0x89601EF588 FP=0x6
+#02 KERNELBASE.dll+0x1BE9F SP=0x89601EF590 FP=0x89601EF620
+#03 your_game_recomp_producer_trace.exe+0x64A9F89 SP=0x89601EF630 FP=0x89601EF628
+Stop: unwind reached non-module address 0xDF4.
+Callbacks: reads=69 readFailures=0 functionTables=19 modules=4 lastRead=0x89601EF640+32
+=== TID 193436 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=193436 StackStart=0x89608FF438 StackBytes=3016
+#00 ntdll.dll+0x1628A4 SP=0x89608FF438 FP=0x0
+#02 KERNELBASE.dll+0x22773 SP=0x89608FF440 FP=0x89608FF720
+#03 CoreMessaging.dll+0x23438 SP=0x89608FF730 FP=0x89608FF728
+Stop: unwind reached non-module address 0x28166A17670.
+Callbacks: reads=144 readFailures=0 functionTables=38 modules=8 lastRead=0x89608FF740+32
+=== TID 186440 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=186440 StackStart=0x89609FF180 StackBytes=3712
+#00 ntdll.dll+0x165DC0 SP=0x89609FF180 FP=0x0
+#02 your_game_recomp_producer_trace.exe+0x649DFE8 SP=0x89609FF8A0 FP=0x89609FF898
+Stop: unwind reached non-module address 0x10000.
+Callbacks: reads=204 readFailures=0 functionTables=49 modules=10 lastRead=0x89609FF8B0+32
+=== TID 186984 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=186984 StackStart=0x8960AFFA68 StackBytes=1432
+#00 ntdll.dll+0x1628A4 SP=0x8960AFFA68 FP=0x0
+#02 KERNELBASE.dll+0x22773 SP=0x8960AFFA70 FP=0x8960AFFD50
+#03 KERNELBASE.dll+0x22641 SP=0x8960AFFD60 FP=0x8960AFFD90
+#04 AudioSes.dll+0x5DB2A SP=0x8960AFFDA0 FP=0x8960AFFD98
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=308 readFailures=0 functionTables=69 modules=16 lastRead=0x8960AFFDA0+8
+=== TID 192932 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=192932 StackStart=0x8960CFFA08 StackBytes=1528
+#00 ntdll.dll+0x1628A4 SP=0x8960CFFA08 FP=0x8960CFFD70
+#02 KERNELBASE.dll+0x22773 SP=0x8960CFFA10 FP=0x8960CFFCF0
+#03 xaudio2_9.dll+0x83ED SP=0x8960CFFD00 FP=0x8960CFFCF8
+Stop: unwind reached non-module address 0x2816D941070.
+Callbacks: reads=383 readFailures=0 functionTables=90 modules=20 lastRead=0x8960CFFD10+32
+=== TID 21448 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=21448 StackStart=0x8960DFEB48 StackBytes=5304
+#00 ntdll.dll+0x1659C4 SP=0x8960DFEB48 FP=0x2816D6B0150
+#02 ntdll.dll+0x1BA2B SP=0x8960DFEB50 FP=0x8960DFEBB0
+#03 KERNELBASE.dll+0x23AC8 SP=0x8960DFEBC0 FP=0x8960DFEBE0
+#04 your_game_recomp_producer_trace.exe+0x64C7491 SP=0x8960DFEBF0 FP=0x8960DFEBE8
+Stop: unwind reached non-module address 0x2816D6B0040.
+Callbacks: reads=501 readFailures=0 functionTables=117 modules=26 lastRead=0x8960DFEC00+32
+=== TID 192580 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=192580 StackStart=0x8960EFF668 StackBytes=2456
+#00 ntdll.dll+0x1623D4 SP=0x8960EFF668 FP=0x0
+#02 ntdll.dll+0xD0FD4 SP=0x8960EFF670 FP=0x8960EFF690
+#03 KERNELBASE.dll+0x8B9C1 SP=0x8960EFF6A0 FP=0x8960EFF720
+#04 your_game_recomp_producer_trace.exe+0x64C3A1B SP=0x8960EFF730 FP=0x8960EFF728
+#05 your_game_recomp_producer_trace.exe+0x7127D20 SP=0x8960EFF738 FP=0x8960EFF730
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=620 readFailures=0 functionTables=143 modules=32 lastRead=0x8960EFF738+8
+=== TID 182444 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=182444 StackStart=0x8960FF27A8 StackBytes=55384
+#00 ntdll.dll+0x1623D4 SP=0x8960FF27A8 FP=0x0
+#02 ntdll.dll+0xD0FD4 SP=0x8960FF27B0 FP=0x8960FF27D0
+#03 KERNELBASE.dll+0x8B9C1 SP=0x8960FF27E0 FP=0x8960FF2860
+#04 your_game_recomp_producer_trace.exe+0x64A0127 SP=0x8960FF2870 FP=0x8960FF2868
+Stop: unwind reached non-module address 0x2406645F.
+Callbacks: reads=738 readFailures=0 functionTables=168 modules=38 lastRead=0x8960FF2880+32
+=== TID 188504 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=188504 StackStart=0x89610FFBA8 StackBytes=1112
+#00 ntdll.dll+0x1623D4 SP=0x89610FFBA8 FP=0x0
+#02 ntdll.dll+0xD0FD4 SP=0x89610FFBB0 FP=0x89610FFBD0
+#03 KERNELBASE.dll+0x8B9C1 SP=0x89610FFBE0 FP=0x89610FFC60
+#04 your_game_recomp_producer_trace.exe+0x64983F2 SP=0x89610FFC70 FP=0x89610FFC68
+#05 your_game_recomp_producer_trace.exe+0x6AC30A0 SP=0x89610FFC78 FP=0x89610FFC70
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=857 readFailures=0 functionTables=194 modules=44 lastRead=0x89610FFC78+8
+=== TID 192080 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=192080 StackStart=0x89611FF758 StackBytes=2216
+#00 ntdll.dll+0x1623D4 SP=0x89611FF758 FP=0x0
+#02 ntdll.dll+0xD0FD4 SP=0x89611FF760 FP=0x89611FF780
+#03 KERNELBASE.dll+0x8B9C1 SP=0x89611FF790 FP=0x89611FF810
+#04 your_game_recomp_producer_trace.exe+0x64D6B21 SP=0x89611FF820 FP=0x89611FF818
+Stop: unwind reached non-module address 0x2408978B.
+Callbacks: reads=975 readFailures=0 functionTables=221 modules=50 lastRead=0x89611FF830+32
+=== TID 191712 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=191712 StackStart=0x89613FF478 StackBytes=2952
+#00 ntdll.dll+0x1628A4 SP=0x89613FF478 FP=0x2
+#02 KERNELBASE.dll+0x22773 SP=0x89613FF480 FP=0x89613FF760
+#03 your_game_recomp_producer_trace.exe+0x64AA3B5 SP=0x89613FF770 FP=0x89613FF768
+Stop: unwind reached non-module address 0x11E2EC4.
+Callbacks: reads=1050 readFailures=0 functionTables=242 modules=54 lastRead=0x89613FF780+32
+=== TID 25620 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=25620 StackStart=0x89612FF998 StackBytes=1640
+#00 ntdll.dll+0x1623D4 SP=0x89612FF998 FP=0x0
+#02 ntdll.dll+0xD0FD4 SP=0x89612FF9A0 FP=0x89612FF9C0
+#03 KERNELBASE.dll+0x8B9C1 SP=0x89612FF9D0 FP=0x89612FFA50
+#04 your_game_recomp_producer_trace.exe+0x64A9048 SP=0x89612FFA60 FP=0x89612FFA58
+Stop: unwind reached non-module address 0x1273F78.
+Callbacks: reads=1168 readFailures=0 functionTables=267 modules=60 lastRead=0x89612FFA70+32
+=== TID 192620 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=192620 StackStart=0x89615FF4D8 StackBytes=2856
+#00 ntdll.dll+0x1628A4 SP=0x89615FF4D8 FP=0x0
+#02 KERNELBASE.dll+0x22773 SP=0x89615FF4E0 FP=0x89615FF7C0
+#03 KERNELBASE.dll+0x22641 SP=0x89615FF7D0 FP=0x89615FF800
+#04 nvoglv64.dll+0xA51577 SP=0x89615FF810 FP=0x89615FF808
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=1272 readFailures=0 functionTables=287 modules=66 lastRead=0x89615FF810+8
+=== TID 186932 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=186932 StackStart=0x89616FF948 StackBytes=1720
+#00 ntdll.dll+0x161DD4 SP=0x89616FF948 FP=0x2
+#02 KERNELBASE.dll+0x1BE9F SP=0x89616FF950 FP=0x89616FF9E0
+#03 your_game_recomp_producer_trace.exe+0x64B772F SP=0x89616FF9F0 FP=0x89616FF9E8
+#04 your_game_recomp_producer_trace.exe+0x6D3C228 SP=0x89616FF9F8 FP=0x89616FF9F0
+Stop: unwind reached non-module address 0x1E0.
+Callbacks: reads=1344 readFailures=0 functionTables=312 modules=70 lastRead=0x89616FFA08+32
+=== TID 191724 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=191724 StackStart=0x89617FF838 StackBytes=1992
+#00 ntdll.dll+0x161DD4 SP=0x89617FF838 FP=0x2
+#02 KERNELBASE.dll+0x1BE9F SP=0x89617FF840 FP=0x89617FF8D0
+#03 your_game_recomp_producer_trace.exe+0x64B772F SP=0x89617FF8E0 FP=0x89617FF8D8
+#04 your_game_recomp_producer_trace.exe+0x6D3C270 SP=0x89617FF8E8 FP=0x89617FF8E0
+Stop: unwind reached non-module address 0x1E1.
+Callbacks: reads=1416 readFailures=0 functionTables=337 modules=74 lastRead=0x89617FF8F8+32
+=== TID 180724 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=180724 StackStart=0x89618FFAC8 StackBytes=1336
+#00 ntdll.dll+0x161DD4 SP=0x89618FFAC8 FP=0x2
+#02 KERNELBASE.dll+0x1BE9F SP=0x89618FFAD0 FP=0x89618FFB60
+#03 your_game_recomp_producer_trace.exe+0x64B772F SP=0x89618FFB70 FP=0x89618FFB68
+#04 your_game_recomp_producer_trace.exe+0x6D3C2B8 SP=0x89618FFB78 FP=0x89618FFB70
+Stop: unwind reached non-module address 0x1E2.
+Callbacks: reads=1488 readFailures=0 functionTables=362 modules=78 lastRead=0x89618FFB88+32
+=== TID 21584 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=21584 StackStart=0x89619FF5F8 StackBytes=2568
+#00 ntdll.dll+0x1628A4 SP=0x89619FF5F8 FP=0x0
+#02 KERNELBASE.dll+0x22773 SP=0x89619FF600 FP=0x89619FF8E0
+#03 KERNELBASE.dll+0x22641 SP=0x89619FF8F0 FP=0x89619FF920
+#04 nvoglv64.dll+0xA51577 SP=0x89619FF930 FP=0x89619FF928
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=1592 readFailures=0 functionTables=382 modules=84 lastRead=0x89619FF930+8
+=== TID 188704 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=188704 StackStart=0x8961AFF908 StackBytes=1784
+#00 ntdll.dll+0x161DD4 SP=0x8961AFF908 FP=0x0
+#02 KERNELBASE.dll+0x1BE9F SP=0x8961AFF910 FP=0x8961AFF9A0
+#03 nvoglv64.dll+0xA1CD6A SP=0x8961AFF9B0 FP=0x8961AFF9A8
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=1659 readFailures=0 functionTables=396 modules=88 lastRead=0x8961AFF9B0+8
+=== TID 192784 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=192784 StackStart=0x8961BFF938 StackBytes=1736
+#00 ntdll.dll+0x161DD4 SP=0x8961BFF938 FP=0x28100361C78
+#02 KERNELBASE.dll+0x1BE9F SP=0x8961BFF940 FP=0x8961BFF9D0
+#03 nvoglv64.dll+0xA1CD6A SP=0x8961BFF9E0 FP=0x8961BFF9D8
+Stop: unwind reached non-module address 0x281000F0F00.
+Callbacks: reads=1728 readFailures=0 functionTables=415 modules=92 lastRead=0x8961BFF9F0+32
+=== TID 186472 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=186472 StackStart=0x8961CFFAE8 StackBytes=1304
+#00 ntdll.dll+0x161DD4 SP=0x8961CFFAE8 FP=0x0
+#02 KERNELBASE.dll+0x1BE9F SP=0x8961CFFAF0 FP=0x8961CFFB80
+#03 nvoglv64.dll+0xA1CD6A SP=0x8961CFFB90 FP=0x8961CFFB88
+Stop: unwind reached non-module address 0x28100344180.
+Callbacks: reads=1797 readFailures=0 functionTables=434 modules=96 lastRead=0x8961CFFBA0+32
+=== TID 192368 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=192368 StackStart=0x8961DFF6C8 StackBytes=2360
+#00 ntdll.dll+0x161DD4 SP=0x8961DFF6C8 FP=0xFA
+#02 KERNELBASE.dll+0x1BE9F SP=0x8961DFF6D0 FP=0x8961DFF760
+#03 nvoglv64.dll+0xA1CD6A SP=0x8961DFF770 FP=0x8961DFF768
+Stop: unwind reached non-module address 0x281006B8908.
+Callbacks: reads=1866 readFailures=0 functionTables=453 modules=100 lastRead=0x8961DFF780+32
+=== TID 192656 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=192656 StackStart=0x8961EFF628 StackBytes=2520
+#00 ntdll.dll+0x161DD4 SP=0x8961EFF628 FP=0x8961EFF7A9
+#02 KERNELBASE.dll+0x1BE9F SP=0x8961EFF630 FP=0x8961EFF6C0
+#03 nvoglv64.dll+0xA1CD6A SP=0x8961EFF6D0 FP=0x8961EFF6C8
+Stop: unwind reached non-module address 0x28100302400.
+Callbacks: reads=1935 readFailures=0 functionTables=474 modules=104 lastRead=0x8961EFF6E0+32
+=== TID 192604 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=192604 StackStart=0x89620FF978 StackBytes=1672
+#00 ntdll.dll+0x161DD4 SP=0x89620FF978 FP=0x281B7B8C078
+#02 KERNELBASE.dll+0x1BE9F SP=0x89620FF980 FP=0x89620FFA10
+#03 nvwgf2umx.dll+0x95A521 SP=0x89620FFA20 FP=0x89620FFA18
+Stop: unwind reached non-module address 0x281B7B8BC00.
+Callbacks: reads=2004 readFailures=0 functionTables=495 modules=108 lastRead=0x89620FFA30+32
+=== TID 168168 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=168168 StackStart=0x89621FF4D8 StackBytes=2856
+#00 ntdll.dll+0x1628A4 SP=0x89621FF4D8 FP=0x89621FF890
+#02 KERNELBASE.dll+0x22773 SP=0x89621FF4E0 FP=0x89621FF7C0
+#03 KERNELBASE.dll+0x22641 SP=0x89621FF7D0 FP=0x89621FF800
+#04 nvwgf2umx.dll+0x14C546 SP=0x89621FF810 FP=0x89621FF808
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=2108 readFailures=0 functionTables=515 modules=114 lastRead=0x89621FF810+8
+=== TID 189880 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=189880 StackStart=0x8961FFF548 StackBytes=2744
+#00 ntdll.dll+0x161DD4 SP=0x8961FFF548 FP=0x8961FFF6F0
+#02 KERNELBASE.dll+0x1BE9F SP=0x8961FFF550 FP=0x8961FFF5E0
+#03 nvwgf2umx.dll+0x9A574F SP=0x8961FFF5F0 FP=0x8961FFF5E8
+Stop: unwind reached non-module address 0x281B7B479C0.
+Callbacks: reads=2177 readFailures=0 functionTables=536 modules=118 lastRead=0x8961FFF600+32
+=== TID 193344 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=193344 StackStart=0x89601FFC48 StackBytes=952
+#00 ntdll.dll+0x161DD4 SP=0x89601FFC48 FP=0x281B7B8B880
+#02 KERNELBASE.dll+0x1BE9F SP=0x89601FFC50 FP=0x89601FFCE0
+#03 nvwgf2umx.dll+0x719EE6 SP=0x89601FFCF0 FP=0x89601FFCE8
+Stop: unwind reached non-module address 0x281B7B8BAD8.
+Callbacks: reads=2246 readFailures=0 functionTables=557 modules=122 lastRead=0x89601FFD00+32
+=== TID 182056 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=182056 StackStart=0x89622FFAF8 StackBytes=1288
+#00 ntdll.dll+0x1659C4 SP=0x89622FFAF8 FP=0x89622FFB70
+#02 ntdll.dll+0x597BE SP=0x89622FFB00 FP=0x89622FFB90
+#03 KERNELBASE.dll+0x22A58 SP=0x89622FFBA0 FP=0x89622FFBD0
+#04 msvcp_win.dll+0x23D2D SP=0x89622FFBE0 FP=0x89622FFC00
+#05 msvcp_win.dll+0x1F4A9 SP=0x89622FFC10 FP=0x89622FFC30
+#06 D3D12Core.dll+0x8E02A SP=0x89622FFC40 FP=0x89622FFC38
+Stop: unwind reached non-module address 0x281B7B43E68.
+Callbacks: reads=2468 readFailures=0 functionTables=594 modules=132 lastRead=0x89622FFC50+32
+=== TID 192908 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=192908 StackStart=0x89623FFC38 StackBytes=968
+#00 ntdll.dll+0x1659C4 SP=0x89623FFC38 FP=0x89623FFCB0
+#02 ntdll.dll+0x597BE SP=0x89623FFC40 FP=0x89623FFCD0
+#03 KERNELBASE.dll+0x22A58 SP=0x89623FFCE0 FP=0x89623FFD10
+#04 msvcp_win.dll+0x23D2D SP=0x89623FFD20 FP=0x89623FFD40
+#05 msvcp_win.dll+0x1F4A9 SP=0x89623FFD50 FP=0x89623FFD70
+#06 D3D12Core.dll+0x8E02A SP=0x89623FFD80 FP=0x89623FFD78
+Stop: unwind reached non-module address 0x281B7B43E68.
+Callbacks: reads=2690 readFailures=0 functionTables=631 modules=142 lastRead=0x89623FFD90+32
+=== TID 181808 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=181808 StackStart=0x89624FF648 StackBytes=2488
+#00 ntdll.dll+0x1659C4 SP=0x89624FF648 FP=0x89624FF6C0
+#02 ntdll.dll+0x597BE SP=0x89624FF650 FP=0x89624FF6E0
+#03 KERNELBASE.dll+0x22A58 SP=0x89624FF6F0 FP=0x89624FF720
+#04 msvcp_win.dll+0x23D2D SP=0x89624FF730 FP=0x89624FF750
+#05 msvcp_win.dll+0x1F4A9 SP=0x89624FF760 FP=0x89624FF780
+#06 D3D12Core.dll+0x8E02A SP=0x89624FF790 FP=0x89624FF788
+Stop: unwind reached non-module address 0x281B7B43E68.
+Callbacks: reads=2912 readFailures=0 functionTables=668 modules=152 lastRead=0x89624FF7A0+32
+=== TID 15164 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=15164 StackStart=0x89625FF758 StackBytes=2216
+#00 ntdll.dll+0x1659C4 SP=0x89625FF758 FP=0x89625FF7D0
+#02 ntdll.dll+0x597BE SP=0x89625FF760 FP=0x89625FF7F0
+#03 KERNELBASE.dll+0x22A58 SP=0x89625FF800 FP=0x89625FF830
+#04 msvcp_win.dll+0x23D2D SP=0x89625FF840 FP=0x89625FF860
+#05 msvcp_win.dll+0x1F4A9 SP=0x89625FF870 FP=0x89625FF890
+#06 D3D12Core.dll+0x8E02A SP=0x89625FF8A0 FP=0x89625FF898
+Stop: unwind reached non-module address 0x281B7B43E68.
+Callbacks: reads=3134 readFailures=0 functionTables=705 modules=162 lastRead=0x89625FF8B0+32
+=== TID 192988 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=192988 StackStart=0x89626FFAB8 StackBytes=1352
+#00 ntdll.dll+0x1628A4 SP=0x89626FFAB8 FP=0x89626FFE70
+#02 KERNELBASE.dll+0x22773 SP=0x89626FFAC0 FP=0x89626FFDA0
+#03 KERNELBASE.dll+0x22641 SP=0x89626FFDB0 FP=0x89626FFDE0
+#04 nvwgf2umx.dll+0x14C546 SP=0x89626FFDF0 FP=0x89626FFDE8
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=3238 readFailures=0 functionTables=725 modules=168 lastRead=0x89626FFDF0+8
+=== TID 192068 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=192068 StackStart=0x89627FF458 StackBytes=2984
+#00 ntdll.dll+0x1628A4 SP=0x89627FF458 FP=0x0
+#02 KERNELBASE.dll+0x22773 SP=0x89627FF460 FP=0x89627FF740
+#03 KERNELBASE.dll+0x22641 SP=0x89627FF750 FP=0x89627FF780
+#04 nvoglv64.dll+0xDE7254 SP=0x89627FF790 FP=0x89627FF788
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=3342 readFailures=0 functionTables=745 modules=174 lastRead=0x89627FF790+8
+=== TID 191672 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=191672 StackStart=0x89628FF668 StackBytes=2456
+#00 ntdll.dll+0x1628A4 SP=0x89628FF668 FP=0x0
+#02 KERNELBASE.dll+0x22773 SP=0x89628FF670 FP=0x89628FF950
+#03 KERNELBASE.dll+0x22641 SP=0x89628FF960 FP=0x89628FF990
+#04 nvoglv64.dll+0xDE6CB0 SP=0x89628FF9A0 FP=0x89628FF998
+Stop: unwind reached non-module address 0x281B80EB420.
+Callbacks: reads=3448 readFailures=0 functionTables=772 modules=180 lastRead=0x89628FF9B0+32
+=== TID 193136 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=193136 StackStart=0x89629FF738 StackBytes=2248
+#00 ntdll.dll+0x161DD4 SP=0x89629FF738 FP=0x0
+#02 KERNELBASE.dll+0x1BE9F SP=0x89629FF740 FP=0x89629FF7D0
+#03 nvwgf2umx.dll+0x750C02 SP=0x89629FF7E0 FP=0x89629FF7D8
+Stop: unwind reached non-module address 0x281B7B47D70.
+Callbacks: reads=3517 readFailures=0 functionTables=793 modules=184 lastRead=0x89629FF7F0+32
+=== TID 175380 ===
+Loaded module images: 94
+Dump=.\iso\local-analysis\logs\m3-mode2-dcf4-producer-followup-r416-20261030\dcf4-stall.dmp TID=175380 StackStart=0x8962A0F378 StackBytes=3208
+#00 ntdll.dll+0x1628A4 SP=0x8962A0F378 FP=0x0
+#02 KERNELBASE.dll+0x22773 SP=0x8962A0F380 FP=0x8962A0F660
+#03 KERNELBASE.dll+0x22641 SP=0x8962A0F670 FP=0x8962A0F6A0
+#04 nvwgf2umx.dll+0x9A0E17 SP=0x8962A0F6B0 FP=0x8962A0F6A8
+StackWalk stopped (ok=False, lastError=487).
+Callbacks: reads=3621 readFailures=0 functionTables=813 modules=190 lastRead=0x8962A0F6B0+8
