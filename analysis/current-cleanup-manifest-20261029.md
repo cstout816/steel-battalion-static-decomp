@@ -2,7 +2,7 @@
 
 ## Authoritative current state — after r373
 
-- Fresh scan: **77,346 files**, **41,463,405,666 bytes allocated (38.616 GiB)** and **1,396,848,441,688 bytes logical (about 1.270 TiB)**. The scan's 13 reparse-point toolchain executables were sized separately and included in allocated totals. Sparse-file logical length is not disk occupancy.
+- Fresh scan: **77,356 files**, **41,463,470,296 bytes allocated (38.616 GiB)** and **1,396,848,506,318 bytes logical (about 1.270 TiB)**. The scan's 13 reparse-point toolchain executables were sized separately and included in allocated totals. Sparse-file logical length is not disk occupancy.
 - Retained workset: warm `local-tools/steel-battalion-game/build-xpp-seeded` **6,918,921,034 allocated / 13,871,927,762 logical bytes** (2,213 files); canonical AOT source **155,887,568 bytes** (27 files); shared route saves **110,700,940 allocated / 5,422,134,482 logical bytes** (31 files); logs **2,982,438,620 allocated / 1,035,920,610,872 logical bytes** (20,626 files). Preserve the cache, saves, and exact r367 EXE/PDB/MAP bundle.
 - The 378 validated staged duplicate/superseded files remain losslessly compressed, preserving hashes. The 34 closed r370/r371 files also remain losslessly compressed with hashes and logical lengths unchanged. Previously measured combined allocated-space reduction remains **763,160,973 bytes**; no files were deleted or moved.
 - r372/r373 added **3,684,718 allocated bytes / 9,655,250 logical bytes** of bounded run evidence. Each run had a 64 MiB cap; neither reached the cap, neither dropped async relay lines, and no trace cap was reported. No hot compiler/Cargo cache was purged and no build ran.
