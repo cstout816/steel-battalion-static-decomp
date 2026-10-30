@@ -38,6 +38,12 @@ The captured DCF4 wait at tick `591919953` returned at `591919968`, 15 ms after 
 
 **Result:** immediate fault is supported; corrupting write remains unknown. r401 does not confirm or reject the writer hypothesis because it failed to reach the same state. No DirectSound behavior fix was made. The separate r399 APU guard addresses the r398 invalid voice index only; it did not trigger in r400 and is not tied to this crash.
 
+## Thread-object completion semantics (separate loader evidence)
+
+The current `kernel_bridge.c` implementation was checked rather than repeating the older r130 null-output diagnosis. It initializes the guest thread object's `+0x120` status to `STATUS_PENDING`, polls the native handle with a zero-time `WaitForSingleObject`, and on `WAIT_OBJECT_0` copies `GetExitCodeThread` to the guest field. `ObReferenceObjectByHandle` writes the object address only when the caller's output pointer is non-null, then returns success if the handle resolves. This update is performed when the object lookup is called; it is not an asynchronous write at thread exit.
+
+Existing r391 runtime evidence observed thread token `0x48000078`, guest object `0x019204A0`, and status transition `0x103` to exit code `1`; the worker logged `PsTerminateSystemThread(status=1)`. Thus pending-to-completed status propagation is verified for that worker. Exit status 1 is not itself a loader error, and this does not prove the separate mode-2 readiness condition accepted the completed worker. No code change was made for this path.
+
 ## Storage and build impact
 
 The final inventory after the report/status artifacts counted 77,780 ordinary files, totaling 41,498,777,888 allocated bytes and 1,397,464,756,894 logical bytes. Thirteen skipped executable reparse paths were measured separately at 165,381,632 allocated bytes, giving **41,664,159,520 total allocated bytes (38.803 GiB)**. Sparse logical lengths are not disk use. Inventory files are stored outside the repository as `sb-inventory-current-r401-final3-20261030.csv` and `.skipped.txt`.
