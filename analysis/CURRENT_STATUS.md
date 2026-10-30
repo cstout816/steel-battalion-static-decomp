@@ -1,40 +1,39 @@
-# Steel Battalion AOT — current status (r419, 2026-10-30)
+# Steel Battalion AOT — current status (r421, 2026-10-30)
 
-**Milestone 3: boot and compatibility. First visually verified mission frame: 0/1.** r419 verified one XID-to-guest input edge and then crashed during a DirectSound voice-list walk. This is distinct from r418's title-stage DCF4 wait and r415's later mode-2 loader plateau. No runtime fix or mission progression has been verified.
+**Milestone 3: boot and compatibility. First visually verified mission frame: 0/1.** The newest r421 run reproduced the title-stage DCF4 wait; it did not reach Campaign or the loader. The immediate blocker is a missing post-reset DCF4 signal. Why the guest callback stops selecting the signaling branch is still unknown. No runtime fix is supported.
 
 ## Progress
 
 ```text
-Decompilation / AOT execution   [##########----------] 50%  AOT execution and exact-bundle diagnosis retained
-Boot and campaign entry         [########------------] 40%  New-pilot route reaches mode 2; loader plateaus
-Kernel/runtime compatibility   [######--------------] 30%  Post-worker loader handoff unresolved
-Graphics / rendering            [###-----------------] 15%  White/title frames only; mission render unverified
-Controller compatibility       [#####---------------] 25%  Screen-gated input route retained
-Audio / DSP                     [###-----------------] 15%  Mission audio unverified; separate DS list issue
-Debugging and evidence          [#################---] 86%  r150–r153 and r271–r418 bundles/traces retained
-Storage control                 [##################--] 91%  Closed r417–r419 evidence compressed and hash-verified
+Decompilation / AOT execution   [##########----------] 50%  Exact-bundle AOT diagnosis retained
+Boot and campaign entry         [########------------] 40%  Prior mode-2 plateau remains separate
+Kernel/runtime compatibility   [######--------------] 30%  DCF4 producer handoff unresolved
+Graphics / rendering            [###-----------------] 15%  Heavy raster cost; mission frame unverified
+Controller compatibility       [#####---------------] 25%  Screen-gated XID path retained
+Audio / DSP                     [###-----------------] 15%  Mission audio unverified
+Debugging and evidence          [##################--] 90%  r150–r153 and r271–r421 evidence retained
+Storage control                 [##################--] 92%  r421 evidence compressed and hash-verified
 Overall project                 [#####---------------] 26%  Mission acceptance remains 0/1
 ```
 
-## Current diagnosis
+## Latest verified findings
 
-- r419's exact AOT trace recorded XID report byte 2, the same byte copied through guest DMA, edge consumption into `0x004AFC08`, and a true input predicate. A subsequent `MENU-RESOURCE` row referenced string VA `0x0026AF04` (“LIST AS NEW”), but r419 recorded no pilot-list callback, guest snapshot, or input-dispatch row. The visible initial title and player-record warning are retained; the final captured frame is black.
-- r419's terminal failure is the DirectSound list path: the traced predecessor `0x8038C098` had a null next/prev/owner, then the list traversal reached node 0 and the guest helper faulted reading `0xFFFFFFF4` in `sub_0021ED29+0x88`. This proves the proximate bad-list walk, not who introduced the null link. Guest stack values are raw stack candidates, and native stack values are not a validated unwind; r419 captured no minidump. No code fix is justified yet.
-- r419 recorded one requested mode-0 worker and a mode-0 branch at `sub_00017E40`; it did not reach mode 2 or loader passes. This does not test the mode-2 race that remains relevant to r415.
-- r414 full-read tracing and r415 sampled tracing reached the same mode-2 plateau. r415 rejects full-read trace volume alone as the cause. Its mode-2 worker completed, resource `0x1E` became ready, sampled reads succeeded, and the output pair stopped at `0x000ABA00/0`. The first stalled loader dependency and expected consumer remain unidentified.
-- r418 again stopped at title-stage DCF4 before pilot-list dispatch. Main TID 190944 unwound to `xbox_KeWaitForSingleObject+0x29`; explicit guest wait records identify event `0x0021DCF4` at caller hint `0x00211F3B`. The last signaling callback was #1467 (index 5 / target `0x0021701E`, `KeSetEvent` caller `0x0021702F`); after reset/wait #512, callbacks #1468 and #1469 selected index 1 / target `0x00216EC9`. No next index-5 callback or wait return was recorded. r271/r274 already document the same missing post-reset signaling handoff, so r418 corroborates it without establishing why guest state stops selecting the signaling branch.
-- r418's last raster snapshot had one batch, four workers and three pending, but it was a transient wait-time sample. Earlier r271 terminal telemetry had an idle raster pool and equal DMA PUT/GET; the evidence does not establish raster backlog as the DCF4 cause. DCE4/timer activity continued separately. Keep this title wait distinct from r415's post-difficulty mode-2 plateau and the DirectSound list failure.
-- The r130 ObReferenceObjectByHandle null-output issue is not the current mode-2 blocker. Current XboxRecomp source resolves the thread handle to a guest object and copies the completed host exit status into object `+0x120`; r415 recorded a valid object, callback success, and completed status 1 before the loader plateau. The generated helper compares that status with `STATUS_PENDING` (`0x103`) and proceeds. The separate ignored game-project bridge copy is stale and is not the linked runtime implementation.
-- r418 did not trace a full XID-to-guest input edge: it logged XID delivery for two A presses, but `-LoadingFocus` disabled guest input/predicate/snapshot/menu traces. The first press displayed “Unable to load Player Record”; the second was followed by a black framebuffer. Do not claim a new-pilot transition or pilot callback from this run.
-- r415’s terminal DCF4 sample cannot be paired with the last wait using row sequence numbers; it does not prove a DCF4 stall there.
-- DirectSound list corruption, title DCF4, possible rendering cost, and the post-difficulty loader plateau remain separate. No behavior change is supported. AOT, controller mapping, guest fences, and rasterizer `1ea1871` are preserved.
+- r421 used the exact r409 EXE/PDB/MAP and existing r368 saves. Three live A presses reached XID/DMA, but only the first guest edge was consumed before the framebuffer went black. There were no pilot-list callback, menu resource, loader pass, or mission frame records.
+- Main TID 193124 unwound through native wait APIs to `xbox_KeWaitForSingleObject+0x29`; StackWalk stopped at synthetic boundary `0xD8C`. At tick `607568750`, it waited on `0x0021DCF4` from caller hint `0x00211F3B`. The wait did not return for 120 seconds; the watchdog captured `dcf4-stall.dmp` and stopped only diagnostic PID 9324.
+- The last post-reset callback selected index 1 / target `0x00216EC9`. No later index-5 / `0x0021701E` callback, `KeSetEvent` at `0x0021702F`, or wait return was recorded. This confirms the missing handoff symptom, not why the callback state ceased selecting the signaling branch.
+- Raster telemetry showed 2,546 two-triangle batches per two-second sample, 1,638 ms batch wall time, and 5,956 summed worker-ms across four threads. The final wait snapshot had three workers pending. High render cost is measured, but it has not been shown to cause the missing DCF4 producer branch.
+- The DirectSound watch did not reproduce r419's corrupt list: r421 recorded 49 inserts and one unlink, but no watched link writes, invalid node, or DirectSound crash. Because it stalled earlier, the prior corruption remains unresolved.
+- r415 remains the latest post-difficulty mode-2 plateau. r421 did not reach that stage. Keep title DCF4, rendering cost, DirectSound corruption, and loader readiness separate.
+- No code, generated source, import seed, controller mapping, guest fence, or rasterizer change was made. No build ran.
 
 ## Storage
 
-Fresh post-push inventory after commit `f4adb08` measured 78,211 ordinary files, **41,667,841,635 allocated / 1,397,954,975,965 logical bytes**, and 13 separately counted reparse entries adding 165,381,632 allocated bytes. Combined allocation: **41,833,223,267 bytes (38.960225 GiB)**. r419 added 977,238 allocated / 3,540,011 logical bytes in closed evidence; lossless compression reclaimed 5,845 allocated bytes with every file hash unchanged. Cumulative r416–r419 compression reclaimed 1,628,069 allocated bytes. The build cache remains 7,136,856,349 allocated bytes; canonical generated source is 155,890,474 bytes; r368 saves remain 110,715,000 allocated / 5,422,148,542 logical bytes. Sparse saves account for the large logical-versus-allocated gap. No file was deleted or moved; no build ran, preserving the warm cache.
+r420 and r421 retained 13,682,820 logical bytes in 31 evidence files; after lossless NTFS compression they occupy 3,502,875 allocated bytes, reclaiming **2,930,861 bytes** with every hash and length unchanged. Combined r416–r421 closed-evidence compression reclaimed **4,558,930 allocated bytes**. Last full-tree inventory was r419 at 41,833,223,267 allocated bytes including 13 reparse entries, and 1,397,954,975,965 ordinary-file logical bytes. Adding the measured r420/r421 directories gives a derived current estimate of 41,836,726,142 allocated bytes; refresh with a full scan before broader cleanup.
 
-Detailed findings: [r419 input and DirectSound crash](m3-r419-input-and-dsound-crash-20261030.md), [r417–r418 title wait](m3-r417-r418-title-wait-and-storage-20261030.md), [r414–r416 loader and title wait](m3-r414-r416-loading-and-title-wait-20261030.md), [r271 title wait](m3-r271-title-dcf4-outer-20261029.md), and [r274 native unwinds](r274-valid-native-unwinds-20261029.txt). Storage record: [r419 cleanup manifest](current-cleanup-manifest-r419-20261030.md).
+The warm incremental build cache remains 7,136,856,349 allocated bytes; no cache purge or build occurred. Exact r409 symbols, canonical generated source, original ISO and unique saves remain protected. Three ZIP copies are confirmed exact duplicates of retained archives, totaling 976,265,216 allocated bytes. Their deletion was rejected by automatic file-action review as “blocked by policy”; all copies remain in place and their hashes were rechecked.
+
+Detailed evidence: [r420–r421 title wait](m3-r420-r421-title-dcf4-and-storage-20261030.md). Storage record: [r421 cleanup manifest](current-cleanup-manifest-r421-20261030.md). Prior distinct findings: [r419 DirectSound/input](m3-r419-input-and-dsound-crash-20261030.md), [r417–r418 title wait](m3-r417-r418-title-wait-and-storage-20261030.md), [r414–r416 loading/DCF4](m3-r414-r416-loading-and-title-wait-20261030.md).
 
 ## Next step
 
-Use the exact r409 AOT/symbol bundle and existing r368 save root. Investigate the r419 DirectSound list corruption with a bounded trace of the exact operation that first leaves the list predecessor's next link null. Capture an exact crash-time minidump and validate native unwind if needed; distinguish real unwind frames from raw guest/native stack scans. Do not add a sentinel bypass or repair until the corrupting operation is identified. On a route that reaches the later mode-2 path, compare the requested mode with the actual worker-entry branch and correlate bounded file completion, loader progress, object status, valid stacks, and synchronized graphics/event state. Preserve AOT, controller mapping, guest fences and rasterizer `1ea1871`. Stop at the first visually verified mission frame.
+Use the exact r421 bundle to trace the guest callback dispatch around `0x002171C9` and gate `0x002173C7`, including the state that distinguishes index 1 (`0x00216EC9`) from index 5 (`0x0021701E`). Establish why the signaling branch is absent before making a change. Then retry the known-good new-pilot route with bounded traces, preserving AOT execution, guest fences, controller mapping, rasterizer `1ea1871`, and r368 saves. Stop at the first visually verified mission frame.
