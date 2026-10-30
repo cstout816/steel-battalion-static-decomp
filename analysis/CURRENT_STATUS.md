@@ -1,38 +1,36 @@
-# Steel Battalion AOT project — current status
+# Steel Battalion AOT — current status (r410, 2026-10-30)
 
-**Current milestone:** 3 — boot and compatibility. **First visually verified mission frame: 0/1.** Latest diagnostic: r406, 2026-10-30.
+**Milestone:** 3 — boot and compatibility. **First mission frame verified: 0/1.** The latest new-pilot run reached mode-2 loading after Normal, then held a white frame; it did not show a mission or visually confirm the `NOW LOADING` label.
 
 ## Progress
 
 ```text
 Decompilation / AOT execution   [##########----------] 50%  AOT path retained
 Boot and campaign entry         [########------------] 40%  New-pilot route reaches mode-2 loader
-Kernel/runtime compatibility   [######--------------] 30%  Loader handoff still unresolved
+Kernel/runtime compatibility   [######--------------] 30%  Later loader handoff unresolved
 Graphics / rendering            [###-----------------] 15%  Mission rendering and 60 FPS unverified
-Controller compatibility       [#####---------------] 25%  XID route traced; full mapping unverified
-Audio / DSP                     [###-----------------] 15%  Complete in-game audio unverified
-Debugging and evidence          [###############-----] 75%  r406 bundle, dump and source patch retained
-Storage control                 [################----] 80%  4,592,754 bytes recovered this pass
-Overall project                 [#####---------------] 26%  Mission frame remains 0/1
+Controller compatibility       [#####---------------] 25%  Screen-gated XID route traced
+Audio / DSP                     [###-----------------] 15%  Mission audio unverified
+Debugging and evidence          [################----] 80%  r410 exact dump/bundle retained
+Storage control                 [################----] 80%  11,934,458 bytes recovered this pass
+Overall project                 [#####---------------] 26%  Mission acceptance remains 0/1
 ```
 
-Bars are rough engineering estimates; first mission frame remains the acceptance point for this milestone.
+## Current diagnosis
 
-## Current findings
-
-- r402–r404 are separate title/input or DirectSound cases. r403 reproduces the r400 invalid-list read at guest VA `0xFFFFFFF4`; r404 does not reach Campaign. Neither is the current loader evidence.
-- r405 reached Normal and mode-2 loading, then logged a failed 4 MiB heap allocation with about 3.41 MiB remaining. Its caller was not recorded.
-- r406 repeated the new-pilot route through Normal with the same r368 save root. It recorded nine mode-2 scans, ending at helper index `0x1E`, decision 5, with progress returned to `0/0`. No missing file or failed sampled read was found; the first stalled dependency remains unknown.
-- r406 did not reproduce r405's OOM. The new failure-only `[HEAP-OOM-TRACE]` did not fire. No heap limit was increased.
-- Exact r406 unwinds show the main thread and one file worker in `fprintf`; another thread reaches `xbox_KeDelayExecutionThread+0xD8` before an incomplete unwind. This supports synchronous trace-output contention as a diagnostic candidate, not a proven gameplay cause.
-- r406's wait trace hit the DCE4 cap, and terminal DMA/PB semaphore state was not enabled. No persistent DCF4 wait was established. Do not combine this with the title DCF4, r153 graphics plateau, or DirectSound list crash.
-- Existing thread-object pending/completion semantics remain intact; the r130 null-output diagnosis is not repeated. A prior worker's pending-to-exit-status transition was observed, but the mode-2 readiness consumer is still unidentified.
-- Preserve AOT execution, controller mapping, guest fences, and rasterizer `1ea1871`. No guest check, signal, preload mode, or import was forced.
+- r410 rejected the hypothesis that mode-2 resource `0x1E` remains unready. Its ready byte at `0x00351F22` changed `0 -> 1`; the helper decision changed `5 -> 6`; mode-2 pair advanced to `0x000ABA00/0`; and both relevant worker objects completed with status 1.
+- The next loader state producer/consumer remains unidentified. After the readiness handoff, callbacks returned expected zero for imported lock routines while mode, phase, progress, status, and gate fields did not advance. Sampled file reads were successful; the trace does not prove complete file consumption.
+- The exact r409-matched r410 dump's native unwind does not give a valid guest call chain. Resolved host frames are normal runtime workers, including sleeping raster workers. DCF4 waits returned signaled in r410; there was no persistent DCF4 hang. Keep title DCF4, DirectSound list corruption, renderer cost, and post-difficulty loading distinct.
+- No runtime behavior changed. AOT, controller mapping, guest fences, and rasterizer `1ea1871` remain intact. r405's 4 MiB allocation failure did not recur. The current ObReferenceObjectByHandle completion implementation was not altered.
 
 ## Storage
 
-Final post-status scan: 77,892 ordinary files, **41,580,673,698 bytes allocated** and **1,397,678,346,351 bytes logical**, plus **165,381,632 allocated bytes** for 13 separately measured Rust/Cargo executable reparse entries. Combined: **41,746,055,330 bytes allocated (38.88 GiB)**. Logical length is not disk use; it includes sparse save images. The scan is `C:\Project\sb-inventory-current-r406-poststatus-20261030.csv` with a `.skipped.txt` list.
+Fresh scan: **41,814,717,222 allocated bytes (38.94 GiB)** combined; **1,397,880,810,882 ordinary-file logical bytes** plus reparse executable logical lengths reported as zero. Hash-verified lossless compression reclaimed **11,934,458 allocated bytes** across the current r410 evidence and 13 older closed diagnostic files. Warm `build-xpp-seeded` is **7,136,856,349 allocated bytes**; canonical generated source is **155,890,474**; r368 saves are **110,709,376 allocated / 5,422,142,918 logical bytes**. No cache or save data was deleted.
 
-Hash-verified lossless compression saved 3,777,586 bytes across r402–r405 and 815,168 bytes for the r406 dump, totaling **4,592,754 bytes**. No files were deleted. Automatic file-action review rejected deletion of 269 duplicate screenshots as “blocked by policy”; that command did not execute. Historical logs and captures are already NTFS-compressed: 9,218 BMPs use 983,547,904 allocated bytes, 6,063 logs use 1,219,333,360 bytes, and 418 dumps use 98,368,002 bytes. Preserve the 12.1 MiB of not-yet-compressed dumps for unresolved evidence; only 8,964 bytes of logs are uncompressed. The 7,064,232,890-byte warm build tree and unique save root remain intact. Details: [r402–r406 report](m3-r402-r406-loader-storage-followup-20261030.md), [cleanup manifest](current-cleanup-manifest-r406-20261030.md), [source patch](preservation-heap-oom-trace-r406.patch).
+Three duplicate tool archives were rehashed against retained copies (976,265,216 allocated bytes in the old copy set), but file-action review rejected their removal before execution. No alternate deletion route was attempted. See the [r410 cleanup manifest](current-cleanup-manifest-r410-20261030.md).
 
-**Next:** use the r406 bundle and existing save root. Add bounded mode-2 thread-start identity and terminal producer/consumer state; reduce synchronous high-volume output before interpreting another thread stopped in `fprintf`. Change runtime behavior only after one producer/consumer failure is confirmed. Stop at the first visually verified mission frame.
+## Next step
+
+Add only bounded producer/consumer evidence after the `0x1E` ready handoff. Identify the exact mode-2 state input, its producer thread, and completion status before changing runtime behavior. Keep AOT and fences intact; stop at the first visually verified mission frame.
+
+Detailed evidence: [r408–r410 report](m3-r408-r410-mode2-readiness-and-storage-20261030.md). Exact build and diagnostic source: [r410 preservation manifest](r410-source-preservation-manifest.md).

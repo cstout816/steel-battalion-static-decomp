@@ -1,25 +1,25 @@
 # Steel Battalion project status
 
-## Current index — r406, 2026-10-30
+## Current index — r410, 2026-10-30
 
-**Milestone 3 remains active. First visually verified mission frame: 0/1.** r405 and r406 reached the new-pilot route through Normal and entered mode-2 loader work, but neither produced a mission frame. r405 logged a 4 MiB heap allocation failure; r406 did not reproduce it. The current loader stop is at helper index `0x1E`, decision 5, with progress `0/0`; its expected producer and consumer are still unidentified. See the [r402–r406 report](../analysis/m3-r402-r406-loader-storage-followup-20261030.md) and [current detailed status](../analysis/CURRENT_STATUS.md).
+**Milestone 3 remains active. First visually verified mission frame: 0/1.** r410 reached mode-2 loading after the screen-gated new-pilot route through Normal, then held a white frame. The bounded test rejected the claim that resource `0x1E` stays unready: its ready byte changed 0→1, helper decision changed 5→6, and the pair advanced to `0x000ABA00/0`. The later state producer/consumer is still unknown; no runtime behavior fix is supported. See the [r408–r410 report](../analysis/m3-r408-r410-mode2-readiness-and-storage-20261030.md) and [current status](../analysis/CURRENT_STATUS.md).
 
 | Area | Verified state | Next evidence |
 | --- | --- | --- |
-| AOT/XBE | r406 is an AOT diagnostic executable with exact EXE/PDB/MAP retained. | Continue with the same generated source and save root. |
+| AOT/XBE | r410 is an AOT diagnostic run with its exact EXE/PDB/MAP and dump retained. | Continue with the canonical generated source and existing save root. |
 | Campaign entry | Screen-gated route reached pilot setup and Normal difficulty. | Stop at the first visually verified mission frame. |
-| Loader | Nine r406 mode-2 scans; last helper index `0x1E`, progress `0/0`; no failed sampled reads or missing-path record. | Identify mode-2 thread start, expected producer, completed handoff, and consumer predicate. |
-| Heap | r405 had one 4 MiB allocation failure; r406's bounded heap trace did not fire. | Capture caller only if the failure recurs; do not increase heap. |
-| Stacks | r406 main and a file worker unwind into `fprintf`; a third thread reaches `KeDelayExecutionThread` then an incomplete boundary. | Reduce synchronous trace volume and capture the loader thread's identity at the plateau. |
-| DCF4/rendering | DCE4 trace capped; terminal DMA/PB semaphore state absent. No persistent DCF4 wait established. | Investigate only if a separate persistent wait reproduces. |
+| Loader | r410 resource `0x1E` became ready; worker completions reached status 1; pair advanced to `0xABA00/0`; mode-2 state then stopped. | Trace the next producer/consumer and exact completion predicate. |
+| Heap | r405 had one 4 MiB allocation failure; r406/r410 did not reproduce it. | Capture caller only if it recurs; do not increase heap. |
+| Stacks | Exact r410 native unwind resolved runtime workers; no valid guest main chain was recovered. | Capture a bounded guest state record alongside the next producer handoff. |
+| DCF4/rendering | r410 DCF4 waits returned signaled; raster pool workers were idle in the plateau dump. Earlier r391 synchronized telemetry found no terminal backlog. | Keep title DCF4, renderer cost, and post-difficulty loader cases separate. |
 | DirectSound | r403 independently reproduced r400's invalid-list read; no new writer evidence. | Keep separate from the loader plateau. |
 | Controller/performance | XID route is traced; full control support, mission performance, and 60 FPS are unverified. | Validate at and after the first mission frame. |
 
 The `ObReferenceObjectByHandle` pending/completion implementation remains intact; the old r130 null-output diagnosis is not repeated. Preserve AOT execution, controller mapping, guest fences, and rasterizer `1ea1871`.
 
-**Storage:** final post-status scan is 41,746,055,330 bytes allocated (38.88 GiB), with 1,397,678,346,351 ordinary-file logical bytes plus separately measured toolchain links. The 4,592,754-byte recovery came from hash-verified lossless compression. No files were deleted; automatic file-action review rejected duplicate screenshot deletion before execution. Historical BMP/log/dump files are already compressed except 12.1 MiB of unresolved dumps and 8.8 KiB of logs, which remain intact. Warm build cache remains 7,064,232,890 allocated bytes. See the [r406 cleanup manifest](../analysis/current-cleanup-manifest-r406-20261030.md) and [source preservation manifest](../analysis/r406-source-preservation-manifest.md).
+**Storage:** fresh scan is 41,814,717,222 bytes allocated (38.94 GiB) and 1,397,880,810,882 ordinary-file logical bytes. Hash-verified compression of closed evidence reclaimed 11,934,458 bytes across 36 files. Three exact duplicate tool archives remain because file-action review rejected removal before execution; no alternate deletion route was tried. Warm build tree remains 7,136,856,349 allocated bytes. See the [r410 cleanup manifest](../analysis/current-cleanup-manifest-r410-20261030.md) and [source preservation manifest](../analysis/r410-source-preservation-manifest.md).
 
-Overall `#####--------------- 26%` · AOT `##########---------- 50%` · boot/campaign `########------------ 40%` · runtime `######-------------- 30%` · rendering `###----------------- 15%` · controller `#####--------------- 25%` · debugging `###############----- 75%` · storage `################---- 80%` · mission frame `0/1` · stable 60 FPS `0/1`.
+Overall `#####--------------- 26%` · AOT `##########---------- 50%` · boot/campaign `########------------ 40%` · runtime `######-------------- 30%` · rendering `###----------------- 15%` · controller `#####--------------- 25%` · debugging `################---- 80%` · storage `################---- 80%` · mission frame `0/1` · stable 60 FPS `0/1`.
 
 **Current milestone:** 3 — boot and compatibility. **Next acceptance point:** first visually verified mission frame.
 ## Previous verified state — r349–r354

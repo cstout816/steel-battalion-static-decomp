@@ -1,0 +1,4 @@
+"Filename","SearchScope","ReferenceCount","Files"
+"ghidra_12.1.4_PUBLIC_20260921.zip","Project text files excluding CSV manifests and binaries","2",".\tools\Build-ComprehensiveCleanupManifest.ps1;.\analysis\workspace-size-audit-20261026.md"
+"jdk21-duplicate-reverse-engineering.zip","Project text files excluding CSV manifests and binaries","0",""
+"temurin21-duplicate-ghidra-analysis.zip","Project text files excluding CSV manifests and binaries","0",""
