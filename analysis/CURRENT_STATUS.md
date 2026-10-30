@@ -5,30 +5,35 @@
 ## Progress bars
 
 ```text
-Decompilation / AOT execution   [##########----------] 50%  AOT route active; mission frame not reached
-Boot and campaign entry         [####----------------] 20%  Pilot flow and loading stage are partly reached
-Runtime compatibility           [######--------------] 30%  Kernel, input, audio, graphics paths still incomplete
-Rendering and performance       [###-----------------] 15%  Raster path measured; no 60 FPS claim
-Controller compatibility        [####----------------] 20%  XID path traced; full Steel Battalion controller unverified
-Launcher and installation       [##------------------] 10%  Not the current milestone
-Debugging and evidence           [############--------] 60%  Bounded traces and exact symbol bundles retained
-Storage control                  [##############------] 70%  About 11.5 MB reclaimed by verified compression; no r393 cleanup
-Overall project                  [#####---------------] 25%  Early compatibility work; campaign not playable yet
+Decompilation / AOT execution   [##########----------] 50%  AOT route reaches NOW LOADING; no mission frame
+Boot and campaign entry         [#######-------------] 35%  New-pilot route and Normal selection verified
+Runtime compatibility          [######--------------] 30%  Kernel, input, audio, and graphics remain incomplete
+Rendering and performance       [###-----------------] 15%  Loading transition measured; 60 FPS unverified
+Controller compatibility       [#####---------------] 25%  XID input path verified; full controller unverified
+Launcher and installation      [##------------------] 10%  Not the current milestone
+Debugging and evidence          [#############-------] 65%  Bounded traces and matching r367 stack bundles retained
+Storage control                 [##############------] 70%  5,021,696 bytes reclaimed in r394/r395 evidence cleanup
+Overall project                 [#####---------------] 25%  Early compatibility work; campaign is not playable yet
 ```
 
-Bars are rough engineering estimates, not completion claims. The current milestone acceptance check is one visually verified first mission frame.
+Bars are rough engineering estimates. The current milestone acceptance check is one visually verified first mission frame.
 
 ## Current findings
 
-- r382 remains the best loader-stage evidence: visible `NOW LOADING`; mode-2 progress stopped at `0x000ABA00`; repeated guest handle `0x3FFF` lookup at `sub_0001D980`, guest address `0x82A9BFF0`, with `0x82A9BFFC == 0xFFFFFFFF`.
-- r391 reached Normal difficulty but left a white framebuffer; it did not verify a mission frame.
-- r393 reproduced a separate title-stage wait on guest event `0x0021DCF4` (caller `0x00211F3B`). Main thread's validated native unwind ends at the AOT guest-wait wrapper. Three raster workers were at their start-event wait in the dump, while telemetry still reported pending=3. This mismatch and the missing expected DCF4 producer keep the title-stage cause unresolved.
-- r392/r393 did not reach the loader route. The pilot handler remains identified; do not reopen discovery of `sub_000E0870`.
-- The existing r130 `ObReferenceObjectByHandle` implementation is present; worker pending/completion propagation was verified in r386–r391. Do not repeat that diagnosis.
-- No runtime fix, build, or test was performed in r392/r393. Keep AOT execution, guest fences, controller mapping, and rasterizer `1ea1871` unchanged.
+- r396 (`m3-3fff-screen-gated-writer-r396-20261030`, PID 19912) used the exact r367 AOT EXE/PDB/MAP and the r368 save root. The route reached the new-pilot editor, default date, YES, `HAI SHI DAO 2080 [NORMAL]`, and a guest framebuffer showing `NOW LOADING`. The host window later showed black at 0.0 FPS; no first mission frame appeared.
+- Screen-gated input from XID DMA at guest buffer `0x01081763` through the edge predicate at `0x000C8064`, pilot callback `0x000E18D8`, selected branch `0x000E193B`, and row action `0x000E19CF` is correlated in r396. `LIST AS NEW` was selected as owner 8; the action changed item `+0x28` from `0x3F800000` to zero.
+- Loading mode 2 stopped at progress pair `0x000ABA00/0`. Sampled reads through read count 11,000 completed with matching byte counts and zero status. File lifecycle and per-handle read traces were disabled, so the first stalled file dependency is still unknown.
+- The same loading run ended with thread 187972 waiting on guest event `0x0021DCF4`; the 180-second DCF4 watchdog stopped only PID 19912 after no wait return. The final synchronized trace had no DCF4 signal, no new raster batches, and static DMA PUT/GET. DCF4 is a separate observed wait; it is not yet proven to be the loader readiness cause.
+- Matching-bundle StackWalk64 reached host `xbox_KeWaitForSingleObject` and stopped at synthetic address `0xF34`. Guest addresses found by raw stack scanning are candidates only, not validated unwinds. No missing guest import was seeded; no behavior fix was made.
+- The r396 guest-write watch on `0x82A9BFFC` used host address `0x82AABFFC`, read zero when attached, and logged no write hit. This does not validate the prior `0xFFFFFFFF` table-entry candidate or its expected writer.
+- r130 `ObReferenceObjectByHandle` and worker completion propagation remain current; do not repeat the old null-output diagnosis. Keep title DCF4, DirectSound-list corruption, rendering cost, and loading readiness distinct.
+- r396 reused the writable r368 save root without cloning or hard-linking it. `UserData` remained empty; TitleData save files were retained. Partition-image timestamps changed at process start and `Cache\\COPYCHECK.DAT` changed during the run, so their contents are not claimed unchanged.
+- No game build, runtime fix, controller-map change, guest-fence change, or rasterizer change was made. A tiny local trace-helper executable was built from `tools/GuestWriteBreakpoint.c`; the warm game build cache remains unchanged.
 
 ## Storage and next action
 
-Current path-summed footprint including 13 separately measured executable reparse entries is **41,527,779,219 allocated bytes (38.67 GiB)**; logical sparse capacity is 1,397,127,080,506 bytes. r392/r393 added a net 4,004,411 allocated bytes versus r391. This turn reclaimed 0 bytes. Previous verified lossless compression saved 11,522,408 allocated bytes. Warm incremental build tree is 6,918,921,034 allocated bytes; retain it for build efficiency.
+The final path-summed inventory after r396 and current status/report files is **41,534,686,538 allocated bytes (38.68 GiB)** and **1,397,141,523,641 logical bytes**, including the 13 separately measured executable reparse entries. The inventory counted 77,689 ordinary files; sparse logical lengths are not disk usage. The warm build cache remains 6,918,921,034 allocated bytes; the last incremental build measurement is about 9.1 seconds, and no game rebuild ran. No build ran in r396.
 
-Next: use exact matching r382/r367 evidence to pursue the first reproducible loader handoff; if a new route run is necessary, keep the trace focused on the `0x3FFF` entry's fourth dword and its writer, with an actually screen-gated new-pilot route. Keep the title DCF4 branch as a separate follow-up. Do not modify behavior until the expected producer or missing handoff is established. See [r392–r393 report](m3-r392-r393-title-dcf4-and-storage-20261030.md), [r386–r391 review](m3-r386-r391-loader-and-storage-review-20261030.md), and [r382 loader report](m3-r382-loading-handle-and-storage-20261030.md).
+Verified r394/r395 closed-evidence cleanup reclaimed **5,021,696 allocated bytes**. The r396 audit found 22 historical cache files that match retained extracted media exactly (178,721,934 logical / 143,407,758 allocated bytes), but the automatic execution review rejected the removal command; none were removed. The r396 run retains four bounded, lossless screenshots and two small dumps; its 64 MiB budget was not triggered, no relay drops occurred, and no trace caps were hit. See [r394–r396 report](m3-r394-r396-loading-storage-followup-20261030.md), [r396 cache audit](r396-redundant-cache-audit-20261030.csv), and [r396 cleanup manifest](current-cleanup-manifest-r396-20261030.md).
+
+**Next:** use the exact r367 bundle and existing save root for one focused follow-up with bounded per-handle file completion, loader state producer/consumer, and wait-state evidence. Keep the DCF4 event distinct from the mode-2 readiness pair. Do not seed, bypass, force, or patch a guest state without a source-and-runtime correlation. Stop at the first visually verified mission frame. Campaign completion and 60 FPS remain unverified.
