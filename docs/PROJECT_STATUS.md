@@ -96,4 +96,3 @@ Dirty checkout recovery: [source preservation manifest](../analysis/source-prese
 
 The 371-row Xbox kernel ordinal-reference set and Java Ghidra scripts are verified in the local Ghidra scripts folder and packaged in `C:\Project\GhidraAnalysis\scripts\XboxKernelOrdinals-GhidraSupport-20261029.zip`. Use the Ghidra 12.1.4 install with the XBE extension; the local 12.2 install lacks it. Exact-name XbeTripper/xberewrite sources remain unverified. Cxbx XBE inspection is useful for read-only metadata/integrity checks, not for validating the AOT runtime. The active XboxRecomp AOT architecture is unchanged; no XBE hooks or edits were made.
 **Still unverified:** the first mission frame, the expected writer for selector `0x3FFF`, audio playback correctness, controller behavior beyond menu navigation, 60 FPS, mission completion, and campaign progression.
-
