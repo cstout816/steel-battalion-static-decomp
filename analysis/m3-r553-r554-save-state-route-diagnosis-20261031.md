@@ -59,3 +59,17 @@ In r550, `user07.sav` was still reported missing in several early `OPEN_EXISTING
 ## Next step / blocker
 
 The current save root contains no valid pilot record and all eight slots are occupied. Do not patch the runtime to ignore the game's slot check or to fabricate a record. To resume the new-pilot route, the save root must have a valid free slot or a valid user-supplied pilot record. Because the current instruction is to preserve this save root, the in-game DELETE PILOT option was left unused. After a safe valid pilot state is available, continue from the exact r513 bundle and screen-gate the remaining route. Then trace the record-validation branch if it still rejects a non-empty record, and proceed to the first mission frame.
+
+## r555 pre-input startup and save-root audit — 2026-10-31
+
+The prescribed r519 save root has eight occupied, zero-payload pilot slots, so I attempted to use the already-existing `saves-m3-newpilot-empty-r366-20261029` root without copying or clearing it. Its `TitleData\43430002` has `user00.sav`–`user04.sav` and `user99.sav`; each 2,792-byte pilot payload is zero, while `user05.sav`–`user07.sav` were absent. The root is not a clean empty baseline: r484 previously used and modified it, as documented in [r484](m3-r484-title-dcf4-followup-20261031.md).
+
+Run `m3-r555-free-slot-loader-handoff-20261031` used the exact r519 r513 executable (PID 61940), with no build. The first launcher attempt was rejected before starting because its `-EnableThreadObjectTrace` freshness check correctly found that r513 predates the current kernel bridge. I retried without that unavailable trace. The run captured the title prompt, but `pad-live.txt` remained empty; no route input was sent.
+
+After launch, the Windows app inventory showed the separate r502 Steel Battalion window from another chat. I stopped only PID 61940 before sending input and did not interact with the r502 window. The r502 run manifest identifies its save directory as the original r519 root, not the alternate root used by r555. A later app inventory no longer listed that window; I did not target or interact with that process, and do not infer why it disappeared.
+
+Startup touched metadata on the alternate root's `Partition0.img`–`Partition5.img` and created/updated `Cache\COPYCHECK.DAT`. Their data deltas cannot be established because no pre-run hashes were captured. The existing `user00.sav`–`user04.sav` and `user99.sav` sizes and timestamps remained unchanged; no `user05.sav`–`user07.sav` appeared. The original r519 save root was not used by r555. Preserve both roots; do not infer that the alternate-root pilot route works until a conflict-free, screen-gated run verifies it.
+
+The aborted run retained 4,685,663 logical bytes. Its runner manifest could not query allocated bytes; a post-stop allocation measurement was 1,438,282 bytes before compression and 1,431,959 afterward. Hashes and lengths were unchanged by lossless NTFS compression, reclaiming **6,323 allocated bytes**. No source, executable, build cache, or controller/fence/rasterizer behavior changed. This was a pre-input title capture, not a route or mission test.
+
+The next safe action is to check both process metadata and the Windows window inventory before launching anything. When no other chat's Steel Battalion run is active, the alternate pre-existing root offers absent slot filenames, but its route is unverified and its partition images were touched during r555 startup. The exact r519 root remains full. No first mission frame has been verified.
