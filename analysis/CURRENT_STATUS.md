@@ -34,6 +34,8 @@ Progress bars track evidence, not estimated completion:
 
 The exact r513 EXE/PDB/MAP still match the recorded SHA-256 values; the existing `saves-m3-route-file-read-copy-20261023` root exists; and r519's 40-line `pad-live.txt` route is retained. `Start-ProducerTrace.ps1` still enables both `RECOMP_CONTIG_ALLOC_TRACE` and `RECOMP_PB_REPORT_TRACE` with the existing 64 MiB per-run budget. No build or route was started because Call of Duty HQ remains active. The next attempt can reuse these exact files and the full screen-gated sequence without a new candidate or save copy.
 
+For r519's separate mode-2 loading plateau, the retained run already has dense successful read completions and progress/helper records, but `RECOMP_FILE_OPEN_PATH_TRACE` and the loader paired-open target trace were unset. On the next route use `-EnableFileOpenPathTrace -EnableFileOpenTargetTrace -EnableFileFailurePathTrace`; these cap at 2,048 open paths, 2,048 paired-open attempts, and sampled failures, respectively. Keep file lifecycle logging off because previous runs showed it can slow file opens. This is a loader-only evidence addition; do not conflate it with the r495 report candidate.
+
 ## Exact r519 identity and retained evidence
 
 - Run: `iso/local-analysis/logs/m3-r519-dcf4-producer-stages-20261031`; diagnostic PID `50584` was stopped only after its executable path was revalidated and CPU, trace sizes, and callbacks stayed unchanged across a sample.
