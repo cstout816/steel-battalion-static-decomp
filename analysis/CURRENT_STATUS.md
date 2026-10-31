@@ -1,29 +1,27 @@
-# Steel Battalion AOT — current status (r480, 2026-10-30)
+# Steel Battalion AOT — current status (r482, 2026-10-30)
 
-**Current milestone:** 3 — boot and compatibility. **First mission frame: 0/1, not verified.** AOT execution remains in place; no gameplay fix, generated-code change, or build was made this pass.
+**Milestone 3: boot and compatibility. First visually verified mission frame: 0/1.** r482 verified one screen-gated A input end to end through XID delivery, guest edge cell `0x004AFC08`, predicate, callback `0x000E0840`, and visible player-record error overlay. The following black state has a DCF4 callback-queue/wait lead; the missing queue producer is not identified. r479 separately reached a live Campaign menu and crashed consuming an invalid DirectSound node. No fix or build change is established.
 
-Read [r476–r480 findings and storage report](m3-r476-r480-title-dcf4-dsound-followup-20261030.md), [current cleanup manifest](current-cleanup-manifest-r480-20261030.md), and the [project review handoff](project-review-and-luna-high-handoff-20261027.md) before repeating a diagnostic. Latest result: r479 visibly reached Campaign then crashed while consuming a malformed DirectSound list; r480 captured only normal list initialization writes and a separate title-stage DCF4 wait. Neither established the corrupting writer or reached `NOW LOADING`.
+Read [r481–r482 diagnostic report](m3-r481-r482-title-dcf4-dsound-followup-20261030.md), [r482 cleanup manifest](current-cleanup-manifest-r482-20261030.md), [r476–r480 report](m3-r476-r480-title-dcf4-dsound-followup-20261030.md), and [r150/r153 exact-bundle unwind review](m3-dump-unwind-review-r150-r153-20261028.md) before repeating old theories.
 
 ## Progress
 
 ```text
-Decompilation / AOT execution   [##########----------] 50%  AOT path retained; no ordinary emulation substitution
-Boot and campaign entry         [##############------] 70%  Visible Campaign reached in r479; then DirectSound AV
-Kernel/runtime compatibility   [########------------] 40%  Title DCF4 wait sampled; producer and r130 semantics unresolved
-Graphics / rendering           [###-----------------] 15%  No mission frame; r480 had drained DMA and no PGRAPH pending
-Controller compatibility       [##########----------] 50%  XID delivery and screen-gated title edge retained in r479/r480
-Audio / DSP                     [###-----------------] 15%  DirectSound list failure at r479; audio playback unverified
-Debugging and evidence          [###################-] 98%  Exact r461 symbols, r480 native dump, bounded run traces retained
-Storage control                 [##################--] 95%  37.088 GiB allocated; 1,303.547 GiB logical; 0 bytes reclaimed
+Decompilation / AOT execution   [##########----------] 50%  Exact AOT path retained; no emulation substitution
+Boot and campaign entry         [##############------] 70%  r479 visibly reached Campaign; r482 visible error overlay
+Kernel/runtime compatibility   [########------------] 40%  DCF4 callback queue/wait traced; source completion path reviewed
+Graphics / rendering           [###-----------------] 15%  Black title-stage output; snapshot has no raster backlog
+Controller compatibility       [##########----------] 50%  r482 verified XID → guest edge → title branch → screen change
+Audio / DSP                     [###-----------------] 15%  r479 invalid DirectSound list; corrupting write unknown
+Debugging and evidence          [###################-] 98%  Exact bundles, r482 callbacks, queue, wait, and minidump retained
+Storage control                 [##################--] 95%  37.091 GiB allocated; 1,303.554 GiB logical; savings 0
 Overall project                 [######--------------] 30%  First-mission acceptance remains 0/1
 ```
 
-## Current blocker and next action
+## Current leads and next action
 
-The most actionable blocker is the r479 DirectSound malformed-list consumption (`node=0xFF000000`, predecessor `0x8038C098`); its writer remains unknown. r480 watched the relevant three words but ended in an earlier DCF4 wait, after only nine valid initialization writes. Reproduce the r479 route with those watches still active, retain a crash dump, and identify the first invalid write before changing list behavior. Keep this separate from title DCF4, the post-difficulty loader plateau, and expensive raster work.
+r482 recorded 325 DCF4 callbacks with no cap. Callback #324 took index 5 (`0x0021701E`) and set DCF4 through return site `0x0021702F`; #325 took index 1 (`0x00216EC9`). Later queue samples were empty while the UI thread snapshot was in the DCF4 wait with signal 0. DMA was drained (`PUT=GET=0x5DEC`), PGRAPH pending was 0, and raster workers had no active/pending work. This points toward an exhausted synchronization queue rather than rendering backlog, but does not identify why it was not replenished.
 
-Review r150/r151/r153 dumps only with their exact matching binaries and symbols; distinguish valid unwinds from raw stack scans. Verify r130 `ObReferenceObjectByHandle` completion semantics. Investigate loader dependencies after a visible `NOW LOADING` state. Stop acceptance at the first visually verified mission frame.
+The next action is static source/data correlation of `sub_00217130`, `sub_00216EA0`, the queue producer, and indirect target slot `0x0025D1E8`; then a bounded run with those traces plus the existing DirectSound link watch. Validate indirect targets before any seeding/rebuild. Keep title DCF4, DirectSound invalid-list crash, and post-difficulty loader plateau distinct. The loader has no evidence in r482 because `NOW LOADING` was not reached. Preserve AOT, guest fences, controller mapping, and rasterizer `1ea1871`.
 
-## Storage / build status
-
-Fresh scan: 79,479 files; 39,822,753,979 allocated bytes (37.088 GiB); 1,399,672,470,449 logical bytes (1,303.547 GiB); 13 reparse entries skipped. r476–r480 account for 5,207,555 allocated bytes (11,312,573 logical). No files were removed or compressed, so reclaimed space is 0; warm incremental build cache and build efficiency are unchanged. See the cleanup manifest for exact per-run paths and allocations.
+Current kernel source already implements pending-to-completed thread-object status; guest readiness consumption of a completed status remains unverified. r150/r151/r153 exact-bundle evidence did not prove a shared deadlock or raster backlog.
