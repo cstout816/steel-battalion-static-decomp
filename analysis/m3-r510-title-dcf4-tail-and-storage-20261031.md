@@ -57,3 +57,7 @@ The earliest r510 blocker is a title-stage wait at guest DCF4 object `0x0021DCF4
 Next test: first use exact matched r153/r151/r150 dumps and symbol bundles with a dump-compatible unwind environment, then reproduce the known new-pilot route with a failure-window tail and a real guest CPU snapshot at the first stopped wait. Keep loader file completion and dispatch-gate owner telemetry enabled only on a route that reaches `NOW LOADING`. Do not alter wait/signal behavior, guest checks, fences, preload policy, controller mapping, AOT execution, or rasterizer until one cause is supported. Stop acceptance at the first visually verified first-mission frame.
 
 
+
+## Reproducible diagnostic source delta
+
+The only generated-source edit for r510 is local under `iso/local-analysis/xboxrecomp-generated-xpp-untraced-current/gen/recomp_0015.c`; it is intentionally excluded from Git because it is game-derived code. Pre-edit SHA-256 was `65EDF05FC26AE1B4BD842572279C6B90EF11E781B030A1C54F7F510C24047B10`; post-edit SHA-256 is recorded above. The bounded text transformation was: outer emit limit `4096u` → `32768u`; cap marker `limit=4096 emitted=4096` → `limit=32768 emitted=32768`; skipped-count subtraction `sb_outer_n - 4096u` → `sb_outer_n - 32768u`. The source's sampling rule and runtime behavior were otherwise unchanged. The build-script required-marker assertion was updated to match the new cap. This compact transformation and hashes are the reproducibility record; no generated source or game assets are included in the repository.
