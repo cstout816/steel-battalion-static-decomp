@@ -24,7 +24,7 @@ r508 is the separate loading-stage case: 27/27 mode-2 passes returned, then two 
 
 ## Storage and build efficiency
 
-Post-r510 full inventory: **40,101,794,669 allocated bytes (37.354 GiB)** vs **1,402,801,346,883 logical bytes (1.276 TiB)**, 80,049 regular files. Compared with pre-r510, allocated workspace grew **76,068,532 bytes** while retaining the new build and diagnostic evidence. Current components include ISO 7.83 GB allocated, extracted game files 1.80 GB, canonical generated tree 155.9 MB, saves 952.9 MB allocated / 5.42 GB logical, build tree 7.94 GB allocated, and local-analysis logs 3.52 GB allocated.
+Post-r510 full inventory: **40,101,826,806 allocated bytes (37.348 GiB)** vs **1,402,801,379,020 logical bytes (1.276 TiB)**, 80,057 regular files. Compared with pre-r510, allocated workspace grew **76,100,669 bytes** while retaining the new build and diagnostic evidence. Current components include ISO 7.83 GB allocated, extracted game files 1.80 GB, canonical generated tree 155.9 MB, saves 952.9 MB allocated / 5.42 GB logical, build tree 7.94 GB allocated, and local-analysis logs 3.52 GB allocated.
 
 A 312-file exact-duplicate set (2,379,096,064 allocated bytes) was validated but its deletion was rejected by automatic action review. **No candidate was removed; deletion savings are 0 bytes.** Compression of 40 verified duplicate TEXOBJ caches preserved hashes but reclaimed **0 bytes**. No save, ISO, source, symbol bundle, or warm cache was removed. r510 incremental build completed in about 14 seconds, recompiling only generated `recomp_0015.c` and relinking; no comparable timing baseline was run.
 
@@ -33,3 +33,5 @@ A 312-file exact-duplicate set (2,379,096,064 allocated bytes) was validated but
 First re-evaluate retained r150/r151/r153 dumps with dump-compatible Windows module metadata and their exact executable/symbol bundles; the attempted local rewalk was inconclusive. Then reproduce the authorized new-pilot route with guest CPU state captured in the failure window. Enable loader completion and dispatch-gate owner diagnosis only after visible `NOW LOADING`. No behavior fix until one cause is supported. Stop at the first visually verified mission frame.
 
 Earlier context: [r506–r509 stall discrimination](m3-r506-r509-stall-discrimination-20261031.md), [r505 post-difficulty plateau](m3-r505-postdifficulty-plateau-20261031.md), [r502 mode-2 plateau](m3-r502-mode2-plateau-and-device-entry-20261031.md), and [r487 new-pilot loading stall](m3-r487-newpilot-loading-stall-and-storage-20261031.md). These preserve the distinct loading, title, DirectSound, and renderer findings.
+
+

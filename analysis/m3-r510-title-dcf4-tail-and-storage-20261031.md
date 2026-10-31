@@ -42,7 +42,7 @@ The attempted fresh r150/r151/r153 rewalk is inconclusive: the host unwind stopp
 
 ## Storage and build impact
 
-The full post-run scan reports **40,101,794,669 allocated bytes (37.354 GiB)** versus **1,402,801,346,883 logical bytes (1.276 TiB)** across 80,049 regular files. Allocation was measured separately from logical length; sparse save images explain much of the gap. The save root, ISO, extracted assets, canonical generated tree, and warm build cache remain.
+The full post-run scan reports **40,101,826,806 allocated bytes (37.348 GiB)** versus **1,402,801,379,020 logical bytes (1.276 TiB)** across 80,057 regular files. Allocation was measured separately from logical length; sparse save images explain much of the gap. The save root, ISO, extracted assets, canonical generated tree, and warm build cache remain.
 
 A validated 312-file exact-duplicate removal set totals 2,379,096,064 allocated bytes, but automatic action review rejected that removal. **Nothing was deleted; actual reclaimed space from removal is 0 bytes.** Lossless NTFS compression of 40 already duplicated TEXOBJ caches preserved every hash and changed their measured allocated total by **0 bytes**. Do not attempt a different deletion route. No hot compiler/Cargo cache was cleared.
 
@@ -55,3 +55,5 @@ Detailed storage artifacts: `analysis/current-cleanup-manifest-r510-20261031.md`
 The earliest r510 blocker is a title-stage wait at guest DCF4 object `0x0021DCF4`, where a later producer/set did not appear after callback 946. Why callback production stopped, whether that is causal to the screen failure, and the actual guest caller state remain unknown. This is separate from r508's post-difficulty dispatch-gate wait, the historical DirectSound list corruption, and title raster cost.
 
 Next test: first use exact matched r153/r151/r150 dumps and symbol bundles with a dump-compatible unwind environment, then reproduce the known new-pilot route with a failure-window tail and a real guest CPU snapshot at the first stopped wait. Keep loader file completion and dispatch-gate owner telemetry enabled only on a route that reaches `NOW LOADING`. Do not alter wait/signal behavior, guest checks, fences, preload policy, controller mapping, AOT execution, or rasterizer until one cause is supported. Stop acceptance at the first visually verified first-mission frame.
+
+
