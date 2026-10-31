@@ -30,6 +30,10 @@ Progress bars track evidence, not estimated completion:
 - DCF4 waits #5248, #5312, and #5376 all returned with signal `1`. Callback tracing continued through `n=11312`; DMA PUT/GET and NV2A ticks advanced in the final sampled interval. One heartbeat showed raster pending `3` with active workers, while the prior heartbeat showed pending `0`. This run does not establish a DCF4 wait as the loading cause or prove raster backlog caused the stall.
 - r522 title input is correlated through `[XID0]`/`[XID-DMA0]`, guest edge consumption at `0x000C8064` (`button_cell=0x004AFC08`), and title route site `0x000E081F`, which returned 1 and branched to `0x001F2DD5`. The visible player-record prompt did not change, but this run used only five `a:600` pulses and one `right:200`; r519's longer screen-gated sequence continued through campaign, pilot creation, difficulty, and visible loading. Therefore r522 did not reproduce the proven r519 route and does not establish a new game-code blocker. Its main native unwind reaches `xbox_KeWaitForSingleObject+0x29` but cannot unwind into guest code; sampled DCE4 wait #576 returned successfully in 31 ms, and DCE4 producer signals continued. Do not equate the title prompt with r502's loader plateau or an unmatched DCF4 wait.
 
+## r519 route preflight — 2026-10-31
+
+The exact r513 EXE/PDB/MAP still match the recorded SHA-256 values; the existing `saves-m3-route-file-read-copy-20261023` root exists; and r519's 40-line `pad-live.txt` route is retained. `Start-ProducerTrace.ps1` still enables both `RECOMP_CONTIG_ALLOC_TRACE` and `RECOMP_PB_REPORT_TRACE` with the existing 64 MiB per-run budget. No build or route was started because Call of Duty HQ remains active. The next attempt can reuse these exact files and the full screen-gated sequence without a new candidate or save copy.
+
 ## Exact r519 identity and retained evidence
 
 - Run: `iso/local-analysis/logs/m3-r519-dcf4-producer-stages-20261031`; diagnostic PID `50584` was stopped only after its executable path was revalidated and CPU, trace sizes, and callbacks stayed unchanged across a sample.
