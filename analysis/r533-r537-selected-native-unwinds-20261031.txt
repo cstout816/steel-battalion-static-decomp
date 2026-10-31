@@ -1,0 +1,38 @@
+r533-r537 wait/crash stack summary — 2026-10-31
+
+Exact EXE/PDB pair for r533-r537:
+  EXE SHA-256 A52F6D3D3C93DA54B629382BD74A4E3AC1B878FFCA34520163A6FD365907EF84
+  PDB SHA-256 6B503653208BE8DD774C42BE6ACEF569F1AD071D3D4B10D74CA77916D5648653
+
+r533 access violation:
+  Host RIP 0x7FF6B83D6928; guest read VA 0xFFFFFFF4; ESI=0xFFFFFFEC; EBX=0.
+  External snapshot lacks an exception-context stream; no faulting native TID or validated fault-time native unwind is available.
+  The printed guest return-address list is raw guest stack data, not a host unwind.
+
+r534 dcf4-stall.dmp, TID 63676:
+  #00 ntdll.dll+0x166464
+  #02 KERNELBASE.dll+0x1427F
+  #03 your_game_recomp_producer_trace.exe+0x64AC299 (xbox_KeWaitForSingleObject)
+  Stop at non-module host event handle 0xF54.
+  StackWalk callbacks: 69 reads, 0 read failures; 19 function-table lookups.
+
+r535 dcf4-stall.dmp, TID 54552:
+  #00 ntdll.dll+0x166464
+  #02 KERNELBASE.dll+0x1427F
+  #03 your_game_recomp_producer_trace.exe+0x64AC299 (xbox_KeWaitForSingleObject)
+  Stop at non-module host event handle 0x1038.
+  StackWalk callbacks: 69 reads, 0 read failures; 19 function-table lookups.
+
+r536 dcf4-stall.dmp, TID 51940:
+  #00 ntdll.dll+0x166464
+  #02 KERNELBASE.dll+0x1427F
+  #03 your_game_recomp_producer_trace.exe+0x64AC299 (xbox_KeWaitForSingleObject)
+  Stop at non-module host event handle 0xFA4.
+  StackWalk callbacks: 69 reads, 0 read failures; 19 function-table lookups.
+
+r537 dcf4-stall.dmp, TID 60560:
+  #00 ntdll.dll+0x166464
+  #02 KERNELBASE.dll+0x1427F
+  #03 your_game_recomp_producer_trace.exe+0x64AC299 (xbox_KeWaitForSingleObject)
+  Stop at non-module host event handle 0xE7C.
+  StackWalk callbacks: 69 reads, 0 read failures; 19 function-table lookups.
