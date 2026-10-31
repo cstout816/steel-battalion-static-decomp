@@ -1,4 +1,21 @@
-# Steel Battalion AOT — current status (r538 ring-poll / DCF4 follow-up, 2026-10-31)
+# Steel Battalion AOT — current status (updated through r554, 2026-10-31)
+
+## Current checkpoint — r553/r554
+
+The exact r519 r513 AOT bundle was reused with the existing save root. The screen-gated route reached Campaign and the pilot list, but the current save state no longer supports the r519 new-pilot route: all eight pilot slot files (`user00.sav`–`user07.sav`) exist and their 2,792-byte record payloads are zero. `LIST AS NEW` reports the pilot limit; DATA-000 displays blank fields and fails to load. No save was changed or removed.
+
+r554 traced the DATA-000 read to `T:\user00.sav`, guest caller `0x0018E149`, handle token `0x48000085`. Both the 2,792-byte payload and 20-byte trailer were fully read with host, NT, and guest status `0`. This rules out a file I/O failure. The precise guest validation return that selects the overlay is not yet traced, and no code fix is supported. The visible deletion option was not used.
+
+| Field | Evidence bar | Verified state |
+| --- | --- | --- |
+| AOT reference bundle | [##########] 1/1 | Exact r519 EXE/PDB/MAP reused in r554. |
+| Pilot-menu route | [##########] 1/1 | Campaign and listed-pilot screens reached; full-slot warning and blank DATA-000 error verified. |
+| First mission frame | [--------------------] 0/1 | No mission scene; the current save root blocks the new-pilot route. |
+| Save-read correlation | [##########] 1/1 | Full DATA-000 file reads succeed; payload is blank, so the exact guest validation branch remains to trace. |
+| DCF4 during r554 route | [##########] 1/1 | DCF4 callbacks ran through menu transitions; no DCF4 cap was hit and this route did not reproduce the historical unmatched wait. |
+| Storage/build | [##########] 1/1 | r553+r554 added 4,367,010 allocated bytes of bounded evidence; no build, deletion, or cache change. |
+
+**Immediate blocker:** the retained root has no valid pilot record and all eight slots are occupied. Preserve it as requested. Resume the campaign route after a valid pilot record/free slot is available; then revisit r519's post-NOW-LOADING mode-2 plateau. Full run identity, evidence paths, and limitations: [r553–r554 diagnosis](m3-r553-r554-save-state-route-diagnosis-20261031.md).
 
 
 **DCF4 correlation correction (r525):** Ordinary `wait-trace.log` includes sampled DCF4 events. `wait-DCF4[64]` (TID 31684, tick 115008921) used guest event `0x0021DCF4` / host handle `0x1020` and returned at tick 115008953. The matched dump's valid unwind for TID 31684 ends at the same non-module `0x1020`, and its register context has `RCX=0x1020`; an outstanding DCF4 host-event wait at dump time is strongly supported. See the corrected [r525 report](m3-r525-dsound-watch-title-stall-20261031.md).
