@@ -1,36 +1,35 @@
-# Steel Battalion AOT — current status (r441, 2026-10-30)
+# Steel Battalion AOT — current status (r461–r466, 2026-10-30)
 
-**Milestone 3: boot and compatibility. First visually verified mission frame: 0/1.** r441 followed the new-pilot route to the visible `NOW LOADING` screen. The final guest framebuffer was white, and the run stopped after 180 seconds with no NV2A frame/counter/fence progress. No mission scene was verified.
+**Milestone 3: boot and compatibility. First visually verified first-mission frame: 0/1.** r463/r465 reached the post-difficulty loader plateau. r466 is a separate title-stage run and did not reach the pilot list or loader. No gameplay fix or AOT behavior change is established.
+
+Read [r466 title and loader evidence](m3-r466-title-route-and-loader-evidence-20261030.md) and [r461–r465 loader evidence](m3-r461-r465-loader-and-storage-20261030.md) before repeating earlier theories. The r466 title wait, r463/r465 loader branch, r150/r151 DCF4 evidence, r153 queue/DSP snapshots, DirectSound corruption, and measured raster cost remain distinct.
 
 ## Progress
 
 ```text
-Decompilation / AOT execution   [##########----------] 50%  Exact r426 AOT and symbol bundle retained
-Boot and campaign entry         [##########----------] 50%  New-pilot route reaches loading; no mission frame
-Kernel/runtime compatibility   [########------------] 40%  0x3FFF object-entry poll identified; owner unresolved
-Graphics / rendering            [###-----------------] 15%  White guest frame; zero queued raster work at stop
-Controller compatibility       [######--------------] 30%  Screen-gated XInput route verified; full mapping untested
+Decompilation / AOT execution   [##########----------] 50%  AOT execution retained; no emulation substitution
+Boot and campaign entry         [#############-------] 65%  r463/r465 reached loader transition; r466 title route stalled
+Kernel/runtime compatibility   [########------------] 40%  0x3FFF poll follows a skipped setup branch; producer unknown
+Graphics / rendering           [###-----------------] 15%  Title/post-difficulty frames only; no mission frame
+Controller compatibility       [########------------] 40%  r466 confirms XID delivery; guest edge/callback unverified
 Audio / DSP                     [###-----------------] 15%  Campaign audio remains unverified
-Debugging and evidence          [###################-] 95%  Bounded r441 trace, writer watch, and exact-bundle dump
-Storage control                 [##################--] 94%  36.724 GiB allocated; warm cache preserved
-Overall project                 [#####---------------] 28%  First-mission acceptance remains 0/1
+Debugging and evidence          [###################-] 98%  Exact bundles, bounded logs, and r466 dump retained
+Storage control                 [##################--] 95%  37.067 GiB measured allocated; 0 bytes reclaimed this pass
+Overall project                 [######--------------] 30%  First-mission acceptance remains 0/1
 ```
 
-## Current finding
+## Current loader candidate
 
-- r441 (`m3-loader-3fff-writer-r441-20261030`, PID 22740; `2026-10-30T18:54:21Z`–`19:04:21Z`) used the exact r426 AOT EXE/PDB/MAP and the existing save root. Its screen-gated route reached `NOW LOADING`; the final retained 640×480 guest framebuffer is solid white.
-- The write watch captured a store of `0xFFFFFFFF` to guest `0x82A9BFFC` at tick `26823843`, TID 26752, native RIP `0x7FF71FCB657A`. It maps to `sub_0020F1F0` in the exact r426 image, guest `loc_0020F250`. The caller trace at that tick ties handle `0x3FFF` to the `sub_000151D0` table-initialization loop; `sub_0020F260` publishes the empty entry with the sentinel still present.
-- AOT `sub_0001D980` repeatedly calls `sub_0020EC00(0x3FFF, ...)`, retrying `0x88760828` at guest PC `0x0020EC2B` / caller `0x0001D992`. Runtime samples reached 262,144 invalid lookups; the watch saw no later valid store during the 180-second stall. This establishes the immediate polling stall. The game operation that should bind the entry, whether that handle must be valid here, and whether it is the sole campaign blocker remain unresolved. No fix or guest-state change was made.
-- The last mode-2 pass was n=30, tick `26811968`, range 2..11, index 28, result 0, pair `0x000ABA00/0`. Index `0x1E` readiness was set to 1; guest objects `0x013BB000` and `0x019204A0` completed with status 1 after 89 and 80 polls. File lifecycle logged 2,499 opens / 2,090 closes and no missing path, but per-target read completion was disabled. File completion for every dependency is unverified.
-- At watchdog stop: DCF4 was signaled, DMA PUT/GET held at `0x1F014`, frame/counter/target/fence held at `0x7C3 / 0x90B9 / 0x9053 / 0x90B7`, and batches/workers/pending raster work were zero. This run did not reproduce an unsignaled DCF4 wait or raster backlog.
-- Exact-bundle native unwind for TID 26752 reached the guest trace helper/UCRT with zero stack-read failures, then stopped outside a module; it did not validate the guest call stack. Runtime guest PCs and the generated AOT branch are the valid call-path evidence.
+In both r463 and r465, AOT function `sub_000450C0` reads `MEM32(0x51E078)==0` at guest `0x451C5`, takes `skip-45287`, and bypasses the call at `0x45287`. In r463, repeated lookups of handle `0x3FFF` return `0x88760828` and the target slot remains invalid. r465 ends in the corresponding `sub_0001D980+0xA2` polling path. This supports the observed path but does not identify the intended global producer or prove why the setup branch should run. Do not seed or bypass it.
 
-## Storage and next step
+r466 did not reach this path. Its UI watchdog snapshot validates a native wait through `xbox_KeWaitForSingleObject+0x29`; deeper guest-looking addresses are raw stack-scan candidates only. DCF4 had repeated set/return cycles through sampled wait #512, while callback detail was disabled; final handoff state is unknown. No DCF4, input, pilot-list, or loader root cause is established by r466.
 
-Current inventory: **39,432,518,326 bytes allocated (36.724 GiB)**; **1,398,728,252,909 bytes logical (1,302.667 GiB)**. Compared with r440, workspace allocation rose 2,423,578 bytes. r441 evidence uses 2,334,966 allocated bytes; its 64 MiB cap was not reached, 13 frame captures were made, nine evicted, and no trace lines or captures were dropped. Warm incremental build tree remains 7,354,916,122 allocated bytes. The reused save root is 952,910,026 allocated bytes. No build or cache purge ran.
+## Storage and preserved working set
 
-No allocated space was reclaimed this turn. Three previously hash-verified duplicate archives totaling 976,265,216 allocated bytes remain in `C:\Project\SteelBattalion-Delete-Later-20261026\duplicate-tool-archives`; the exact removal command was blocked by the local policy gate. Keeper copies remain verified and intact.
+Post-r466 inventory: 79,220 files, 39,799,862,841 measured allocated bytes (37.067 GiB), and 1,399,613,305,721 logical bytes (1,303.491 GiB). Eight small Cargo fingerprint allocation queries failed; see the current cleanup manifest. C: free space was 46,022,909,952 bytes at scan time. The r466 evidence directory uses 1,994,082 allocated bytes. No files were deleted or moved; actual reclaimed space: **0 bytes**. The automatic review rejection of the 534 screenshot deletion candidates remains in effect.
 
-Next: identify the owner and expected producer for handle `0x3FFF` by tracing the AOT caller of `sub_0001D980` and the allocation/binding path that should publish its object pointer. Preserve guest checks, fences, AOT execution, controller mapping, and rasterizer `1ea1871`. Make no behavior change until the expected binding is established; stop the gameplay milestone at the first visually verified mission frame.
+Preserve the warm incremental build and all exact symbols for unresolved dumps, the ISO/assets, unique saves, dirty source checkouts, generated code and license files. The r154 report/logs and exact r149 bundle remain present. No Steel Battalion project directory was found on D:.
 
-Full diagnostic: [m3-r441-handle-slot-writer-and-loader-stall-20261030.md](m3-r441-handle-slot-writer-and-loader-stall-20261030.md). Prior r438–r440 context: [m3-r438-r440-invalid-device-handle-retry-and-storage-20261030.md](m3-r438-r440-invalid-device-handle-retry-and-storage-20261030.md). Current cleanup record: [current-cleanup-manifest-r441-20261030.md](current-cleanup-manifest-r441-20261030.md).
+## Next action
+
+Run a new screen-gated trace only after the exact new-pilot route reaches the pilot list. Have the write-watch helper wait for `0x51E078` memory to commit before arming, then capture the writer RIP and value transition alongside the existing branch and `0x3FFF` lookup. Keep input/edge tracing enabled; retain AOT execution, controller mapping, guest fences, and rasterizer baseline `1ea1871`. Make no gameplay change until the producer condition is established. Stop at the first visually verified mission frame.
