@@ -1,8 +1,8 @@
-# Steel Battalion AOT — current status (r461–r471, 2026-10-30)
+# Steel Battalion AOT — current status (r461–r472, 2026-10-30)
 
-**Milestone 3: boot and compatibility. First visually verified first-mission frame: 0/1.** r470/r471 transitioned from the title prompt to a black frame. r471 captured repeated DCF4 signals, then cessation of the index-5 callback path followed by an unsignaled wait in the live dump; the cause of callback cessation and its relationship to the black frame remain unknown. Neither run reached the pilot list or loader. r463/r465's post-difficulty plateau, r468's DirectSound list-corruption crash, and prior rendering cost remain separate findings. No gameplay fix or AOT behavior change is established.
+**Milestone 3: boot and compatibility. First visually verified first-mission frame: 0/1.** r472 verifies the screen-gated route through visible `LIST AS NEW` and pilot name entry on the current r461 AOT executable. It then reproduces the separate DirectSound invalid-list-node crash at `sub_0021ED29+0x88`; the corrupting writer remains unknown. The run did not reach difficulty or loading. Keep this separate from r463/r465's post-difficulty plateau, r470/r471's title-stage DCF4 wait, and measured rendering cost. No gameplay fix or AOT behavior change is established.
 
-Read [r470–r471 title DCF4 and storage report](m3-r470-r471-title-dcf4-stall-and-storage-20261030.md), [r469 title prompt and dump review](m3-r469-title-prompt-stall-and-dump-20261030.md), [r468 input route and DirectSound crash](m3-r468-input-route-and-directsound-crash-20261030.md), [r466 title and loader evidence](m3-r466-title-route-and-loader-evidence-20261030.md), and [r461–r465 loader evidence](m3-r461-r465-loader-and-storage-20261030.md) before repeating earlier theories. Keep the title DCF4 wait, post-difficulty loader branch, r150/r151 DCF4 evidence, r153 queue/DSP snapshots, DirectSound corruption, and measured raster cost distinct.
+Read [r472 route and DirectSound crash](m3-r472-screen-gated-name-entry-directsound-crash-20261030.md), [r471 DCF4 callsite and PMC review](m3-r471-dcf4-callsite-and-pmc-review-20261030.md), [r470–r471 title DCF4 and storage report](m3-r470-r471-title-dcf4-stall-and-storage-20261030.md), [r469 title prompt and dump review](m3-r469-title-prompt-stall-and-dump-20261030.md), [r468 input route and DirectSound crash](m3-r468-input-route-and-directsound-crash-20261030.md), and [r461–r465 loader evidence](m3-r461-r465-loader-and-storage-20261030.md) before repeating earlier theories. Keep title DCF4, the post-difficulty loader branch, r150/r151 DCF4 evidence, r153 queue/DSP snapshots, DirectSound corruption, and measured raster cost distinct.
 
 The offline r471 callsite review confirms caller hint `0x00211F3B` maps to a DCF4 wait inside guest `sub_00211E10`, after its graphics/DMA threshold and flush path. This is not a loader file wait. The later outer-loop flag at `0xFD000100` maps to PMC PCRTC status bit `0x01000000`; it is separate from PGRAPH context-switch bit `0x1000` at `0xFD400100`. Since the guest aperture is plain memory and no writer of the PMC value was captured, the register name alone does not prove a hardware vblank producer. See [r471 DCF4 callsite and PMC review](m3-r471-dcf4-callsite-and-pmc-review-20261030.md).
 
@@ -10,15 +10,21 @@ The offline r471 callsite review confirms caller hint `0x00211F3B` maps to a DCF
 
 ```text
 Decompilation / AOT execution   [##########----------] 50%  AOT execution retained; no emulation substitution
-Boot and campaign entry         [#############-------] 65%  r468 reached Campaign menu; r469 input did not reach pilot list
+Boot and campaign entry         [##############------] 70%  r472 reached visible LIST AS NEW and name entry
 Kernel/runtime compatibility   [########------------] 40%  0x3FFF poll follows a skipped setup branch; producer unknown
 Graphics / rendering           [###-----------------] 15%  Title/post-difficulty frames only; no mission frame
-Controller compatibility       [#########-----------] 45%  r470/r471 confirm title input delivery; title predicate and pilot handler unverified
+Controller compatibility       [##########----------] 50%  r472 correlates XID, guest edge, and pilot row action
 Audio / DSP                     [###-----------------] 15%  Campaign audio remains unverified
 Debugging and evidence          [###################-] 98%  Exact bundles, bounded logs, and r470/r471 DCF4/dump evidence retained
-Storage control                 [##################--] 95%  37.073 GiB allocated; 1,303.508 GiB logical; 0 bytes reclaimed this pass
+Storage control                 [##################--] 95%  37.076 GiB allocated; 1,303.517 GiB logical; 0 bytes reclaimed this pass
 Overall project                 [######--------------] 30%  First-mission acceptance remains 0/1
 ```
+
+## r472 result
+
+r472's AOT executable/PDB/MAP hashes, generated-source hash, environment, trace counts, and dump identity are recorded in the linked report. One run correlates XID byte 2, guest edge cell `0x004AFC08`, pilot updater branch `0x000E193B`, visible `LIST AS NEW` at `0x0026AF04`, and action `0x83` at `0x000E19CF`. The exact-bundle native unwind reaches `sub_0021ED29+0x88` and stops at the synthetic guest boundary after the DirectSound invalid-node read; the earlier corrupting write is still unknown. No loader callback ran.
+
+Fresh whole-workspace scan after r472: 79,375 files; 39,810,510,383 allocated bytes (37.076 GiB); 1,399,640,834,790 logical bytes (1,303.517 GiB); zero query failures. r472 itself is 3,606,351 allocated bytes (3.44 MiB). No files were deleted or moved, so actual reclaimed space is 0 bytes. Build caches and saves are unchanged. See [current r472 cleanup manifest](current-cleanup-manifest-r472-20261030.md).
 
 ## Current loader candidate
 
@@ -44,4 +50,4 @@ Preserve the warm incremental build and all exact symbols for unresolved dumps, 
 
 ## Next action
 
-Recover a reliable screen-gated title input sequence, then capture the terminal DCF4 wait and the producer transition with bounded recent-tail evidence. Observe writes to guest PMC status `0xFD000100` separately from PGRAPH status `0xFD400100`; do not infer the PMC writer from its register name. Require the visible pilot list plus active branch `0x000E193B`, label `LIST AS NEW` (`0x0026AF04`), and row action `0x83` at `0x000E19CF`. Investigate the post-difficulty `0x3FFF` path and file-completion dependencies only after a new-pilot route reaches visible `NOW LOADING`. Do not force a signal, seed/bypass guest state, change fences, or alter the rasterizer. Stop gameplay acceptance at the first visually verified mission frame.
+The screen-gated route and pilot row are now correlated. Before another run, analyze the retained exact-bundle r153/r151/r150 evidence and the deeper r158/r463/r465 post-difficulty records to choose one loader handoff hypothesis. Keep the DirectSound invalid-node crash distinct until its writer is found. Do not force signals, seed/bypass guest state, change fences, or alter rasterizer `1ea1871`. Pursue file-completion dependencies only after visible `NOW LOADING`; stop gameplay acceptance at the first visually verified mission frame.
