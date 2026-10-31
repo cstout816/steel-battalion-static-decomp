@@ -1,6 +1,6 @@
-# Steel Battalion AOT — current status (r524 route/crash follow-up, 2026-10-31)
+# Steel Battalion AOT — current status (r525 title-stall/write-watch follow-up, 2026-10-31)
 
-**Latest route: r524 (`m3-r524-r519-replay-open-paths-20261031`).** PID 15544 used the exact r513 EXE/PDB/MAP bundle at BelowNormal priority, the existing route save root, and the 64 MiB cap while Call of Duty HQ remained open. The screen-gated route visually reached the title prompt, Campaign, then `LIST AS NEW`; the final A edge reached the pilot-list callback. It then reproduced the DirectSound invalid voice-list crash before name entry. The supervisor captured the matching-bundle dump and stopped only PID 15544. No first mission frame, loader run, contiguous-allocation record, or GET_REPORT record. Full evidence: [r524 title-to-pilot-list crash report](m3-r524-title-to-pilot-list-crash-20261031.md).
+**Latest route: r525 (`m3-r525-dsound-writer-screen-gated-20261031`).** PID 51228 used the exact r513 EXE/PDB/MAP bundle, existing save root, DirectSound write watch, and a 64 MiB cap while Call of Duty PID 52452 remained open. Five A pulses reached XID; one title-route edge advanced to `0x002EC12C`, then the title/error prompt stalled. The no-progress watchdog captured a matched dump and stopped only PID 51228. The write watch saw valid list initialization/insertion, not the corrupting write from r521/r524. First mission frame remains 0/1. Full evidence: [r525 report](m3-r525-dsound-watch-title-stall-20261031.md).
 
 **Milestone 3: boot and compatibility. First visually verified mission frame: 0/1.** r519 reached visible `NOW LOADING` and recorded a mode-2 plateau; r521 and r524 independently crashed during DirectSound voice-list traversal before completing pilot creation. r522 was an incomplete replay of the longer r519 route. The low/high allocator fix remains in source and its real thunk regression passes, but the GET_REPORT address alias remains uncorrelated in-game. AOT execution, controller mapping, guest fences, and rasterizer `1ea1871` remain unchanged.
 
@@ -10,15 +10,16 @@ Progress bars track evidence, not estimated completion:
 
 | Field | Evidence bar | Verified state |
 | --- | --- | --- |
-| AOT executable | [##########] 1/1 | Exact r513 EXE/PDB/MAP bundle used for r519, r521, r522, and r524. |
+| AOT executable | [##########] 1/1 | Exact r513 EXE/PDB/MAP bundle used for r519, r521, r522, r524, and r525. |
 | Campaign | [--------------------] 0/1 | First mission frame not reached. |
-| New-pilot route | [##########] 1/1 to name editor | r521 reached the visible name editor; r524 independently reproduced a DirectSound crash at the earlier pilot-list stage. Pilot submission and mission loading remain unverified in r521. |
+| New-pilot route | [##########] 1/1 to name editor | r521 reached the visible name editor; r524 reproduced the DirectSound crash; r525 stalled at the title prompt before the pilot list. Pilot submission and mission loading remain unverified. |
+| DirectSound writer | [####----------------] 1/4 | r525 mapped startup writes to valid construction/list insertion; the later `0xFF000000` write was not reached or identified. |
 | Contiguous allocation | [##########] 1/1 regression | Actual ordinal-166 thunk test passes beyond 16 MiB with range, alignment, overlap, and graceful-failure checks. In-game caller provenance is absent. |
-| GET_REPORT DMA | [##------------------] 1/5 | The real executor's low-offset writeback regression passes; r495's type-3 packet/context/alias was not observed in r521 or r524. |
-| Loading dependency | [##------------------] 1/5 | r519 captured a mode-2 readiness plateau. r524 crashed before pilot creation or loader entry; no dependency path was identified. |
+| GET_REPORT DMA | [##------------------] 1/5 | The real executor's low-offset writeback regression passes; r495's type-3 packet/context/alias was not observed in r521, r524, or r525. |
+| Loading dependency | [##------------------] 1/5 | r519 captured a mode-2 readiness plateau. r524 crashed and r525 stalled before loader entry; no dependency path was identified. |
 | Rendering / pacing | [##------------------] 1/5 | r521 title/menu output varied around 8–23 FPS; no mission frame or gameplay pacing measurement. |
 | Regressions | [##########] 5/5 | r523 rerun: all five warm modes passed, 42 checks, zero failures, under 1 second; no rebuild. |
-| Storage | [#-------------------] 19,116 B prior savings | r524 retained 2,154,735 allocated B of diagnostic evidence under the 64 MiB cap. No artifacts were removed; no new savings. Whole-workspace size was not rescanned. |
+| Storage | [#-------------------] 19,116 B prior savings | r525 retained 2,080,006 allocated B of evidence under the 64 MiB cap. No artifacts were removed; no new savings. Whole-workspace size was not rescanned. |
 | Stable 60 FPS | [--------------------] 0/1 | Not measured in a mission. |
 | Whole campaign | [--------------------] 0/1 | Campaign completion unverified. |
 
@@ -53,7 +54,7 @@ Older exact-r149-bundle dumps were reviewed before drawing cross-run conclusions
 
 ## Next action
 
-Keep the report offset/type, guest synchronization, controller mapping, AOT path, and rasterizer unchanged. Use the existing `RECOMP_DSOUND_WRITE_WATCH` on the exact r513 bundle and same save root to capture writes to `0x8038C098/9C/8C`; it already exists in that binary, so no build is needed. Screen-gate the route and retain the 64 MiB cap. Do not patch based on the list-walk symptom alone. If a writer is established, test the smallest supported fix, then continue toward loading; capture allocation slot/ordinal-166 result, consumed report packet/context/writeback/poll, and loader path-to-handle/progress only if the route reaches those stages. Stop at the first visually verified mission frame.
+The immediate route blocker is the title-stage wait after one accepted route edge, not the r519/r502 loader plateaus or the r521/r524 DirectSound crash. Correlate TIDs `31684`/`54564` and guest lock `0x0023FE18`; current validated unwinds stop before a guest caller or wait object. The new write watch proved only valid startup list initialization. Keep report offset/type, guest synchronization, controller mapping, AOT execution, and rasterizer unchanged. No further route was run after the one explicitly authorized trace. A next route should use one candidate and the same capped, screen-gated workflow after the title wait is understood. Stop at the first visually verified mission frame.
 
 Details: [r520/r521 allocation and pilot crash report](m3-r520-r521-allocation-and-pilot-crash-20261031.md); [r519 loading and allocation/report report](m3-r519-loading-allocation-report-20261031.md); [r519 storage manifest](current-cleanup-manifest-r519-20261031.md); [r150/r151/r153 matched unwind review](m3-dump-unwind-review-r150-r153-20261028.md).
 
