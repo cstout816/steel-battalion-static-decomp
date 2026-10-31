@@ -1,6 +1,8 @@
-# Steel Battalion AOT — current status (r522, 2026-10-31)
+# Steel Battalion AOT — current status (r523 follow-up, 2026-10-31)
 
 **Milestone 3: boot and compatibility. First visually verified mission frame: 0/1.** r519 reached `NOW LOADING`; r521 reached the new-pilot editor before a DirectSound list-walk crash; r522 returned to the title/player-record prompt and stalled after the accepted title input branch. The low/high allocator fix remains in source and its real thunk regression passes. The GET_REPORT address alias remains uncorrelated in-game. AOT execution, controller mapping, guest fences, and rasterizer `1ea1871` remain unchanged.
+
+The r523 follow-up reran the warm five-mode regression suite: **42 checks passed, 0 failed, under 1 second; no rebuild**. The r495 retained log confirms the created entry at `0x82A9BFF0` and later invalid polls, but has no `[CONTIG-EX]` allocation result or `[PB-REPORT]` consumption record. Allocation provenance, packet consumption, report DMA descriptor, writeback target, and guest alias remain unverified. No runtime source change is supported. Focused candidate-history and nested-log measurements matched the r522 audit. The r522 run-folder query now measures 1,841,701 B versus 1,845,944 B previously reported; no files were changed, so the 4,243 B difference is unexplained and not counted as savings. PID 52452 was the user's Call of Duty HQ process; it was left untouched and no route was started.
 
 Progress bars track evidence, not estimated completion:
 
@@ -13,8 +15,8 @@ Progress bars track evidence, not estimated completion:
 | GET_REPORT DMA | [##------------------] 1/5 | The real executor's low-offset writeback regression passes; r495's type-3 packet/context/alias was not observed in r521. |
 | Loading dependency | [##------------------] 1/5 | r519 captured a mode-2 readiness plateau. r521 crashed before loader-helper entry; no dependency path was identified. |
 | Rendering / pacing | [##------------------] 1/5 | r521 title/menu output varied around 8–23 FPS; no mission frame or gameplay pacing measurement. |
-| Regressions | [##########] 5/5 | All five warm modes passed directly again: 42 checks, zero failures, under 1 second; no rebuild. |
-| Storage | [#-------------------] 19,116 B prior savings | r522 recovered 0 bytes and adds 1,845,944 allocated bytes. Candidate history 6,305,103,821 B; nested historical logs 4,821,252,507 B; protected ISO/extracted-data/save floor 10,578,219,166 B. No old artifact removed or recompressed. |
+| Regressions | [##########] 5/5 | r523 rerun: all five warm modes passed, 42 checks, zero failures, under 1 second; no rebuild. |
+| Storage | [#-------------------] 19,116 B prior savings | r523 refreshed candidate history 6,305,103,821 B, nested historical logs 4,821,252,507 B, full build tree 8,081,749,248 B, and `iso` 19,739,404,383 B. No artifact removed or recompressed; cumulative savings remain 19,116 B. |
 | Stable 60 FPS | [--------------------] 0/1 | Not measured in a mission. |
 | Whole campaign | [--------------------] 0/1 | Campaign completion unverified. |
 
@@ -65,6 +67,12 @@ r522 used the same exact r513 bundle and stopped at the title/player-record prom
 Allocated space was remeasured for candidate history, nested historical logs, protected ISO/extracted data/save root, generated source, current r513 symbols, regression cache, and r522 evidence. The historical subtree totals match prior audits. Candidate EXE/PDB/MAP hashing found only empty MAP duplicates. No removal or compression occurred; r522 added 1,845,944 allocated bytes and build/cache efficiency was unchanged. The protected input/save floor is 10,578,219,166 bytes. See [r522 storage manifest](current-cleanup-manifest-r522-20261031.md).
 
 The save root was reused in place. r522 touched the six partition images and wrote `Cache\COPYCHECK.DAT`; it remains intact and was not copied or hard-linked.
+
+## r523 allocator/report and storage follow-up — 2026-10-31
+
+No later completed report existed. A read-only process check found no Steel Battalion/build process and found user process PID 52452 (`cod.exe`); it was left untouched, and no route replay was started. The five warm regression modes were rerun successfully: default 4, heap-reclaim 9, contig-range 16, ext-vma 12, ext-vma-128 1 (42 total, zero failures, under one second). The run used the actual ordinal-166 thunk and existing low-page NV2A executor/report-writeback check; no source change or rebuild occurred. This test does not exercise a nonzero report DMA descriptor.
+
+The r495 log's `create-entry-return` row proves the table entry address and later invalid lookup state, but does not prove which allocation produced the page. It contains no `[CONTIG-EX]` or `[PB-REPORT]` line. The packet, active report DMA descriptor, executor target, and CPU-polled alias remain uncorrelated; no report-contract fix is justified. Focused allocated-byte measurements match the r522 audit: candidate history 6,305,103,821 B; nested historical logs 4,821,252,507 B; full build tree 8,081,749,248 B; `iso` 19,739,404,383 B; warm route save root 952,918,462 B. No data was deleted, moved, compressed, or copied; savings are 0 B this turn and build efficiency is unchanged. Full details: [r523 follow-up](m3-r523-allocator-report-and-storage-followup-20261031.md).
 
 
 ## Repository safety and source preservation — 2026-10-31
