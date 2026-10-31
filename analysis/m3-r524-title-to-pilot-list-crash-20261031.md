@@ -17,6 +17,7 @@ At guest tick `114367359`, DirectSound commit tracing found an invalid voice-lis
 - Host RIP `0x7FF7DF806928`, read fault at host address `0x10000FFF4`.
 - Guest fault VA `0xFFFFFFF4`; guest `ESI=0xFFFFFFEC`, `EBX=0`, `EDI=0x010810A4`, `ESP=0x00F7FDB8`.
 - Runner captured `exception-stall.dmp` with the same r513 image/symbol bundle and stopped only the diagnostic process.
+- The dump contains 38 threads. TID `51764`'s validated x64 unwind reaches `your_game_recomp_producer_trace.exe+0x61A6928` and `+0x6523428`, then stops at guest VA `0x0021ED29`, which is outside host modules. The dump has no exception stream, so this is a post-exception supervisor-thread snapshot, not the fault-time host context. The explicit crash log's guest registers and fault address remain the reliable exception evidence; the dump does not identify the list writer.
 
 This independently reproduces the immediate DirectSound invalid-list traversal also seen in r521. It does **not** establish which writer or invalidation corrupted the links. No code fix is supported by this run. Keep this failure separate from the r519/r502 mode-2 loading plateaus, the r495/r501 GET_REPORT candidate, and the historical DCF4 wait.
 
