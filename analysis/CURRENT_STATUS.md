@@ -4,6 +4,8 @@
 
 Read [r470–r471 title DCF4 and storage report](m3-r470-r471-title-dcf4-stall-and-storage-20261030.md), [r469 title prompt and dump review](m3-r469-title-prompt-stall-and-dump-20261030.md), [r468 input route and DirectSound crash](m3-r468-input-route-and-directsound-crash-20261030.md), [r466 title and loader evidence](m3-r466-title-route-and-loader-evidence-20261030.md), and [r461–r465 loader evidence](m3-r461-r465-loader-and-storage-20261030.md) before repeating earlier theories. Keep the title DCF4 wait, post-difficulty loader branch, r150/r151 DCF4 evidence, r153 queue/DSP snapshots, DirectSound corruption, and measured raster cost distinct.
 
+The offline r471 callsite review confirms caller hint `0x00211F3B` maps to a DCF4 wait inside guest `sub_00211E10`, after its graphics/DMA threshold and flush path. This is not a loader file wait. The later outer-loop flag at `0xFD000100` maps to PMC PCRTC status bit `0x01000000`; it is separate from PGRAPH context-switch bit `0x1000` at `0xFD400100`. Since the guest aperture is plain memory and no writer of the PMC value was captured, the register name alone does not prove a hardware vblank producer. See [r471 DCF4 callsite and PMC review](m3-r471-dcf4-callsite-and-pmc-review-20261030.md).
+
 ## Progress
 
 ```text
@@ -42,4 +44,4 @@ Preserve the warm incremental build and all exact symbols for unresolved dumps, 
 
 ## Next action
 
-Trace the expected producer for the title DCF4 callback/event from its dispatch targets and data flow; add a narrowly bounded producer marker only if existing r471 records cannot establish execution or absence. Independently recover a reliable screen-gated title input sequence before the pilot handler, and require the visible list plus active branch `0x000E193B`, label `LIST AS NEW` (`0x0026AF04`), and row action `0x83` at `0x000E19CF`. Investigate the post-difficulty `0x3FFF` path only after a new-pilot route reaches visible `NOW LOADING`. Do not force a signal, seed/bypass guest state, change fences, or alter the rasterizer. Stop gameplay acceptance at the first visually verified mission frame.
+Recover a reliable screen-gated title input sequence, then capture the terminal DCF4 wait and the producer transition with bounded recent-tail evidence. Observe writes to guest PMC status `0xFD000100` separately from PGRAPH status `0xFD400100`; do not infer the PMC writer from its register name. Require the visible pilot list plus active branch `0x000E193B`, label `LIST AS NEW` (`0x0026AF04`), and row action `0x83` at `0x000E19CF`. Investigate the post-difficulty `0x3FFF` path and file-completion dependencies only after a new-pilot route reaches visible `NOW LOADING`. Do not force a signal, seed/bypass guest state, change fences, or alter the rasterizer. Stop gameplay acceptance at the first visually verified mission frame.
