@@ -14,7 +14,7 @@ Graphics / rendering           [###-----------------] 15%  Title/post-difficulty
 Controller compatibility       [#########-----------] 45%  r470/r471 confirm title input delivery; title predicate and pilot handler unverified
 Audio / DSP                     [###-----------------] 15%  Campaign audio remains unverified
 Debugging and evidence          [###################-] 98%  Exact bundles, bounded logs, and r470/r471 DCF4/dump evidence retained
-Storage control                 [##################--] 95%  37.067 GiB last full scan; 0 bytes reclaimed; r469–r471 add about 5.83 MiB
+Storage control                 [##################--] 95%  37.073 GiB allocated; 1,303.508 GiB logical; 0 bytes reclaimed this pass
 Overall project                 [######--------------] 30%  First-mission acceptance remains 0/1
 ```
 
@@ -32,7 +32,7 @@ r470/r471 used the exact r461 bundle and same empty-save route. The visible titl
 
 ## Storage and preserved working set
 
-Last full inventory (r466): 79,220 files, 39,799,862,841 measured allocated bytes (37.067 GiB), and 1,399,613,305,721 logical bytes (1,303.491 GiB). Eight small Cargo fingerprint allocation queries failed; see the current cleanup manifest. r469–r471 evidence adds 6,110,402 allocated bytes in total (about 5.83 MiB), yielding an approximate working set of 39,805,973,243 bytes (37.072 GiB); this is not a fresh full scan. r470/r471 account for 4,524,383 allocated bytes; the two folders contain 9,907,274 logical bytes because allocation and logical sparse-file length differ. The closed-log compression/replacement action was rejected by automatic file-action review, so no files were removed and reclaimed space is 0. The warm build cache was not touched. The automatic review rejection of the 534 screenshot deletion candidates remains in effect.
+Fresh read-only full inventory after r471: 79,343 files; 39,806,838,262 allocated bytes (37.073 GiB); 1,399,630,939,024 logical bytes (1,303.508 GiB); 13 reparse points skipped; zero allocation-query failures. C: free space was 45,906,464,768 bytes. r470/r471 account for 4,524,383 allocated bytes and 9,907,274 logical bytes; sparse logical length is distinct from actual allocation. The closed-log compression/replacement action was rejected by automatic file-action review, so no files were removed and reclaimed space is 0. The warm build cache was not touched. The automatic review rejection of the 534 screenshot deletion candidates remains in effect.
 
 Preserve the warm incremental build and all exact symbols for unresolved dumps, the ISO/assets, unique saves, dirty source checkouts, generated code and license files. The r154 report/logs and exact r149 bundle remain present. No Steel Battalion project directory was found on D:.
 

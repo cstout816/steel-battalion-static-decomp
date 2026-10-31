@@ -67,7 +67,7 @@ Post-exit evidence measurements:
 | r471 | 5,188,091 | 2,361,921 | 20 |
 | Combined | 9,907,274 | 4,524,383 | 38 |
 
-The allocation scan counts sparse allocation separately from logical size. The current last full workspace scan remains r466 at 39,799,862,841 allocated bytes (37.067 GiB); adding r469–r471 evidence gives an approximate 39,805,973,243 bytes (37.072 GiB), not a new full scan. No bytes were reclaimed in this pass. The warm incremental build cache was untouched, so build-efficiency impact is zero. A proposed lossless compression/replacement of the closed raw trace logs was rejected by the automatic file-action review; no raw logs were removed or altered.
+The allocation scan counts sparse allocation separately from logical size. A fresh read-only full scan after r471 measured 79,343 files, 39,806,838,262 allocated bytes (37.073 GiB), 1,399,630,939,024 logical bytes (1,303.508 GiB), 13 skipped reparse points, and zero allocation-query failures. C: had 45,906,464,768 bytes free. No bytes were reclaimed in this pass. The warm incremental build cache was untouched, so build-efficiency impact is zero. A proposed lossless compression/replacement of the closed raw trace logs was rejected by automatic file-action review; no raw logs were removed or altered.
 
 ## Next discriminating step
 

@@ -4,12 +4,12 @@ This is a local measurement and retention record. No files were deleted or moved
 
 ## Measured storage
 
-- Latest full workspace inventory is still r466: 79,220 files; 39,799,862,841 allocated bytes (37.067 GiB); 1,399,613,305,721 logical bytes (1,303.491 GiB). Eight small Cargo allocation queries failed, so those allocations are omitted.
+- Fresh read-only full inventory after r471: 79,343 files; 39,806,838,262 allocated bytes (37.073 GiB); 1,399,630,939,024 logical bytes (1,303.508 GiB); 13 reparse points skipped; zero allocated-size query failures. This scan wrote no inventory CSV. C: free space was 45,906,464,768 bytes.
 - r469 evidence: 1,586,019 allocated bytes (measured in its prior manifest).
 - r470: 4,719,183 logical bytes; 2,162,462 allocated bytes; 18 files.
 - r471: 5,188,091 logical bytes; 2,361,921 allocated bytes; 20 files.
 - r470+r471: 9,907,274 logical bytes and 4,524,383 allocated bytes. Sparse/logical length is not counted as allocation.
-- Approximate working set based on the r466 full scan plus r469–r471 evidence: 39,805,973,243 allocated bytes (37.072 GiB). This is an estimate, not a new full scan.
+- The fresh scan is the current working-set measurement; it supersedes the earlier r466-based estimate.
 - Space reclaimed in this pass: **0 bytes**. Build cache and save files were not changed.
 
 ## Protected inputs and evidence
