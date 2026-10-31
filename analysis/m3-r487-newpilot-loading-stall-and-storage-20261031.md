@@ -28,8 +28,9 @@ The recurring post-difficulty loader pass is the earliest blocker supported by t
 - Pass #37 entered on TID 11460 at tick `56387031` (`ret=0x00102063`, mode 2, table `0x002602A8/0x0025E2D4`). Its final record is helper branch `ret=0x000C319A`, paired-open-compare, index `0x02`, paths `0x00F7FDF8/0x00F7FD78`. No `LOAD-PASS-OUT` followed it before traces stopped.
 - The last asset-specific records include a failed cache-path open for `Z:\TEX00.BIN` (status `0xC0000001`, reported as Win32 `ERROR_SHARING_VIOLATION`) and a successful fallback open under `D:\media\BIN\TEX00.BIN`, mapped to the user's extracted game media. The fallback file is 702,976 bytes, and reads completed through offset 655,360 with a final 47,616-byte read. The asset was therefore found and read; the cache-path miss is not a supported root cause.
 - The file-open-target trace reached its configured 2,048-attempt cap and emitted one cap marker. It cannot represent later target attempts. Separate lifecycle and read streams continued to report 2,419 opens, 2,347 closes, and 5,568 reads. These streams do not reveal an unfinished guest wait or a first missing loader dependency.
-- No `LOAD-STACK`, `SB-SNAPSHOT`, or thread-object state records were emitted. A guest EIP/context for the stalled loader thread was not retained.
-- `THREAD-OBJECT`, `THREAD-OBJECT-POLL`, and `THREAD-OBJECT-STATE` counters were 0. The existing r130 `ObReferenceObjectByHandle` implementation was not re-diagnosed; its guest completion-consumption semantics remain unverified.
+- No `LOAD-STACK`, `SB-SNAPSHOT`, or bridge-level thread-object state records were emitted. A guest EIP/context for the stalled loader thread was not retained.
+- Current source semantics were checked in `local-tools/xboxrecomp/src/kernel/kernel_bridge.c`: `bridge_thread_object_for_handle` sets `STATUS_PENDING` on `WAIT_TIMEOUT` and stores the thread exit code after `WAIT_OBJECT_0` plus a successful `GetExitCodeThread`; `bridge_ObReferenceObjectByHandle` writes the guest view only when the output pointer is non-null and returns invalid handle when no view exists. Generated helper `0x00191451` checks the object's valid byte, reads `+0x120`, writes the resulting status to its output, and calls the following callback. r487 observed that helper consume `0x00000103` (`STATUS_PENDING`) with valid object and successful reference. No completed exit status was observed at runtime, so completed-state consumption remains unverified. This is not the old r130 null-output/false-success issue.
+- Optional bridge `THREAD-OBJECT`, `THREAD-OBJECT-POLL`, and `THREAD-OBJECT-STATE` counters were 0 in r487; the guest helper's load-scheduling trace did record the pending value.
 
 ## Synchronized graphics and event telemetry
 
@@ -48,6 +49,8 @@ The exact r461 image and PDB/MAP were used with `Walk-ProducerTraceMiniDump.ps1`
 - TID 27492 had an exception marker `0xE06D7363` at tick `56387031`. Its partial unwind reached EXE+`0x544F5A`, nearest MAP symbol `_snprintf_s` in `dsound_write_watch.obj`. This is not evidence that the DirectSound list-corruption writer caused the loader stall.
 
 These native stacks identify host-side contexts but do not provide a guest stack. The direct guest callsite, wait/poll state, and pending producer after pass #37 remain unknown. Do not infer those from raw stack addresses.
+
+The older r150/r151/r153 dump review was checked before drawing cross-run conclusions: `analysis/m3-dump-unwind-review-r150-r153-20261028.md` and its paired raw output retain exact r149 EXE/PDB/MAP hashes. It validates the r150/r151 title DCF4 waits through `xbox_KeWaitForSingleObject` with a guest caller at `sub_00211E10+0xDD2`, and shows the raster workers can be idle. r153's native waits resolve to `guest_cpu_acquire`; its dump lacks owner/queue state and does not prove a deadlock. These older waits remain separate from r487's incomplete loader pass. Raw stack-address scans in that review were explicitly excluded from call-chain claims.
 
 ## Trace bounds and retained size
 
