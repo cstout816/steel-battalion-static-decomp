@@ -12,7 +12,7 @@ Graphics / rendering           [###-----------------] 15%  DMA drained at last t
 Controller compatibility       [##########----------] 50%  Screen-gated XID route reached new-pilot setup
 Audio / DSP                     [###-----------------] 15%  Earlier DirectSound list-corruption case remains separate
 Debugging and evidence          [###################-] 98%  Bounded trace, lossless BMPs, exact-bundle dump retained
-Storage control                 [##################--] 95%  37.103 GiB allocated; 1,303.592 GiB logical; logs compressed
+Storage control                 [##################--] 95%  37.103 GiB allocated; 1,303.592 GiB logical; working cache retained
 Overall project                 [######--------------] 30%  First-mission acceptance remains 0/1
 ```
 
@@ -39,8 +39,8 @@ Use the exact r487 bundle and dump to resolve the loader worker's guest state an
 
 ## Storage snapshot
 
-The final post-compression scan found 79,610 files: **39,839,269,867 allocated bytes (37.103 GiB)** and **1,399,720,906,505 logical bytes (1,303.592 GiB)**; 0 allocation-size failures and 13 reparse entries skipped. Top-level allocated space is `local-tools` 18.727 GiB and `iso` 18.154 GiB. The 1,571 sparse `.img` files account for about 0.763 GiB allocated versus about 1,244.23 GiB logical. The original ISO remains untouched.
+The post-push inventory found 79,624 files: **39,839,312,579 allocated bytes (37.103 GiB)** and **1,399,720,949,217 logical bytes (1,303.592 GiB)**; 0 allocation-size failures and 13 reparse entries skipped. Top-level allocated space remains dominated by `local-tools` and `iso`. The 1,571 sparse `.img` files account for about 0.763 GiB allocated versus about 1,244.23 GiB logical. The original ISO remains untouched.
 
-Lossless compression of previously uncompressed closed log/screenshot files reduced path-summed allocation by **3,220,011 bytes**. r487 evidence is retained and compressed. The prior full scan was 39,836,630,299 allocated bytes; after adding this diagnostic and its report, the project is net **2,639,568 bytes larger** than that pre-run scan. Build caches were not changed and no build ran.
+Lossless compression of previously uncompressed closed log/screenshot files reduced path-summed allocation by **3,220,011 bytes**. r487 evidence is retained and compressed. Relative to the pre-r487 inventory (39,836,630,299 allocated bytes), the post-push workspace is **2,682,280 bytes larger net**. No old build was deleted and warm build caches were not changed, preserving incremental build efficiency. An external `C:\Project` compression pass now covers 823 CSV/TXT files; their current logical lengths total 1,876,438,439 bytes and NTFS reports 483,093,231 bytes stored. This is current compressed occupancy, not a verified before/after volume-free-space delta. The fresh outside-workspace inventory CSV is compressed to 3,964,928 stored bytes. No build ran.
 
 Read [r487 loading and storage report](m3-r487-newpilot-loading-stall-and-storage-20261031.md) and [r487 cleanup manifest](current-cleanup-manifest-r487-20261031.md). The exact duplicate Ghidra trees and inactive build trees remain untouched; previous cleanup policy had blocked recursive Ghidra removal.
