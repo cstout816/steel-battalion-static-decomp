@@ -1,27 +1,46 @@
-# Steel Battalion AOT — current status (r482, 2026-10-30)
+# Steel Battalion AOT — current status (r487, 2026-10-31)
 
-**Milestone 3: boot and compatibility. First visually verified mission frame: 0/1.** r482 verified one screen-gated A input end to end through XID delivery, guest edge cell `0x004AFC08`, predicate, callback `0x000E0840`, and visible player-record error overlay. The following black state has a DCF4 callback-queue/wait lead; the missing queue producer is not identified. r479 separately reached a live Campaign menu and crashed consuming an invalid DirectSound node. No fix or build change is established.
-
-Read [r481–r482 diagnostic report](m3-r481-r482-title-dcf4-dsound-followup-20261030.md), [r482 cleanup manifest](current-cleanup-manifest-r482-20261030.md), [r476–r480 report](m3-r476-r480-title-dcf4-dsound-followup-20261030.md), and [r150/r153 exact-bundle unwind review](m3-dump-unwind-review-r150-r153-20261028.md) before repeating old theories.
+**Milestone 3: boot and compatibility. First visually verified mission frame: 0/1.** r487 used the authorized new-pilot route and reached `NOW LOADING`, then stopped on a black, unresponsive screen. The first mission has not been reached. No gameplay fix is supported yet.
 
 ## Progress
 
 ```text
-Decompilation / AOT execution   [##########----------] 50%  Exact AOT path retained; no emulation substitution
-Boot and campaign entry         [##############------] 70%  r479 visibly reached Campaign; r482 visible error overlay
-Kernel/runtime compatibility   [########------------] 40%  DCF4 callback queue/wait traced; source completion path reviewed
-Graphics / rendering           [###-----------------] 15%  Black title-stage output; snapshot has no raster backlog
-Controller compatibility       [##########----------] 50%  r482 verified XID → guest edge → title branch → screen change
-Audio / DSP                     [###-----------------] 15%  r479 invalid DirectSound list; corrupting write unknown
-Debugging and evidence          [###################-] 98%  Exact bundles, r482 callbacks, queue, wait, and minidump retained
-Storage control                 [##################--] 95%  37.091 GiB allocated; 1,303.554 GiB logical; savings 0
+Decompilation / AOT execution   [##########----------] 50%  Exact r461 AOT bundle retained
+Boot and campaign entry         [###############-----] 75%  Campaign → pilot setup → loading; mission frame 0/1
+Kernel/runtime compatibility   [########------------] 40%  Loader stall localized to an incomplete pass; cause unknown
+Graphics / rendering           [###-----------------] 15%  DMA drained at last telemetry; no mission render verified
+Controller compatibility       [##########----------] 50%  Screen-gated XID route reached new-pilot setup
+Audio / DSP                     [###-----------------] 15%  Earlier DirectSound list-corruption case remains separate
+Debugging and evidence          [###################-] 98%  Bounded trace, lossless BMPs, exact-bundle dump retained
+Storage control                 [##################--] 95%  37.103 GiB allocated; 1,303.592 GiB logical; logs compressed
 Overall project                 [######--------------] 30%  First-mission acceptance remains 0/1
 ```
 
-## Current leads and next action
+## Latest result
 
-r482 recorded 325 DCF4 callbacks with no cap. Callback #324 took index 5 (`0x0021701E`) and set DCF4 through return site `0x0021702F`; #325 took index 1 (`0x00216EC9`). Later queue samples were empty while the UI thread snapshot was in the DCF4 wait with signal 0. DMA was drained (`PUT=GET=0x5DEC`), PGRAPH pending was 0, and raster workers had no active/pending work. This points toward an exhausted synchronization queue rather than rendering backlog, but does not identify why it was not replenished.
+Run `m3-newpilot-loader-ring-immediate-r487-20261031` used the exact r461 AOT executable/PDB/MAP and the existing save root `iso/local-analysis/saves-m3-known-save-copy-20261023`; it did not copy or hard-link saves. Screen-gated inputs traversed Campaign, `LIST AS NEW`, name/date entry, Rookie difficulty, and `NOW LOADING`. The live screenshot showed `NOW LOADING`; the on-disk four-frame history ends at the difficulty screen, followed by the retained black-stall capture.
 
-The next action is static source/data correlation of `sub_00217130`, `sub_00216EA0`, the queue producer, and indirect target slot `0x0025D1E8`; then a bounded run with those traces plus the existing DirectSound link watch. Validate indirect targets before any seeding/rebuild. Keep title DCF4, DirectSound invalid-list crash, and post-difficulty loader plateau distinct. The loader has no evidence in r482 because `NOW LOADING` was not reached. Preserve AOT, guest fences, controller mapping, and rasterizer `1ea1871`.
+The last completed loader pass was #36 at guest tick `56387015`. Pass #37 began at `56387031` and stopped after entering the paired-open helper at guest index `0x02`; no matching pass-out was emitted. The preceding pass repeatedly returned result 0. The media fallback for `D:\media\BIN\TEX00.BIN` was opened and fully read (702,976 bytes); a separate cache-path attempt returned a sharing violation. The fallback read and copy completion mean that cache miss is not established as the cause.
 
-Current kernel source already implements pending-to-completed thread-object status; guest readiness consumption of a completed status remains unverified. r150/r151/r153 exact-bundle evidence did not prove a shared deadlock or raster backlog.
+Last synchronized GPU/event records show `DMA-ACK` PUT=GET `0x00004018`, DCF4 event state 1, and no worker/pending raster backlog in the latest NV2A tick. DCF4 callbacks continued through #8014. This r487 post-difficulty stall is distinct from the r486 title DCF4 wait, r479 DirectSound list corruption, and the historical r153 loading plateau.
+
+## Current blocker and limits
+
+- The loader pass stops before returning, but traces do not identify a specific file dependency or the guest wait/poll condition. TEX00 cache fallback succeeded; do not patch it based on the miss.
+- `THREAD-OBJECT`, `THREAD-OBJECT-POLL`, and `THREAD-OBJECT-STATE` counters were 0 in r487. Do not repeat the old r130 null-output diagnosis; the current `ObReferenceObjectByHandle` implementation's guest completion-consumption semantics remain unverified.
+- Exact r461 native unwinds for TIDs 11460 (loader/main guest thread), 35176 (file-copy worker), and 38336 (DCF4/NV2A worker) are partial. TID 11460's last complete native unwind ends at EXE+`0x64937A0` before a non-module stack value. The dump contains no guest CPU-state snapshot. Raw stack-address scans were not treated as unwinds.
+- The open-target trace reached its 2,048-attempt cap (one cap marker); the independent file lifecycle/read logs continued. Ring polling was enabled from process start and emitted 59 periodic samples, below its 256-row cap. Relay dropped 0 stdout/stderr lines. Four-frame history retained 4 of 7 captures, evicted 3, dropped 0.
+- A C++ exception marker (`0xE06D7363`) appeared on TID 27492 in the DSound watch formatting path. It was not correlated with the loader thread and does not establish the separate DirectSound list corruption cause.
+- FPS shown during setup/loading is diagnostic-overlay output, not a performance benchmark. No mission FPS, 1% lows, frame pacing, audio, or gameplay correctness has been verified.
+
+## Next action
+
+Use the exact r487 bundle and dump to resolve the loader worker's guest state and call site around pass #37 / helper index `0x02`, correlating the final successful read/copy, open status, loader progress fields, and synchronized framebuffer/GPU/event timestamps. Add only bounded per-index completion/guest-state capture if existing traces cannot answer it. Reproduce the same new-pilot route, retain failure-window screenshots, and stop at a visually verified first mission frame. Do not force signals, bypass guest checks, seed imports, change preload modes, alter AOT execution/controller mapping/fences, or port another rasterizer.
+
+## Storage snapshot
+
+The final post-compression scan found 79,610 files: **39,839,269,867 allocated bytes (37.103 GiB)** and **1,399,720,906,505 logical bytes (1,303.592 GiB)**; 0 allocation-size failures and 13 reparse entries skipped. Top-level allocated space is `local-tools` 18.727 GiB and `iso` 18.154 GiB. The 1,571 sparse `.img` files account for about 0.763 GiB allocated versus about 1,244.23 GiB logical. The original ISO remains untouched.
+
+Lossless compression of previously uncompressed closed log/screenshot files reduced path-summed allocation by **3,220,011 bytes**. r487 evidence is retained and compressed. The prior full scan was 39,836,630,299 allocated bytes; after adding this diagnostic and its report, the project is net **2,639,568 bytes larger** than that pre-run scan. Build caches were not changed and no build ran.
+
+Read [r487 loading and storage report](m3-r487-newpilot-loading-stall-and-storage-20261031.md) and [r487 cleanup manifest](current-cleanup-manifest-r487-20261031.md). The exact duplicate Ghidra trees and inactive build trees remain untouched; previous cleanup policy had blocked recursive Ghidra removal.
