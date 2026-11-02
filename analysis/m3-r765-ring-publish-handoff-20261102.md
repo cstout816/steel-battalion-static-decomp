@@ -15,6 +15,15 @@ This run does **not** show a general failure to execute method-5 notifications. 
 
 There were zero `[SB-RING-PUBLISH]` records: the conditional indirect callback site at `0x00211EEE` was not taken in this capture. This is an observed branch condition, not proof that a callback was required there or that it is the root defect. The trace narrows the failure to the missing next DCF4 publication/consumer handoff after an earlier successful method-5 completion; it does not identify which guest condition should publish it. No fix is supported. Keep this separate from the r763 DirectSound invalid-list crash and the r519 loading plateau.
 
+## Field progress
+
+| Field | Progress | Verified state |
+| --- | --- | --- |
+| Title-to-campaign route | [####----------------] 1/5 | Empty-record title error observed; Campaign and pilot list not reached in r765. |
+| DCF4 producer/consumer | [######--------------] 3/5 | Prior method-5 completion verified; final wait remains unsignaled. |
+| First mission frame | [--------------------] 0/1 | Not reached. |
+| Diagnostic storage cap | [##########] 1/1 | 2,567,888 allocated bytes of run evidence under the 64 MiB limit. |
+
 ## Storage and limits
 
 - Run evidence: 6,958,405 logical bytes and 2,567,888 allocated bytes after close. The run stayed under its 64 MiB cap; no trace lines were dropped.
